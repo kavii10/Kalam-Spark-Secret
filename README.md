@@ -8,17 +8,19 @@
 
 ---
 
-## 🌟 Overall Summary
+## 🌟 Overall Summary (Agentic AI)
 
-Navigating career choices can be overwhelming. Kalam Spark acts as a personal AI career architect. It starts by helping students discover their ideal career path through an intelligent personality quiz. Once a dream career is chosen, the platform uses a hybrid pipeline of **web crawling** (to fetch real-time industry data) and **Gemma 4** to generate a highly detailed, 4-stage learning roadmap.
+Kalam Spark is built on an **Agentic AI Architecture**. Instead of being a simple chatbot, it utilizes a swarm of specialized AI agents that perceive data, reason over student goals, and execute complex workflows:
 
-Beyond just a roadmap, Kalam Spark is a full educational ecosystem:
+- **Career Architect Agent:** Acts as the core engine. It autonomously crawls industry sources (Crawl4AI), analyzes real-time trends, and constructs a progressive 4-stage learning roadmap.
+- **Mentor & Coach Agent:** A persistent multimodal agent that maintains session memory. It reasons about the student's education level and current branch to provide context-aware technical guidance.
+- **Document Intelligence Agent (File Speaker):** Specialized in RAG (Retrieval-Augmented Generation). It ingests complex documents, extracts key concepts, and can even act as a podcast host by scriptwriting and narrating study material.
+- **Opportunity Radar Agent:** Proactively maps real-world internships, hackathons, and jobs to the student's specific learning progress, ensuring actionable career outcomes.
 
-- **Daily Planner & Spaced Repetition:** AI-generated daily tasks managed with a Pomodoro timer, backed by FSRS v5 and Ebisu algorithms for long-term knowledge retention.
-- **AI Mentor Chat:** A persistent, multimodal AI mentor available 24/7 to answer questions, analyze uploaded images, and provide career advice.
-- **Document Intelligence (File Speaker):** Upload study materials (PDF/DOCX) or paste URLs to chat with your documents using RAG (Retrieval-Augmented Generation), create flashcards, or even generate AI-hosted podcasts using Edge-TTS.
-- **Opportunity Radar:** Real-time curation of internships, hackathons, and jobs matched to the student's exact roadmap stage.
-- **Career Pivot Analysis:** Evaluates the difficulty of switching careers and generates an actionable bridge plan.
+The platform also includes:
+
+- **Daily Planner & Spaced Repetition:** AI-managed tasks synchronized with FSRS v5 and Ebisu algorithms.
+- **Career Pivot Analysis:** Quantifies skill gaps and generates autonomous bridge plans for career transitions.
 
 ---
 
