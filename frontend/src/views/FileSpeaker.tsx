@@ -11,16 +11,17 @@ import { getCurrentLang } from '../i18n';
 import { GoogleGenAI } from '@google/genai';
 import { networkService } from '../services/networkService';
 import { llamaPlugin } from '../services/llamaPlugin';
+import { Capacitor } from '@capacitor/core';
+
+// On native mobile, the backend at 127.0.0.1:8000 is NOT reachable
+const IS_NATIVE_MOBILE = Capacitor.isNativePlatform();
 
 const getBackendUrl = () => {
   const envUrl = import.meta.env.VITE_BACKEND_URL;
   if (envUrl) return envUrl.replace(/\/$/, '');
-  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
-    return window.location.origin;
-  }
   return "http://localhost:8000";
 };
-const BACKEND = getBackendUrl();
+const BACKEND = IS_NATIVE_MOBILE ? '' : getBackendUrl();
 
 /* ─── Types ─── */
 interface Source {
@@ -566,35 +567,190 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
     setAddMode(null);
   };
 
-  /* ─── Upload File ─── */
+  /* ─── Upload File (client-side extraction, no backend needed on mobile) ─── */
   const handleFileUpload = useCallback(async (file: File) => {
     setUploading(true);
-    const form = new FormData();
-    form.append('file', file);
     try {
-      const res  = await fetch(`${BACKEND}/api/filespeaker/upload`, { method: 'POST', body: form });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Upload failed');
-      registerSource({ ...data, text: data.preview, addedAt: Date.now() });
-    } catch (e: any) { alert(`Upload failed: ${e.message}`); }
-    finally { setUploading(false); }
+      // ── Try backend first (desktop only) ──────────────────────────────────
+      if (!IS_NATIVE_MOBILE && BACKEND) {
+        try {
+          const form = new FormData();
+          form.append('file', file);
+          const res = await fetch(`${BACKEND}/api/filespeaker/upload`, { method: 'POST', body: form });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.source_id) {
+              registerSource({ ...data, text: data.preview, addedAt: Date.now() });
+              setUploading(false);
+              return;
+            }
+          }
+        } catch (e) {
+          console.warn('[FileSpeaker] Backend upload failed, falling back to client-side...', e);
+        }
+      }
+
+      // ── Client-side extraction (works on mobile + desktop fallback) ────────
+      let text = '';
+      const fileNameLower = file.name.toLowerCase();
+
+      if (fileNameLower.endsWith('.pdf')) {
+        // Use PDF.js from CDN for PDF text extraction
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          // Dynamically load PDF.js
+          if (!(window as any).pdfjsLib) {
+            await new Promise<void>((resolve, reject) => {
+              const script = document.createElement('script');
+              script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+              script.onload = () => resolve();
+              script.onerror = reject;
+              document.head.appendChild(script);
+            });
+            (window as any).pdfjsLib.GlobalWorkerOptions.workerSrc =
+              'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+          }
+          const pdf = await (window as any).pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          const pages: string[] = [];
+          const maxPages = Math.min(pdf.numPages, 50); // Limit to 50 pages
+          for (let i = 1; i <= maxPages; i++) {
+            const page = await pdf.getPage(i);
+            const content = await page.getTextContent();
+            const pageText = content.items.map((item: any) => item.str).join(' ');
+            if (pageText.trim()) pages.push(`[Page ${i}]\n${pageText}`);
+          }
+          text = pages.join('\n\n');
+          if (!text.trim()) text = `[PDF: ${file.name} — could not extract text. Try pasting text directly.]`;
+        } catch (pdfErr) {
+          console.warn('[FileSpeaker] PDF.js extraction failed:', pdfErr);
+          text = `[PDF: ${file.name} — ${file.size} bytes. Text extraction failed. Paste the text manually.]`;
+        }
+      } else if (
+        fileNameLower.endsWith('.txt') ||
+        fileNameLower.endsWith('.md') ||
+        fileNameLower.endsWith('.csv') ||
+        fileNameLower.endsWith('.json') ||
+        fileNameLower.endsWith('.html') ||
+        fileNameLower.endsWith('.xml')
+      ) {
+        // Plain text files — read directly
+        text = await file.text();
+      } else if (fileNameLower.endsWith('.docx')) {
+        // Basic DOCX — read as text (imperfect but better than nothing)
+        text = await file.text().catch(() => `[DOCX: ${file.name}. For best results, copy-paste the text using the Text tab.]`);
+      } else {
+        // Other files — try reading as text
+        text = await file.text().catch(() => `[Binary file: ${file.name}. For best results, paste the text manually.]`);
+      }
+
+      if (!text.trim()) {
+        text = `[File: ${file.name} — no readable text found. Use the Text tab to paste content directly.]`;
+      }
+
+      // Limit text length to avoid memory issues on mobile
+      const MAX_CHARS = 50000;
+      const truncated = text.length > MAX_CHARS;
+      const finalText = truncated ? text.substring(0, MAX_CHARS) + `\n\n[Truncated: showing first ${MAX_CHARS} characters of ${text.length} total]` : text;
+
+      const source: Source = {
+        source_id: `file_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        title: file.name.replace(/\.[^.]+$/, ''), // Remove extension for title
+        char_count: finalText.length,
+        chunk_count: Math.ceil(finalText.length / 1000),
+        preview: finalText.substring(0, 250) + (finalText.length > 250 ? '...' : ''),
+        text: finalText,
+        addedAt: Date.now(),
+        detectedLang: 'en',
+      };
+      registerSource(source);
+    } catch (e: any) {
+      alert(`Upload failed: ${e.message || 'Unknown error'}`);
+    } finally {
+      setUploading(false);
+    }
   }, []);
 
-  /* ─── Add URL ─── */
+  /* ─── Add URL (mobile: Gemini-powered extraction, desktop: backend first) ─── */
   const handleAddUrl = async () => {
     if (!urlInput.trim()) return;
     setUploading(true);
     try {
-      const res  = await fetch(`${BACKEND}/api/filespeaker/url`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: urlInput.trim(), deep: deepCrawl }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'URL extraction failed');
-      registerSource({ ...data, text: data.preview, addedAt: Date.now() });
-      setUrlInput('');
-    } catch (e: any) { alert(`Failed to fetch URL: ${e.message}`); }
-    finally { setUploading(false); }
+      // Desktop: try backend first for full crawl4ai extraction
+      if (!IS_NATIVE_MOBILE && BACKEND) {
+        try {
+          const res = await fetch(`${BACKEND}/api/filespeaker/url`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: urlInput.trim(), deep: deepCrawl }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.source_id) {
+              registerSource({ ...data, text: data.preview, addedAt: Date.now() });
+              setUrlInput('');
+              setUploading(false);
+              return;
+            }
+          }
+        } catch (e) {
+          console.warn('[FileSpeaker] Backend URL extraction failed, trying Gemini...', e);
+        }
+      }
+
+      // Mobile + desktop fallback: use Gemini to summarize/extract from the URL
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (apiKey && networkService.isOnline()) {
+        const ai = new GoogleGenAI({ apiKey });
+        // Try to fetch the URL content via a CORS proxy, then have Gemini analyze it
+        let urlContent = '';
+        try {
+          // allorigins.win is a reliable CORS proxy for mobile
+          const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(urlInput.trim())}`;
+          const resp = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
+          const proxyData = await resp.json();
+          urlContent = proxyData.contents?.substring(0, 8000) || '';
+        } catch (_) {
+          urlContent = ''; // Proxy failed, use Gemini's own knowledge
+        }
+
+        const prompt = urlContent
+          ? `Extract and summarize the key content from this webpage. URL: ${urlInput.trim()}\n\nPage HTML/content:\n${urlContent}`
+          : `You are given a URL: ${urlInput.trim()}. Based on the URL pattern and your knowledge, describe what this page is about and extract any meaningful content you can infer.`;
+
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.0-flash',
+          contents: prompt,
+          config: {
+            systemInstruction: 'You are a web content extractor. Extract and present the main educational content from the given page. Be comprehensive. Output plain text only.',
+            temperature: 0.1,
+          }
+        });
+
+        const extractedText = response.text || '';
+        if (extractedText.trim()) {
+          const title = urlInput.trim().replace(/https?:\/\//, '').split('/')[0];
+          const source: Source = {
+            source_id: `url_${Date.now()}`,
+            title,
+            char_count: extractedText.length,
+            chunk_count: Math.ceil(extractedText.length / 1000),
+            preview: extractedText.substring(0, 250) + '...',
+            text: extractedText,
+            addedAt: Date.now(),
+            detectedLang: 'en',
+          };
+          registerSource(source);
+          setUrlInput('');
+          setUploading(false);
+          return;
+        }
+      }
+
+      throw new Error('Could not extract URL content. Please paste the text manually using the Text tab.');
+    } catch (e: any) {
+      alert(`Failed to add URL: ${e.message}`);
+    } finally {
+      setUploading(false);
+    }
   };
 
   /* ─── Add Text ─── */
@@ -606,9 +762,10 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
       const text = textInput.trim();
       const isOnline = networkService.isOnline();
 
-      if (isOnline) {
+      // Desktop + online: try backend first
+      if (!IS_NATIVE_MOBILE && BACKEND && isOnline) {
         try {
-          const res  = await fetch(`${BACKEND}/api/filespeaker/text`, {
+          const res = await fetch(`${BACKEND}/api/filespeaker/text`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text, title }),
           });
@@ -624,7 +781,7 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
         }
       }
 
-      // Offline or backend failed fallback: save locally
+      // Mobile or offline fallback: save locally
       const localSource: Source = {
         source_id: `src_${Date.now()}`,
         title,
@@ -662,21 +819,23 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
 
     try {
       if (isOnline) {
-        // Route 1: Try FastAPI backend
-        try {
-          const res  = await fetch(`${BACKEND}/api/filespeaker/chat`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ source_ids: sids, source_titles: titles, history: historyForApi, question: q }),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            reply = data.reply;
+        // Route 1: Try FastAPI backend (desktop only)
+        if (!IS_NATIVE_MOBILE && BACKEND) {
+          try {
+            const res = await fetch(`${BACKEND}/api/filespeaker/chat`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ source_ids: sids, source_titles: titles, history: historyForApi, question: q }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              reply = data.reply;
+            }
+          } catch (e) {
+            console.warn('[FileSpeaker] Backend chat failed, trying client-side Gemini direct...', e);
           }
-        } catch (e) {
-          console.warn('[FileSpeaker] Backend chat failed, trying client-side Gemini direct...', e);
         }
 
-        // Route 2: Direct client-side Gemini RAG fallback
+        // Route 2: Direct client-side Gemini RAG (mobile + desktop fallback)
         if (!reply) {
           const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
           if (apiKey) {
@@ -769,21 +928,23 @@ Be accurate and concise. Never invent facts.`;
       const sourceText = activeSource.text || activeSource.preview;
 
       if (isOnline) {
-        // Route 1: Try FastAPI backend
-        try {
-          const res  = await fetch(`${BACKEND}/api/filespeaker/transform`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ source_id: sid, source_text: sourceText, transformation: key }),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            resultText = data.result;
+        // Route 1: Try FastAPI backend (desktop only)
+        if (!IS_NATIVE_MOBILE && BACKEND) {
+          try {
+            const res = await fetch(`${BACKEND}/api/filespeaker/transform`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ source_id: sid, source_text: sourceText, transformation: key }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              resultText = data.result;
+            }
+          } catch (e) {
+            console.warn('[FileSpeaker] Backend transform failed, trying client-side Gemini direct...', e);
           }
-        } catch (e) {
-          console.warn('[FileSpeaker] Backend transform failed, trying client-side Gemini direct...', e);
         }
 
-        // Route 2: Direct Gemini API fallback
+        // Route 2: Direct Gemini API (mobile + desktop fallback)
         if (!resultText) {
           const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
           if (apiKey) {

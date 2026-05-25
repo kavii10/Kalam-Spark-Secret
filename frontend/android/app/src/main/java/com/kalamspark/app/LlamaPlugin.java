@@ -6,6 +6,7 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import android.os.AsyncTask;
+import android.os.Environment;
 import android.util.Log;
 import java.io.File;
 
@@ -17,8 +18,7 @@ public class LlamaPlugin extends Plugin {
 
     /**
      * Check if the model file exists at the given path.
-     * Uses java.io.File which can access external storage (/storage/emulated/0/Download/)
-     * unlike Capacitor's sandboxed Filesystem API.
+     * Tries multiple paths to handle different Android/MIUI storage configurations.
      */
     @PluginMethod
     public void checkModelExists(PluginCall call) {
@@ -27,10 +27,40 @@ public class LlamaPlugin extends Plugin {
             call.resolve(new JSObject().put("exists", false));
             return;
         }
-        File file = new File(modelPath);
-        boolean exists = file.exists() && file.isFile() && file.length() > 0;
-        Log.d(TAG, "checkModelExists: " + modelPath + " -> " + exists + " (size: " + file.length() + ")");
-        call.resolve(new JSObject().put("exists", exists));
+        
+        // Try the provided path first, then fallbacks
+        String[] pathsToTry = buildPathCandidates(modelPath);
+        for (String path : pathsToTry) {
+            File file = new File(path);
+            boolean exists = file.exists() && file.isFile() && file.length() > 0;
+            Log.d(TAG, "checkModelExists: " + path + " -> " + exists + " (size: " + file.length() + ")");
+            if (exists) {
+                call.resolve(new JSObject().put("exists", true).put("resolvedPath", path));
+                return;
+            }
+        }
+        call.resolve(new JSObject().put("exists", false));
+    }
+
+    /**
+     * Builds a list of candidate paths for the model file.
+     * Handles: standard Android, MIUI, and alternative storage configs.
+     */
+    private String[] buildPathCandidates(String providedPath) {
+        // Extract just the filename
+        String fileName = new File(providedPath).getName();
+        
+        // Standard external storage path
+        File externalDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        
+        return new String[] {
+            providedPath,                                               // Provided path (e.g. /storage/emulated/0/Download/model.gguf)
+            externalDir.getAbsolutePath() + "/" + fileName,           // Environment.DIRECTORY_DOWNLOADS/filename
+            "/storage/emulated/0/Download/" + fileName,               // Standard Android emulated path
+            "/sdcard/Download/" + fileName,                            // Legacy sdcard path
+            "/mnt/sdcard/Download/" + fileName,                        // MIUI alternative
+            "/storage/emulated/0/Downloads/" + fileName,               // Some phones use 'Downloads' (plural)
+        };
     }
 
     @PluginMethod
@@ -41,35 +71,47 @@ public class LlamaPlugin extends Plugin {
             return;
         }
 
-        // Use java.io.File directly — this works for /storage/emulated/0/Download/
-        File file = new File(modelPath);
-        Log.d(TAG, "loadModel: checking " + modelPath + " exists=" + file.exists() + " size=" + file.length());
+        // Try multiple paths to find the model file
+        String[] pathsToTry = buildPathCandidates(modelPath);
+        File resolvedFile = null;
+        String resolvedPath = null;
 
-        if (!file.exists() || !file.isFile()) {
-            JSObject ret = new JSObject();
-            ret.put("success", false);
-            ret.put("message", "Model file not found at: " + modelPath + ". Please place google_gemma-4-E2B-it-Q2_K.gguf in your Downloads folder.");
-            call.resolve(ret);
-            return;
+        for (String path : pathsToTry) {
+            File candidate = new File(path);
+            Log.d(TAG, "loadModel: trying " + path + " exists=" + candidate.exists() + " size=" + candidate.length());
+            if (candidate.exists() && candidate.isFile() && candidate.length() > 1024 * 1024) {
+                resolvedFile = candidate;
+                resolvedPath = path;
+                break;
+            }
         }
 
-        if (file.length() < 1024 * 1024) { // Less than 1MB means corrupt/incomplete
+        if (resolvedFile == null) {
+            // Try to give more helpful error
+            File primaryPath = new File(modelPath);
+            String detail;
+            if (primaryPath.exists() && primaryPath.isFile()) {
+                detail = "File found but appears incomplete (size: " + primaryPath.length() + " bytes). Re-download the GGUF model.";
+            } else {
+                detail = "Model not found. Place \"google_gemma-4-E2B-it-Q2_K.gguf\" in your Downloads folder." +
+                         " Tried: " + String.join(", ", pathsToTry);
+            }
             JSObject ret = new JSObject();
             ret.put("success", false);
-            ret.put("message", "Model file appears incomplete (size: " + file.length() + " bytes). Re-download the GGUF file.");
+            ret.put("message", detail);
             call.resolve(ret);
             return;
         }
 
         try {
-            // In full JNI integration: nativeInitLlama(modelPath);
+            // In full JNI integration: nativeInitLlama(resolvedPath);
             // Currently uses Java fallback — the model "loads" by recording the path
-            loadedModelPath = modelPath;
+            loadedModelPath = resolvedPath;
             isLoaded = true;
 
             JSObject ret = new JSObject();
             ret.put("success", true);
-            ret.put("message", "Model loaded: " + file.getName() + " (" + (file.length() / 1024 / 1024) + " MB)");
+            ret.put("message", "Model loaded: " + resolvedFile.getName() + " (" + (resolvedFile.length() / 1024 / 1024) + " MB)");
             call.resolve(ret);
         } catch (Exception e) {
             call.resolve(new JSObject().put("success", false).put("message", e.getMessage()));

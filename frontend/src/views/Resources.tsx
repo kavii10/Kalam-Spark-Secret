@@ -586,8 +586,16 @@ export default function Resources({ user }: { user: UserProfile }) {
 
   useEffect(() => {
     let active = true;
+    // Safety timeout: if fetch hangs for 15s, force show the UI with what we have
+    const timeout = setTimeout(() => {
+      if (active && !initialized) {
+        setInitialized(true);
+        setLoading(false);
+        console.warn('[Resources] Init timeout hit — showing UI with available data');
+      }
+    }, 15000);
     if (active) fetchCurriculum();
-    return () => { active = false; };
+    return () => { active = false; clearTimeout(timeout); };
   }, [fetchCurriculum]);
 
   // ── Load next batch — REPLACES current data with fresh resources ─────────────
@@ -661,8 +669,8 @@ export default function Resources({ user }: { user: UserProfile }) {
 
   const displayed = searchMode ? searchResults : data;
 
-  // ── Error ─────────────────────────────────────────────────────────────────────
-  if (!initialized || (loading && !roadmap)) {
+  // ── Loading state ────────────────────────────────────────────────────────────
+  if (!initialized) {
     return (
       <div className="h-[60vh] flex flex-col items-center justify-center text-center fade-up gap-4">
         <Loader2 className="animate-spin text-gold-400" size={28} />
@@ -671,16 +679,7 @@ export default function Resources({ user }: { user: UserProfile }) {
     );
   }
 
-  if (!roadmap) {
-    return (
-      <div className="h-[60vh] flex flex-col items-center justify-center text-center fade-up gap-4">
-        <AlertCircle size={32} className="text-gold-500/30" />
-        <p className="text-sm text-gold-300">Initializing study center...</p>
-        <button onClick={fetchCurriculum} className="btn-primary px-6 py-2 rounded-xl">Retry</button>
-      </div>
-    );
-  }
-
+  // ── Error state (roadmap completely unavailable) ──────────────────────────────
   if (loadError && !roadmap) {
     return (
       <div className="h-[60vh] flex flex-col items-center justify-center text-center fade-up gap-4">
@@ -688,11 +687,23 @@ export default function Resources({ user }: { user: UserProfile }) {
           style={{ background: 'rgba(255,140,66,0.08)', border: '1px solid rgba(255,140,66,0.22)' }}>
           <AlertCircle size={24} className="text-gold-500/40" />
         </div>
-        <p className="text-sm text-gold-300/60 font-medium">Couldn't load resources</p>
-        <p className="text-xs text-gold-500/35">Check your connection and try again</p>
+        <p className="text-sm text-gold-300/60 font-medium">Couldn't load your study plan</p>
+        <p className="text-xs text-gold-500/35">Generate your roadmap first, then come back here</p>
         <button onClick={fetchCurriculum} className="btn-primary flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium">
           <RefreshCw size={14} /> Try Again
         </button>
+      </div>
+    );
+  }
+
+  // ── No roadmap (use fallback) ─────────────────────────────────────────────────
+  if (!roadmap) {
+    return (
+      <div className="h-[60vh] flex flex-col items-center justify-center text-center fade-up gap-4">
+        <AlertCircle size={32} className="text-gold-500/30" />
+        <p className="text-sm text-gold-300">Create your roadmap first</p>
+        <p className="text-xs text-gold-500/35">Go to Roadmap → generate your plan → come back to Study Center</p>
+        <button onClick={fetchCurriculum} className="btn-primary px-6 py-2 rounded-xl">Retry</button>
       </div>
     );
   }
