@@ -5,6 +5,7 @@ export interface LlamaPluginInterface {
   loadModel(options: { modelPath: string }): Promise<{ success: boolean; message?: string }>;
   generateCompletion(options: { prompt: string; systemInstruction?: string }): Promise<{ text: string }>;
   checkModelExists(options: { modelPath: string }): Promise<{ exists: boolean }>;
+  selectModelFile(): Promise<{ status: string; path: string; size: number }>;
 }
 
 const LlamaPluginNative = registerPlugin<LlamaPluginInterface>('LlamaPlugin');
@@ -116,6 +117,39 @@ export const llamaPlugin = {
     } catch (err: any) {
       console.error('[LlamaPlugin] Inference error:', err);
       throw err;
+    }
+  },
+
+  async selectModelFile(onProgress?: (progress: number) => void): Promise<boolean> {
+    if (!this.isSupported()) return false;
+    
+    let listener: any = null;
+    if (onProgress) {
+      try {
+        listener = await (LlamaPluginNative as any).addListener('copyProgress', (data: any) => {
+          if (data && typeof data.progress === 'number') {
+            onProgress(data.progress);
+          }
+        });
+      } catch (e) {
+        console.warn('[LlamaPlugin] Failed to register progress listener:', e);
+      }
+    }
+
+    try {
+      const res = await LlamaPluginNative.selectModelFile();
+      if (res && res.status === 'done') {
+        isModelLoaded = false; // Reset to force reload from the copied internal path
+        return true;
+      }
+      return false;
+    } catch (e: any) {
+      console.error('[LlamaPlugin] selectModelFile failed:', e);
+      throw e;
+    } finally {
+      if (listener) {
+        listener.remove();
+      }
     }
   }
 };

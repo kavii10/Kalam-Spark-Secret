@@ -5,6 +5,11 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.ActivityCallback;
+import androidx.activity.result.ActivityResult;
+import android.app.Activity;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Environment;
 import android.util.Log;
@@ -44,7 +49,7 @@ public class LlamaPlugin extends Plugin {
 
     /**
      * Builds a list of candidate paths for the model file.
-     * Handles: standard Android, MIUI, and alternative storage configs.
+     * Handles: internal files, standard Android, MIUI, and alternative storage configs.
      */
     private String[] buildPathCandidates(String providedPath) {
         // Extract just the filename
@@ -52,15 +57,114 @@ public class LlamaPlugin extends Plugin {
         
         // Standard external storage path
         File externalDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+        // App's private internal storage directory
+        File internalDir = getContext().getFilesDir();
         
         return new String[] {
             providedPath,                                               // Provided path (e.g. /storage/emulated/0/Download/model.gguf)
+            internalDir.getAbsolutePath() + "/" + fileName,            // App's private internal storage
             externalDir.getAbsolutePath() + "/" + fileName,           // Environment.DIRECTORY_DOWNLOADS/filename
             "/storage/emulated/0/Download/" + fileName,               // Standard Android emulated path
             "/sdcard/Download/" + fileName,                            // Legacy sdcard path
             "/mnt/sdcard/Download/" + fileName,                        // MIUI alternative
             "/storage/emulated/0/Downloads/" + fileName,               // Some phones use 'Downloads' (plural)
         };
+    }
+
+    /**
+     * Launches the system Document Picker so the user can browse and select the model GGUF file.
+     * Works on Android 11+ without requesting MANAGE_EXTERNAL_STORAGE permission.
+     * Once selected, copies the file into private internal storage.
+     */
+    @PluginMethod
+    public void selectModelFile(PluginCall call) {
+        saveCall(call);
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        startActivityForResult(call, intent, "pickModelCallback");
+    }
+
+    @ActivityCallback
+    private void pickModelCallback(PluginCall call, ActivityResult result) {
+        if (call == null) return;
+        if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
+            Uri uri = result.getData().getData();
+            if (uri != null) {
+                copyModelFileAsyncTask(call, uri);
+                return;
+            }
+        }
+        call.reject("File selection failed or cancelled");
+    }
+
+    private void copyModelFileAsyncTask(PluginCall call, Uri uri) {
+        AsyncTask.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    File destFile = new File(getContext().getFilesDir(), "google_gemma-4-E2B-it-Q2_K.gguf");
+                    Log.d(TAG, "copyModelFileAsyncTask: Copying URI " + uri.toString() + " to " + destFile.getAbsolutePath());
+                    
+                    if (destFile.exists()) {
+                        destFile.delete();
+                    }
+
+                    long totalBytes = 0;
+                    try (android.database.Cursor cursor = getContext().getContentResolver().query(uri, null, null, null, null)) {
+                        if (cursor != null && cursor.moveToFirst()) {
+                            int sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE);
+                            if (sizeIndex != -1) {
+                                totalBytes = cursor.getLong(sizeIndex);
+                            }
+                        }
+                    }
+
+                    java.io.InputStream is = getContext().getContentResolver().openInputStream(uri);
+                    java.io.FileOutputStream os = new java.io.FileOutputStream(destFile);
+
+                    byte[] buffer = new byte[64 * 1024];
+                    int bytesRead;
+                    long bytesCopied = 0;
+                    long lastNotificationTime = 0;
+
+                    while ((bytesRead = is.read(buffer)) != -1) {
+                        os.write(buffer, 0, bytesRead);
+                        bytesCopied += bytesRead;
+
+                        long now = System.currentTimeMillis();
+                        if (now - lastNotificationTime > 300) { // throttle notifications
+                            int progress = 0;
+                            if (totalBytes > 0) {
+                                progress = (int) ((bytesCopied * 100) / totalBytes);
+                            }
+                            JSObject progressObj = new JSObject();
+                            progressObj.put("status", "copying");
+                            progressObj.put("progress", progress);
+                            progressObj.put("copied", bytesCopied);
+                            progressObj.put("total", totalBytes);
+                            
+                            notifyListeners("copyProgress", progressObj);
+                            lastNotificationTime = now;
+                        }
+                    }
+
+                    os.flush();
+                    os.close();
+                    is.close();
+
+                    JSObject successObj = new JSObject();
+                    successObj.put("status", "done");
+                    successObj.put("path", destFile.getAbsolutePath());
+                    successObj.put("size", destFile.length());
+                    call.resolve(successObj);
+
+                } catch (Exception e) {
+                    Log.e(TAG, "Error copying model file", e);
+                    call.reject("Error copying model file: " + e.getMessage());
+                }
+            }
+        });
     }
 
     @PluginMethod

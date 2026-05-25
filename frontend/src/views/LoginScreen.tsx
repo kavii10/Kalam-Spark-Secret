@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowRight, ShieldCheck } from 'lucide-react';
-import { supabase, signInWithGoogle } from '../services/supabaseClient';
+import { supabase } from '../services/supabaseClient';
+import { Capacitor } from '@capacitor/core';
 
 export default function LoginScreen({ isLight = false, onManualLogin }: { isLight?: boolean, onManualLogin: (email: string, name: string) => void }) {
   const [tab, setTab] = useState<'login' | 'register'>('login');
@@ -28,19 +29,15 @@ export default function LoginScreen({ isLight = false, onManualLogin }: { isLigh
     } catch (err: any) {
        setMessage(`Error: ${err.message}`);
        setLoading(false);
-    }
+     }
   };
 
   const handleGoogleAuth = async () => {
     try {
-      // On mobile (Capacitor), window.location.origin = 'https://localhost'
-      // which is NOT in Supabase's allowed redirect list.
-      // We use the Supabase project URL as the redirect so Supabase can accept it,
-      // then the onAuthStateChange listener in App.tsx picks up the session automatically.
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-      const redirectUrl = supabaseUrl
-        ? `${supabaseUrl}/auth/v1/callback`
-        : window.location.origin + window.location.pathname;
+      const isNative = Capacitor.isNativePlatform();
+      const redirectUrl = isNative
+        ? 'com.kalamspark.app://callback'
+        : (window.location.origin + window.location.pathname);
 
       const { error: googleError } = await supabase.auth.signInWithOAuth({
         provider: 'google',

@@ -49,6 +49,8 @@ import { getCurrentLang, type LangCode } from "./i18n";
 import { rewardEvents } from './services/rewardService';
 import { offlineSyncService } from './services/offlineSyncService';
 import { networkService } from './services/networkService';
+import { Capacitor } from '@capacitor/core';
+import { llamaPlugin } from './services/llamaPlugin';
 
 
 const LIGHT_THEME_CSS = `
@@ -616,7 +618,7 @@ const KalamSparkLogo = ({ className = "w-full h-full", isLight = false }) => (
     <img
       src={isLight ? "/assets/logo-light.png" : "/assets/logo.png"}
       className="relative z-10 w-full h-full object-contain"
-      style={{ maskImage: "radial-gradient(circle closest-side at center, black 85%, transparent 100%)", WebkitMaskImage: "radial-gradient(circle closest-side at center, black 85%, transparent 100%)" }}
+      style={{ filter: isLight ? 'drop-shadow(0 2px 6px rgba(234,88,12,0.2))' : 'drop-shadow(0 2px 8px rgba(255,140,66,0.3))' }}
       alt="Kalam Spark Logo"
     />
   </div>
@@ -752,7 +754,21 @@ const SplashScreen = ({ onComplete, isLight = false }: { onComplete: () => void;
 /* ── Sidebar logo (compact) ── */
 const PhoenixLogo = ({ className = "w-8 h-8", isLight = false }) => (
   <div className={`relative flex items-center justify-center ${className}`}>
-    <KalamSparkLogo isLight={isLight} />
+    {/* Outer glow ring */}
+    <div className="absolute inset-0 rounded-full"
+         style={{ 
+           border: isLight ? '2px solid rgba(234,88,12,0.5)' : '2px solid rgba(255,140,66,0.6)', 
+           boxShadow: isLight ? '0 0 12px rgba(234,88,12,0.15)' : '0 0 16px rgba(255,140,66,0.2)' 
+         }} />
+    {/* Logo image — transparent background PNG, no fill box */}
+    <img
+      src={isLight ? "/assets/logo-light.png" : "/assets/logo.png"}
+      alt="Kalam Spark"
+      className="w-2/3 h-2/3 object-contain relative z-10"
+      style={{ 
+        filter: isLight ? 'drop-shadow(0 2px 6px rgba(234,88,12,0.2))' : 'drop-shadow(0 2px 8px rgba(255,140,66,0.3))' 
+      }}
+    />
   </div>
 );
 
@@ -809,11 +825,30 @@ const AppContent = ({
 
   // Track online/offline status for UI indicator
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); };
+    let nativeListener: any = null;
+    if (Capacitor.isNativePlatform()) {
+      import('@capacitor/network').then(({ Network }) => {
+        Network.addListener('networkStatusChange', (status) => {
+          setIsOnline(status.connected);
+        }).then(h => {
+          nativeListener = h;
+        });
+      });
+    } else {
+      const handleOnline = () => setIsOnline(true);
+      const handleOffline = () => setIsOnline(false);
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+      return () => {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      };
+    }
+    return () => {
+      if (nativeListener) {
+        nativeListener.remove();
+      }
+    };
   }, []);
 
   const handleManualSync = async () => {
@@ -831,6 +866,36 @@ const AppContent = ({
   }, [location, user.isAuthenticated, user.onboardingComplete]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+
+  const [modelExists, setModelExists] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copying' | 'done'>('idle');
+  const [copyProgress, setCopyProgress] = useState(0);
+
+  useEffect(() => {
+    if (showSettingsModal && Capacitor.isNativePlatform()) {
+      llamaPlugin.checkModelExists().then(exists => {
+        setModelExists(exists);
+      });
+    }
+  }, [showSettingsModal]);
+
+  const handlePickModel = async () => {
+    try {
+      setCopyStatus('copying');
+      setCopyProgress(0);
+      const success = await llamaPlugin.selectModelFile((progress) => {
+        setCopyProgress(progress);
+      });
+      if (success) {
+        setCopyStatus('done');
+        setModelExists(true);
+      } else {
+        setCopyStatus('idle');
+      }
+    } catch (err) {
+      setCopyStatus('idle');
+    }
+  };
 
   useEffect(() => {
     document.body.style.overflow = isSidebarOpen ? "hidden" : "auto";
@@ -1175,9 +1240,39 @@ const AppContent = ({
                   className="w-4 h-4 accent-gold-500 cursor-pointer"
                 />
               </label>
-
-
             </div>
+
+            {Capacitor.isNativePlatform() && (
+              <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-black/40 border border-gold-500/20 mb-5 text-left">
+                <span className="text-xs uppercase font-mono tracking-wider text-gold-400 font-bold mb-1">Local AI (Offline Mode)</span>
+                <p className="text-[10px] text-gold-500/60 leading-relaxed mb-2">
+                  Place <strong>google_gemma-4-E2B-it-Q2_K.gguf</strong> in your Downloads folder, or select it below to copy to app private storage.
+                </p>
+                {copyStatus === 'copying' ? (
+                  <div className="w-full bg-black/50 border border-gold-500/10 rounded-lg p-2.5 text-center">
+                    <span className="text-xs font-mono text-gold-300 animate-pulse">Copying Model: {copyProgress}%</span>
+                    <div className="w-full bg-black/80 rounded-full h-1.5 mt-2 overflow-hidden border border-gold-500/10">
+                      <div className="bg-gradient-to-r from-orange-500 to-gold-500 h-1.5 rounded-full transition-all duration-300" style={{ width: `${copyProgress}%` }} />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between text-xs text-gold-300">
+                      <span>Status:</span>
+                      <span className={modelExists ? "text-emerald-400 font-bold flex items-center gap-1" : "text-amber-400 font-medium flex items-center gap-1"}>
+                        {modelExists ? "Ready" : "Not Found"}
+                      </span>
+                    </div>
+                    <button
+                      onClick={handlePickModel}
+                      className="w-full py-2 bg-gradient-to-r from-orange-500/20 to-gold-500/10 hover:from-orange-500/30 hover:to-gold-500/20 text-gold-200 border border-orange-500/30 hover:border-orange-500/50 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all"
+                    >
+                      {modelExists ? "Re-Select Model File" : "Select Model File"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
 
 
@@ -1380,7 +1475,50 @@ export default function App() {
       handleSession(session, false);
     });
 
-    return () => subscription.unsubscribe();
+    // ── Capacitor Deep Link Listener for OAuth Redirects ──
+    let appUrlListener: any = null;
+    if (Capacitor.isNativePlatform()) {
+      import('@capacitor/app').then(({ App }) => {
+        appUrlListener = App.addListener('appUrlOpen', async (data: any) => {
+          console.log('[App] Deep link received:', data.url);
+          if (data.url && data.url.startsWith('com.kalamspark.app://')) {
+            try {
+              // Convert custom scheme to an HTTP URL for URL parser
+              const urlVal = data.url.replace('com.kalamspark.app://', 'http://localhost/');
+              const parsedUrl = new URL(urlVal);
+              
+              if (parsedUrl.hash) {
+                const params = new URLSearchParams(parsedUrl.hash.substring(1));
+                const access_token = params.get('access_token');
+                const refresh_token = params.get('refresh_token');
+                
+                if (access_token && refresh_token) {
+                  console.log('[App] Deep link credentials found, setting Supabase session...');
+                  setSessionLoading(true);
+                  const { error } = await supabase.auth.setSession({
+                    access_token,
+                    refresh_token
+                  });
+                  if (error) {
+                    console.error('[App] Failed to set deep link session:', error.message);
+                    setSessionLoading(false);
+                  }
+                }
+              }
+            } catch (err) {
+              console.error('[App] Error parsing deep link URL:', err);
+            }
+          }
+        });
+      });
+    }
+
+    return () => {
+      subscription.unsubscribe();
+      if (appUrlListener) {
+        appUrlListener.then((l: any) => l.remove());
+      }
+    };
   }, []);
 
   // ── Wake Up Backend (Prevents Render Free Tier Cold Start) ──
