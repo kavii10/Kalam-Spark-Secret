@@ -78,10 +78,29 @@ const LIGHT_THEME_CSS = `
     box-shadow: 0 10px 30px rgba(0,0,0,0.03), inset 0 2px 0 rgba(255,255,255,1) !important; 
     color: #1f2937 !important; 
   }
-  .glass-header, .glass-sidebar { 
+  .glass-sidebar { 
     background: rgba(255, 255, 255, 0.95) !important; 
     box-shadow: 0 4px 20px rgba(0,0,0,0.02) !important; 
     border-color: rgba(0,0,0,0.05) !important; 
+  }
+  .glass-header { 
+    background: rgba(255, 255, 255, 0.98) !important; 
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.02) !important; 
+    border-color: rgba(0,0,0,0.05) !important; 
+    transform: translate3d(0, 0, 0) !important;
+    -webkit-transform: translate3d(0, 0, 0) !important;
+    backface-visibility: hidden !important;
+    -webkit-backface-visibility: hidden !important;
+    will-change: transform !important;
+  }
+  @media (min-width: 1024px) {
+    .glass-header {
+      background: rgba(255, 255, 255, 0.90) !important;
+      backdrop-filter: blur(24px) saturate(150%) !important;
+      -webkit-backdrop-filter: blur(24px) saturate(150%) !important;
+    }
   }
   
   .cosmic-bg { opacity: 0 !important; }
@@ -1100,7 +1119,7 @@ const AppContent = ({
         {user.settings?.theme === 'light' && <style>{LIGHT_THEME_CSS}</style>}
 
         {/* Page content */}
-        <div className="flex-1 overflow-y-auto relative scroll-smooth">
+        <div className="flex-1 overflow-y-auto relative scroll-smooth overscroll-contain">
           {/* Subtle center glow on pages */}
           <div className="absolute top-20 right-10 w-[400px] h-[400px] bg-purple-700/5 blur-[120px] rounded-full pointer-events-none" />
           <div className="p-5 lg:p-8 page-transition pb-28 lg:pb-10">

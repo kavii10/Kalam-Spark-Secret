@@ -89,6 +89,7 @@ public class LlamaPlugin extends Plugin {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("*/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         startActivityForResult(call, intent, "pickModelCallback");
     }
 
@@ -98,20 +99,39 @@ public class LlamaPlugin extends Plugin {
         if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
             Uri uri = result.getData().getData();
             if (uri != null) {
-                copyModelFileAsyncTask(call, uri);
+                try {
+                    // Try to persist read permission
+                    int takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION;
+                    getContext().getContentResolver().takePersistableUriPermission(uri, takeFlags);
+                } catch (Exception e) {
+                    Log.w(TAG, "Failed to take persistable URI permission: " + e.getMessage());
+                }
+
+                // Open input stream synchronously on main thread inside callback context
+                try {
+                    final java.io.InputStream is = getContext().getContentResolver().openInputStream(uri);
+                    if (is == null) {
+                        call.reject("Failed to open model file stream (null)");
+                        return;
+                    }
+                    copyModelFileAsyncTask(call, is, uri);
+                } catch (Exception e) {
+                    Log.e(TAG, "Failed to open input stream on main thread", e);
+                    call.reject("Failed to open input stream: " + e.getMessage());
+                }
                 return;
             }
         }
         call.reject("File selection failed or cancelled");
     }
 
-    private void copyModelFileAsyncTask(PluginCall call, Uri uri) {
+    private void copyModelFileAsyncTask(PluginCall call, final java.io.InputStream is, Uri uri) {
         AsyncTask.execute(new Runnable() {
             @Override
             public void run() {
                 try {
                     File destFile = new File(getContext().getFilesDir(), "google_gemma-4-E2B-it-Q2_K.gguf");
-                    Log.d(TAG, "copyModelFileAsyncTask: Copying URI " + uri.toString() + " to " + destFile.getAbsolutePath());
+                    Log.d(TAG, "copyModelFileAsyncTask: Copying stream to " + destFile.getAbsolutePath());
                     
                     if (destFile.exists()) {
                         destFile.delete();
@@ -125,9 +145,10 @@ public class LlamaPlugin extends Plugin {
                                 totalBytes = cursor.getLong(sizeIndex);
                             }
                         }
+                    } catch (Exception e) {
+                        Log.w(TAG, "Failed to query file size: " + e.getMessage());
                     }
 
-                    java.io.InputStream is = getContext().getContentResolver().openInputStream(uri);
                     java.io.FileOutputStream os = new java.io.FileOutputStream(destFile);
 
                     byte[] buffer = new byte[64 * 1024];
@@ -168,6 +189,9 @@ public class LlamaPlugin extends Plugin {
 
                 } catch (Exception e) {
                     Log.e(TAG, "Error copying model file", e);
+                    try {
+                        is.close();
+                    } catch (Exception ignored) {}
                     call.reject("Error copying model file: " + e.getMessage());
                 }
             }

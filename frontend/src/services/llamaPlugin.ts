@@ -140,11 +140,19 @@ export const llamaPlugin = {
       const res = await LlamaPluginNative.selectModelFile();
       if (res && res.status === 'done') {
         isModelLoaded = false; // Reset to force reload from the copied internal path
+        await Toast.show({
+          text: '✅ Local model copied to app storage and loaded!',
+          duration: 'short'
+        });
         return true;
       }
       return false;
     } catch (e: any) {
       console.error('[LlamaPlugin] selectModelFile failed:', e);
+      await Toast.show({
+        text: `❌ Copy failed: ${e.message || e}`,
+        duration: 'long'
+      });
       throw e;
     } finally {
       if (listener) {
