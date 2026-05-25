@@ -9,6 +9,7 @@ import os
 import re
 import httpx
 from typing import Optional
+from json_repair import try_parse_json, repair_json_string
 
 # ── Cloud API Keys (from environment variables)
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
@@ -140,43 +141,70 @@ async def _call_llm_chat(messages: list[dict], max_tokens: int = 1500, temperatu
 
     # ── 2. Google AI Studio — gemma-4-31b-it (Strictly Gemma 4, multimodal)
     if GEMINI_API_KEY:
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_GEMMA_MODEL}:generateContent?key={GEMINI_API_KEY}"
-            # Separate system messages for Gemini's systemInstruction
-            system_message = None
-            contents = []
-            for i, m in enumerate(messages):
-                role = m.get("role")
-                if role == "system":
-                    # Only one system message is expected; capture its content
-                    system_message = m.get("content", "")
-                else:
-                    # role for Gemini must be "user" or "model"
-                    gemma_role = "user" if role == "user" else "model"
-                    parts = [{"text": m.get("content", "")}] if isinstance(m.get("content"), str) else []
-                    # Inject image into last user message if present
-                    if i == len(messages) - 1 and role == "user" and attachment_b64 and attachment_type.startswith("image/"):
-                        parts.append({"inlineData": {"mimeType": attachment_type, "data": attachment_b64}})
-                    contents.append({"role": gemma_role, "parts": parts})
-            gen_config = {"maxOutputTokens": max_tokens, "temperature": temperature}
-            if json_mode:
-                # Some Gemma versions on Gemini AI Studio support JSON mode via responseMimeType
-                gen_config["responseMimeType"] = "application/json"
+        # Try with JSON mode first
+        for attempt_num in range(2):
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_GEMMA_MODEL}:generateContent?key={GEMINI_API_KEY}"
+                # Separate system messages for Gemini's systemInstruction
+                system_message = None
+                contents = []
+                for i, m in enumerate(messages):
+                    role = m.get("role")
+                    if role == "system":
+                        # Only one system message is expected; capture its content
+                        system_message = m.get("content", "")
+                    else:
+                        # role for Gemini must be "user" or "model"
+                        gemma_role = "user" if role == "user" else "model"
+                        parts = [{"text": m.get("content", "")}] if isinstance(m.get("content"), str) else []
+                        # Inject image into last user message if present
+                        if i == len(messages) - 1 and role == "user" and attachment_b64 and attachment_type.startswith("image/"):
+                            parts.append({"inlineData": {"mimeType": attachment_type, "data": attachment_b64}})
+                        contents.append({"role": gemma_role, "parts": parts})
                 
-            body = {
-                "contents": contents,
-                "generationConfig": gen_config,
-            }
-            if system_message:
-                body["systemInstruction"] = {"role": "system", "parts": [{"text": system_message}]}
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                resp = await client.post(url, json=body)
-                resp.raise_for_status()
-                text = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-                print(f"[LLM] Google AI Studio chat (Gemma 4 31B) ✓ ({len(text)} chars)")
-                return text
-        except Exception as e:
-            print(f"[LLM] Google AI Studio chat failed: {e} — trying local Ollama...")
+                gen_config = {"maxOutputTokens": max_tokens, "temperature": temperature}
+                
+                # First attempt: try with responseMimeType=json. Second attempt: without it
+                if json_mode and attempt_num == 0:
+                    gen_config["responseMimeType"] = "application/json"
+                    attempt_desc = "with JSON mode"
+                else:
+                    attempt_desc = "without JSON mode (fallback)"
+                    
+                body = {
+                    "contents": contents,
+                    "generationConfig": gen_config,
+                }
+                if system_message:
+                    body["systemInstruction"] = {"role": "system", "parts": [{"text": system_message}]}
+                
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    resp = await client.post(url, json=body)
+                    resp.raise_for_status()
+                    text = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    print(f"[LLM] Google AI Studio chat (Gemma 4 31B) {attempt_desc} ✓ ({len(text)} chars)")
+                    
+                    # ⚠️ CRITICAL: Check if response is actually JSON, not echoed instructions
+                    if text and not text.startswith('{'):
+                        # Response doesn't look like JSON - might be system instruction echo or error
+                        if any(keyword in text[:200].lower() for keyword in ["career mentor", "return only", "raw json", "do not wrap", "do not include"]):
+                            print(f"[LLM] WARNING: Gemma 4 returned prompt text instead of JSON (responseMimeType not working). Response: {text[:80]}...")
+                            if attempt_num == 0:
+                                print(f"[LLM] Retrying without responseMimeType...")
+                                continue  # Try next iteration (attempt_num=1)
+                            else:
+                                print(f"[LLM] Both attempts failed. Falling back to Ollama...")
+                                raise ValueError("Gemma 4 returned instructions instead of JSON even without responseMimeType")
+                    
+                    return text
+                    
+            except Exception as e:
+                if attempt_num == 0 and json_mode:
+                    print(f"[LLM] Google AI Studio attempt {attempt_num + 1} failed: {e} — retrying without JSON mode...")
+                    continue  # Try next iteration
+                else:
+                    print(f"[LLM] Google AI Studio chat failed: {e} — trying local Ollama...")
+                    break  # Exit loop, move to Ollama
 
     # ── 3. Ollama (local Gemma 4 e4b — last resort)
     # Build flat prompt for /api/generate fallback
@@ -316,7 +344,7 @@ def _build_prompt(dream: str, year: str, branch: str, crawled_content: str, lang
         if language != "en" else ""
     )
 
-    return f"""You are an elite career mentor. Create a HIGHLY SPECIFIC, DETAILED 4-stage career roadmap.{language_instruction}
+    return f"""Create a detailed 4-stage career roadmap for a {year} student pursuing {dream} in {branch}.{language_instruction}
 
 STUDENT PROFILE:
 - Dream Career: {dream}
@@ -325,52 +353,56 @@ STUDENT PROFILE:
 
 {context_section}
 
-INSTRUCTIONS:
-1. You MUST generate EXACTLY 4 progressive stages from beginner to hirable professional.
-2. Each of the 4 stages must have: 8-10 subjects, 6 skills, 3 projects, detailed description.
-3. Use REAL technology names, tools, frameworks specific to {dream}.
-4. Durations realistic for a {year} student working part-time.
+REQUIREMENTS:
+1. Generate EXACTLY 4 progressive stages from beginner to professional.
+2. Each stage: 8-10 subjects, 6 skills, 3 projects, 100+ word description.
+3. Use real tech names and frameworks specific to {dream}.
+4. Realistic durations for a {year} student.
 
-Return ONLY a raw JSON object matching this EXACT schema. Do NOT wrap in markdown blocks, do NOT include any other text:
+OUTPUT INSTRUCTIONS - CRITICAL:
+- Return ONLY valid JSON object. Start with {{ and end with }}.
+- NO markdown code blocks. NO explanatory text before or after.
+- NO wrapping. NO backticks. Just the raw JSON object.
+- All strings must use double quotes and be properly escaped.
+
+Match this EXACT structure:
 {ROADMAP_SCHEMA}"""
 
 
 def _parse_roadmap_json(raw: str, dream: str) -> Optional[dict]:
+    """Parse roadmap JSON with multiple recovery strategies."""
     if not raw or len(raw.strip()) < 10:
+        print(f"[JSON] Input too short or empty (len={len(raw.strip()) if raw else 0})")
         return None
-        
-    text = raw.strip()
-    # 1. Try to extract from markdown blocks
-    if "```json" in text:
-        matches = re.findall(r'```json\s*(.*?)\s*```', text, re.DOTALL | re.IGNORECASE)
-        if matches:
-            text = matches[0]
-    elif "```" in text:
-        matches = re.findall(r'```\s*(.*?)\s*```', text, re.DOTALL)
-        if matches:
-            text = matches[0]
-
-    try:
-        parsed = json.loads(text.strip())
-        if isinstance(parsed, dict) and "stages" in parsed and len(parsed["stages"]) > 0:
-            return parsed
-    except json.JSONDecodeError:
-        pass
-        
-    # 2. Fallback: try to find the outermost JSON object
-    try:
-        # Find first { and last }
-        start_idx = text.find('{')
-        end_idx = text.rfind('}')
-        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-            json_str = text[start_idx:end_idx + 1]
-            parsed = json.loads(json_str)
-            if isinstance(parsed, dict) and "stages" in parsed:
-                return parsed
-    except json.JSONDecodeError:
-        pass
-        
-    print(f"[LLM] Failed to parse JSON. Raw (first 300): {raw[:300]}")
+    
+    print(f"[JSON] Attempting to parse {len(raw)} char response...")
+    
+    # Use robust JSON repair and parsing utility
+    parsed = try_parse_json(raw)
+    
+    if parsed and isinstance(parsed, dict) and "stages" in parsed and len(parsed["stages"]) > 0:
+        print(f"[JSON] [OK] Successfully parsed roadmap with {len(parsed['stages'])} stages")
+        return parsed
+    
+    # Additional fallback: Manual extraction of the main JSON object
+    if not parsed:
+        print(f"[JSON] Trying manual extraction of JSON object...")
+        text = raw.strip()
+        try:
+            start_idx = text.find('{')
+            end_idx = text.rfind('}')
+            if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                json_str = text[start_idx:end_idx + 1]
+                # Try to repair the extracted JSON
+                repaired = repair_json_string(json_str)
+                parsed = json.loads(repaired)
+                if isinstance(parsed, dict) and "stages" in parsed and len(parsed["stages"]) > 0:
+                    print(f"[JSON] ✓ Successfully extracted and repaired JSON")
+                    return parsed
+        except Exception as e:
+            print(f"[JSON] Manual extraction failed: {e}")
+    
+    print(f"[JSON] ✗ Failed to parse JSON. Raw (first 400): {raw[:400]}")
     return None
 
 
@@ -395,15 +427,30 @@ def _normalize_stage(stage: dict, index: int) -> dict:
 async def generate_roadmap(dream: str, year: str, branch: str, crawled_content: str, language: str = "en") -> dict:
     """Generate a career roadmap using cloud Gemma4 (OpenRouter → Groq → Gemini)."""
     user_prompt = _build_prompt(dream, year, branch, crawled_content, language)
-    print(f"[LLM] Sending roadmap prompt ({len(user_prompt)} chars)...")
+    print(f"[Roadmap] Starting generation for: {dream} | {year} | {branch}")
+    print(f"[Roadmap] Prompt size: {len(user_prompt)} chars | Context: {len(crawled_content)} chars")
+    
     # Keep system instruction separate to prevent instruction echo
     system_prompt = f"You are an elite career mentor. Return ONLY a raw JSON object matching this exact schema. Do NOT wrap in markdown. {ROADMAP_SCHEMA}"
     messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
-    raw_response = await _call_llm_chat(messages, max_tokens=3500, temperature=0.15, json_mode=True)
+    
+    print(f"[Roadmap] Calling LLM with max_tokens=3500, json_mode=True...")
+    try:
+        raw_response = await _call_llm_chat(messages, max_tokens=3500, temperature=0.15, json_mode=True)
+        print(f"[Roadmap] LLM response received: {len(raw_response)} chars")
+    except Exception as e:
+        print(f"[Roadmap] LLM call failed: {e}")
+        raise RuntimeError(f"Failed to call LLM: {e}")
+    
+    print(f"[Roadmap] Parsing JSON response...")
     parsed = _parse_roadmap_json(raw_response, dream)
 
     if not parsed:
-        raise RuntimeError("LLM returned invalid JSON. Please try again.")
+        print(f"[Roadmap] [-] JSON parsing failed. Response preview: {raw_response[:200]}...")
+        raise RuntimeError(
+            "LLM returned invalid JSON format. The response could not be parsed. "
+            "This may be a temporary issue with the API. Please try again."
+        )
 
     roadmap = {
         "dream": parsed.get("dream") or dream,
@@ -411,9 +458,10 @@ async def generate_roadmap(dream: str, year: str, branch: str, crawled_content: 
         "stages": [_normalize_stage(s, i) for i, s in enumerate(parsed.get("stages", []))],
     }
     if not roadmap["stages"]:
-        raise RuntimeError("LLM returned roadmap with no stages.")
+        print(f"[Roadmap] [-] Parsed JSON but no stages found")
+        raise RuntimeError("LLM returned roadmap with no stages. Please try again.")
 
-    print(f"[LLM] Successfully generated roadmap with {len(roadmap['stages'])} stages")
+    print(f"[Roadmap] [OK] Successfully generated roadmap with {len(roadmap['stages'])} stages")
     return roadmap
 
 

@@ -9,6 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/core": "^8.3.4",
+    "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/network": "^8.0.1",
+    "@capacitor/toast": "^8.0.1",
     "@google/genai": "^1.40.0",
     "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.95.3",
@@ -22,6 +26,10 @@
     "ts-fsrs": "^5.2.3"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.3.4",
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.3.4",
+    "@capacitor/ios": "^8.3.4",
     "@types/node": "^22.14.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
