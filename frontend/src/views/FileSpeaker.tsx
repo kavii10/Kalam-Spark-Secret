@@ -837,53 +837,59 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
 
         // Route 2: Direct client-side Gemini RAG (mobile + desktop fallback)
         if (!reply) {
-          const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-          if (apiKey) {
-            const contextText = sids.map(id => {
-              const s = sources.find(src => src.source_id === id);
-              return `DOCUMENT: ${s?.title}\n${s?.text || s?.preview}`;
-            }).join('\n\n');
+          try {
+            const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+            if (apiKey) {
+              const contextText = sids.map(id => {
+                const s = sources.find(src => src.source_id === id);
+                return `DOCUMENT: ${s?.title}\n${s?.text || s?.preview}`;
+              }).join('\n\n');
 
-            const systemInstruction = `You are Kalam Spark Document Intelligence Agent.
+              const systemInstruction = `You are Kalam Spark Document Intelligence Agent.
 You answer questions based on the provided documents.
 Be extremely accurate, helpful, and concise (under 3 paragraphs).
 Never make up facts not mentioned in the documents.`;
 
-            const ai = new GoogleGenAI({ apiKey });
-            const contents: any[] = [];
-            historyForApi.forEach(h => {
-              contents.push({
-                role: h.role === 'ai' ? 'model' : 'user',
-                parts: [{ text: h.text }]
+              const ai = new GoogleGenAI({ apiKey });
+              const contents: any[] = [];
+              historyForApi.forEach(h => {
+                contents.push({
+                  role: h.role === 'ai' ? 'model' : 'user',
+                  parts: [{ text: h.text }]
+                });
               });
-            });
-            contents.push({
-              role: 'user',
-              parts: [{ text: `Here are the documents:\n\n${contextText}\n\nQuestion: ${q}` }]
-            });
+              contents.push({
+                role: 'user',
+                parts: [{ text: `Here are the documents:\n\n${contextText}\n\nQuestion: ${q}` }]
+              });
 
-            const response = await ai.models.generateContent({
-              model: "gemini-2.0-flash",
-              contents,
-              config: {
-                systemInstruction,
-                temperature: 0.2
-              }
-            });
-            reply = response.text || "";
+              const response = await ai.models.generateContent({
+                model: "gemini-2.0-flash",
+                contents,
+                config: {
+                  systemInstruction,
+                  temperature: 0.2
+                }
+              });
+              reply = response.text || "";
+            }
+          } catch (geminiErr) {
+            console.warn('[FileSpeaker] Direct client-side Gemini failed (possibly quota limit):', geminiErr);
           }
         }
-      } else {
-        // Route 3: Offline local model RAG
-        if (llamaPlugin.isSupported()) {
-          console.log('[FileSpeaker] Running offline chat, calling local model...');
+      }
+
+      // Route 3: Local model RAG fallback (runs if we are offline, OR if online API query failed)
+      if (!reply && llamaPlugin.isSupported()) {
+        try {
+          console.log('[FileSpeaker] Falling back to local llama model...');
           const contextText = sids.map(id => {
             const s = sources.find(src => src.source_id === id);
             return `DOCUMENT: ${s?.title}\n${s?.text || s?.preview}`;
           }).join('\n\n');
 
           // Limit context length on mobile to prevent OOM
-          const maxContextLength = 5000;
+          const maxContextLength = 4000;
           const truncatedContext = contextText.substring(0, maxContextLength) + (contextText.length > maxContextLength ? '... [truncated]' : '');
 
           const systemInstruction = `You are Kalam Spark Document Intelligence Agent.
@@ -894,6 +900,10 @@ Be accurate and concise. Never invent facts.`;
           const prompt = `Documents:\n${truncatedContext}\n\nHistory:\n${historyStr}\nStudent: ${q}\nAI:`;
           
           reply = await llamaPlugin.getCompletion(prompt, systemInstruction);
+        } catch (localErr) {
+          console.error('[FileSpeaker] Local model fallback failed:', localErr);
+          // If offline model fails, return a friendly local message rather than crashing
+          reply = `📁 Kalam Spark offline document reader: I see you're asking about these documents. While offline or with rate limits exceeded, and since the local model is not loaded, I recommend checking your internet connection or downloading the GGUF model in Settings. Your documents remain loaded locally in the browser/app.`;
         }
       }
 

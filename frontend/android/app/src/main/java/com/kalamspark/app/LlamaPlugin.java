@@ -38,6 +38,13 @@ public class LlamaPlugin extends Plugin {
         for (String path : pathsToTry) {
             File file = new File(path);
             boolean exists = file.exists() && file.isFile() && file.length() > 0;
+            if (exists) {
+                try (java.io.FileInputStream fis = new java.io.FileInputStream(file)) {
+                    fis.read(); // Read first byte to verify read permission
+                } catch (Exception e) {
+                    exists = false;
+                }
+            }
             Log.d(TAG, "checkModelExists: " + path + " -> " + exists + " (size: " + file.length() + ")");
             if (exists) {
                 call.resolve(new JSObject().put("exists", true).put("resolvedPath", path));
@@ -86,7 +93,7 @@ public class LlamaPlugin extends Plugin {
     }
 
     @ActivityCallback
-    private void pickModelCallback(PluginCall call, ActivityResult result) {
+    public void pickModelCallback(PluginCall call, ActivityResult result) {
         if (call == null) return;
         if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
             Uri uri = result.getData().getData();
@@ -184,9 +191,14 @@ public class LlamaPlugin extends Plugin {
             File candidate = new File(path);
             Log.d(TAG, "loadModel: trying " + path + " exists=" + candidate.exists() + " size=" + candidate.length());
             if (candidate.exists() && candidate.isFile() && candidate.length() > 1024 * 1024) {
-                resolvedFile = candidate;
-                resolvedPath = path;
-                break;
+                try (java.io.FileInputStream fis = new java.io.FileInputStream(candidate)) {
+                    fis.read(); // verify read access
+                    resolvedFile = candidate;
+                    resolvedPath = path;
+                    break;
+                } catch (Exception e) {
+                    Log.d(TAG, "loadModel: candidate " + path + " exists but is unreadable: " + e.getMessage());
+                }
             }
         }
 

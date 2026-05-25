@@ -253,11 +253,11 @@ Current Stage: ${(user.currentStageIndex || 0) + 1}
       if (reply) return reply;
     } catch (e: any) {
       console.error('[MentorChat] Offline local model execution failed:', e);
-      throw new Error(`Offline chat failed: ${e.message || e}`);
+      return `🔋 Kalam Spark Offline Mentor: I hear your question about "${userText}". While we are offline or still loading the local model, I'm here to support you! Review your active tasks on the Planner, or complete a quiz in the Study Center. What aspect of your career path as an ${user.dream || 'ML engineer'} would you like to work on right now?`;
     }
   }
 
-  throw new Error("I cannot connect to the server or load the local model. Please check your internet connection.");
+  return `🔋 Kalam Spark Offline Mentor: I hear your question about "${userText}". While we are offline or still loading the local model, I'm here to support you! Review your active tasks on the Planner, or complete a quiz in the Study Center. What aspect of your career path as an ${user.dream || 'ML engineer'} would you like to work on right now?`;
 }
 
 /* ─── Welcome message ─── */

@@ -617,8 +617,11 @@ const KalamSparkLogo = ({ className = "w-full h-full", isLight = false }) => (
   <div className={`relative ${className} flex items-center justify-center`}>
     <img
       src={isLight ? "/assets/logo-light.png" : "/assets/logo.png"}
-      className="relative z-10 w-full h-full object-contain"
-      style={{ filter: isLight ? 'drop-shadow(0 2px 6px rgba(234,88,12,0.2))' : 'drop-shadow(0 2px 8px rgba(255,140,66,0.3))' }}
+      className="relative z-10 w-full h-full object-cover rounded-full"
+      style={{ 
+        filter: isLight ? 'drop-shadow(0 2px 6px rgba(234,88,12,0.2))' : 'drop-shadow(0 2px 8px rgba(255,140,66,0.3))',
+        borderRadius: '50%'
+      }}
       alt="Kalam Spark Logo"
     />
   </div>
