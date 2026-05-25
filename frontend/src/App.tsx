@@ -51,6 +51,7 @@ import { offlineSyncService } from './services/offlineSyncService';
 import { networkService } from './services/networkService';
 import { Capacitor } from '@capacitor/core';
 import { llamaPlugin } from './services/llamaPlugin';
+import { notificationService } from './services/notificationService';
 
 
 const LIGHT_THEME_CSS = `
@@ -1202,13 +1203,53 @@ const AppContent = ({
             {/* App Settings Toggles */}
             <div className="flex flex-col gap-3 mb-5">
               <label className="flex items-center justify-between p-3 rounded-lg bg-black/40 border border-gold-500/20 cursor-pointer hover:bg-black/60 transition-colors">
+                <span className="text-sm font-medium text-gold-200">Follow System Theme</span>
+                <input 
+                  type="checkbox" 
+                  checked={!user.settings?.hasManualTheme} 
+                  onChange={(e) => {
+                    const useSystem = e.target.checked;
+                    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    const systemTheme = prefersDark ? 'dark' : 'light';
+                    const newTheme = useSystem ? systemTheme : user.settings?.theme || 'dark';
+                    const updated = { 
+                      ...user, 
+                      settings: { 
+                        ...user.settings, 
+                        theme: newTheme as any, 
+                        hasManualTheme: !useSystem,
+                        autoScheduleRevisions: user.settings?.autoScheduleRevisions ?? true, 
+                        notificationsEnabled: user.settings?.notificationsEnabled ?? true, 
+                        soundEnabled: user.settings?.soundEnabled ?? true 
+                      } 
+                    };
+                    setUser(updated);
+                    dbService.saveUser(updated);
+                  }}
+                  className="w-4 h-4 accent-gold-500 cursor-pointer"
+                />
+              </label>
+
+              <label className={`flex items-center justify-between p-3 rounded-lg bg-black/40 border border-gold-500/20 transition-colors ${user.settings?.hasManualTheme ? 'cursor-pointer hover:bg-black/60' : 'opacity-50 cursor-not-allowed'}`}>
                 <span className="text-sm font-medium text-gold-200">Dark Mode</span>
                 <input 
                   type="checkbox" 
+                  disabled={!user.settings?.hasManualTheme}
                   checked={user.settings?.theme !== 'light'} 
                   onChange={(e) => {
+                    if (!user.settings?.hasManualTheme) return;
                     const newTheme = e.target.checked ? 'dark' : 'light';
-                    const updated = { ...user, settings: { ...user.settings, theme: newTheme as any, hasManualTheme: true, autoScheduleRevisions: user.settings?.autoScheduleRevisions ?? true, notificationsEnabled: user.settings?.notificationsEnabled ?? true, soundEnabled: user.settings?.soundEnabled ?? true } };
+                    const updated = { 
+                      ...user, 
+                      settings: { 
+                        ...user.settings, 
+                        theme: newTheme as any, 
+                        hasManualTheme: true,
+                        autoScheduleRevisions: user.settings?.autoScheduleRevisions ?? true, 
+                        notificationsEnabled: user.settings?.notificationsEnabled ?? true, 
+                        soundEnabled: user.settings?.soundEnabled ?? true 
+                      } 
+                    };
                     setUser(updated);
                     dbService.saveUser(updated);
                   }}
@@ -1225,6 +1266,34 @@ const AppContent = ({
                     const updated = { ...user, settings: { ...user.settings, theme: user.settings?.theme || 'dark', autoScheduleRevisions: e.target.checked, notificationsEnabled: user.settings?.notificationsEnabled ?? true, soundEnabled: user.settings?.soundEnabled ?? true } };
                     setUser(updated);
                     dbService.saveUser(updated);
+                  }}
+                  className="w-4 h-4 accent-gold-500 cursor-pointer"
+                />
+              </label>
+
+              <label className="flex items-center justify-between p-3 rounded-lg bg-black/40 border border-gold-500/20 cursor-pointer hover:bg-black/60 transition-colors">
+                <span className="text-sm font-medium text-gold-200">Push Notifications</span>
+                <input 
+                  type="checkbox" 
+                  checked={user.settings?.notificationsEnabled !== false} 
+                  onChange={(e) => {
+                    const updated = { 
+                      ...user, 
+                      settings: { 
+                        ...user.settings, 
+                        theme: user.settings?.theme || 'dark', 
+                        autoScheduleRevisions: user.settings?.autoScheduleRevisions ?? true, 
+                        notificationsEnabled: e.target.checked, 
+                        soundEnabled: user.settings?.soundEnabled ?? true 
+                      } 
+                    };
+                    setUser(updated);
+                    dbService.saveUser(updated);
+                    if (e.target.checked) {
+                      notificationService.init();
+                    } else {
+                      notificationService.cancelAll();
+                    }
                   }}
                   className="w-4 h-4 accent-gold-500 cursor-pointer"
                 />
@@ -1343,7 +1412,22 @@ export default function App() {
         if (cachedProfile?.isAuthenticated && cachedProfile?.id) {
           console.log('[App] Restored session from localStorage cache for:', cachedProfile.email || cachedProfile.id);
           profileLoadedRef.current = cachedProfile.id;
-          setUser({ ...cachedProfile, isAuthenticated: true });
+          
+          let finalProfile = cachedProfile;
+          if (!cachedProfile.settings?.hasManualTheme) {
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const systemTheme = prefersDark ? 'dark' : 'light';
+            if (cachedProfile.settings?.theme !== systemTheme) {
+              finalProfile = {
+                ...cachedProfile,
+                settings: {
+                  ...cachedProfile.settings,
+                  theme: systemTheme
+                }
+              };
+            }
+          }
+          setUser(finalProfile);
           setSessionLoading(false);
         }
       } catch (e) {
@@ -1416,9 +1500,23 @@ export default function App() {
              console.log('[App] Auth ID changed for existing email. Preserving original DB identity...');
           }
 
-          setUser(dbUser);
+          let finalUser = dbUser;
+          if (!dbUser.settings?.hasManualTheme) {
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const systemTheme = prefersDark ? 'dark' : 'light';
+            if (dbUser.settings?.theme !== systemTheme) {
+              finalUser = {
+                ...dbUser,
+                settings: {
+                  ...dbUser.settings,
+                  theme: systemTheme
+                }
+              };
+            }
+          }
+          setUser(finalUser);
           // Save to localStorage cache for instant restore on next app open
-          localStorage.setItem('kalamspark_cached_profile', JSON.stringify({ ...dbUser, isAuthenticated: true }));
+          localStorage.setItem('kalamspark_cached_profile', JSON.stringify({ ...finalUser, isAuthenticated: true }));
         } else {
           // Truly a NEW user — no row in DB yet. Build a clean initial record.
           const name = session.user.user_metadata?.name || session.user.user_metadata?.full_name || '';
@@ -1498,6 +1596,9 @@ export default function App() {
                 if (access_token && refresh_token) {
                   console.log('[App] Deep link credentials found, setting Supabase session...');
                   setSessionLoading(true);
+                  import('@capacitor/browser').then(({ Browser }) => {
+                    Browser.close().catch(() => {});
+                  });
                   const { error } = await supabase.auth.setSession({
                     access_token,
                     refresh_token
@@ -1565,6 +1666,31 @@ export default function App() {
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, []);
+
+  // ── Sync Retention Notifications on App State Changes ──
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let appStateListener: any = null;
+    import('@capacitor/app').then(({ App }) => {
+      appStateListener = App.addListener('appStateChange', (state) => {
+        console.log('[App] App state changed:', state.isActive);
+        if (!state.isActive && user.isAuthenticated && user.id) {
+          notificationService.scheduleSmartRetentionNotifications(user);
+        }
+      });
+    });
+
+    if (user.isAuthenticated && user.id) {
+      notificationService.scheduleSmartRetentionNotifications(user);
+    }
+
+    return () => {
+      if (appStateListener) {
+        appStateListener.then((l: any) => l.remove());
+      }
+    };
+  }, [user.isAuthenticated, user.id, user.streak, user.dream, user.branch, user.settings?.notificationsEnabled]);
 
   // No Google OAuth — users start with name-only local session
 

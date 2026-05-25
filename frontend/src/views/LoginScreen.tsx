@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ArrowRight, ShieldCheck } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 import { Capacitor } from '@capacitor/core';
+import { Browser } from '@capacitor/browser';
 
 export default function LoginScreen({ isLight = false, onManualLogin }: { isLight?: boolean, onManualLogin: (email: string, name: string) => void }) {
   const [tab, setTab] = useState<'login' | 'register'>('login');
@@ -39,14 +40,29 @@ export default function LoginScreen({ isLight = false, onManualLogin }: { isLigh
         ? 'com.kalamspark.app://callback'
         : (window.location.origin + window.location.pathname);
 
-      const { error: googleError } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: redirectUrl,
-          queryParams: { access_type: 'offline', prompt: 'consent' },
-        },
-      });
-      if (googleError) throw googleError;
+      if (isNative) {
+        const { data, error: googleError } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: redirectUrl,
+            skipBrowserRedirect: true,
+            queryParams: { access_type: 'offline', prompt: 'consent' },
+          },
+        });
+        if (googleError) throw googleError;
+        if (data?.url) {
+          await Browser.open({ url: data.url });
+        }
+      } else {
+        const { error: googleError } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: redirectUrl,
+            queryParams: { access_type: 'offline', prompt: 'consent' },
+          },
+        });
+        if (googleError) throw googleError;
+      }
     } catch (err: any) {
       setMessage(`Error: ${err.message}`);
     }
