@@ -1816,7 +1816,26 @@ export default function App() {
     try {
       const cleanEmail = email.trim().toLowerCase();
       const cleanName = name.trim() || cleanEmail.split('@')[0];
-      
+
+      // ── Clear ALL previous user data from localStorage before switching accounts ──
+      // This prevents old user's data (tasks, roadmap, FileSpeaker, planner, etc.)
+      // from leaking into the new user's session.
+      const prevEmail = localStorage.getItem('kalamspark_manual_email');
+      if (prevEmail && prevEmail !== cleanEmail) {
+        // Different user logging in — wipe all user-scoped localStorage keys
+        const keysToWipe = [
+          'kalamspark_user_session', 'kalamspark_roadmap_data', 'kalamspark_cached_profile',
+          'kalamspark_force_refresh', 'kalamspark_last_route', 'kalamspark_last_login_date',
+          'kalamspark_roadmap_cache', 'kalamspark_concept_progress', 'kalamspark_mentor_titles',
+          'fs_sources', 'fs_active_id', 'fs_states', 'fs_checked', 'fs_podcast_library',
+          'ks_task_variety', 'ks_last_task_reset', 'ks_task_target',
+        ];
+        keysToWipe.forEach(k => localStorage.removeItem(k));
+        sessionStorage.removeItem('kalamspark_radar');
+        sessionStorage.removeItem('fs_import_url');
+        console.log('[App] Cleared previous user data for account switch');
+      }
+
       let dbUser = await dbService.getUserByEmail(cleanEmail);
       
       if (dbUser) {

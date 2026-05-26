@@ -476,14 +476,22 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
       if (voices.length > 0) {
         doSpeak();
       } else {
-        window.speechSynthesis.onvoiceschanged = () => {
-          window.speechSynthesis.onvoiceschanged = null;
+        // Track whether we've already spoken to avoid double-call (race between
+        // onvoiceschanged and setTimeout both triggering doSpeak)
+        let alreadySpoken = false;
+        const safeSpeak = () => {
+          if (alreadySpoken) return;
+          alreadySpoken = true;
           doSpeak();
         };
-        // Fallback: speak without a specific voice after 500ms
+        window.speechSynthesis.onvoiceschanged = () => {
+          window.speechSynthesis.onvoiceschanged = null;
+          safeSpeak();
+        };
+        // Fallback: speak without a specific voice after 600ms
         setTimeout(() => {
-          if (!window.speechSynthesis.speaking) doSpeak();
-        }, 500);
+          if (!window.speechSynthesis.speaking) safeSpeak();
+        }, 600);
       }
     }
   };

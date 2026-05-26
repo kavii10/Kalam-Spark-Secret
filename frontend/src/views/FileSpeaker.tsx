@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   Upload, Link, FileText, MessageSquare, Zap, Headphones,
   ChevronRight, Loader2, Play, Pause, Download, X,
@@ -54,29 +54,29 @@ interface PodcastRecord {
   lines: { speaker: string; text: string }[];
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Supported podcast languages Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* --- Supported podcast languages --- */
 const PODCAST_LANGUAGES = [
-  { code: 'en', label: 'English',   flag: 'Ã°Å¸â€¡Â¬Ã°Å¸â€¡Â§' },
-  { code: 'ta', label: 'Ã Â®Â¤Ã Â®Â®Ã Â®Â¿Ã Â®Â´Ã Â¯Â',      flag: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³' },
-  { code: 'hi', label: 'Ã Â¤Â¹Ã Â¤Â¿Ã Â¤Â¨Ã Â¥ÂÃ Â¤Â¦Ã Â¥â‚¬',      flag: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³' },
-  { code: 'te', label: 'Ã Â°Â¤Ã Â±â€ Ã Â°Â²Ã Â±ÂÃ Â°â€”Ã Â±Â',     flag: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³' },
-  { code: 'kn', label: 'Ã Â²â€¢Ã Â²Â¨Ã Â³ÂÃ Â²Â¨Ã Â²Â¡',      flag: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³' },
-  { code: 'ml', label: 'Ã Â´Â®Ã Â´Â²Ã Â´Â¯Ã Â´Â¾Ã Â´Â³Ã Â´â€š',     flag: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³' },
-  { code: 'bn', label: 'Ã Â¦Â¬Ã Â¦Â¾Ã Â¦â€šÃ Â¦Â²Ã Â¦Â¾',      flag: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³' },
-  { code: 'mr', label: 'Ã Â¤Â®Ã Â¤Â°Ã Â¤Â¾Ã Â¤Â Ã Â¥â‚¬',      flag: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³' },
-  { code: 'es', label: 'EspaÃƒÂ±ol',   flag: 'Ã°Å¸â€¡ÂªÃ°Å¸â€¡Â¸' },
-  { code: 'fr', label: 'FranÃƒÂ§ais',  flag: 'Ã°Å¸â€¡Â«Ã°Å¸â€¡Â·' },
-  { code: 'de', label: 'Deutsch',   flag: 'Ã°Å¸â€¡Â©Ã°Å¸â€¡Âª' },
-  { code: 'zh', label: 'Ã¤Â¸Â­Ã¦â€“â€¡',       flag: 'Ã°Å¸â€¡Â¨Ã°Å¸â€¡Â³' },
-  { code: 'ar', label: 'Ã˜Â§Ã™â€žÃ˜Â¹Ã˜Â±Ã˜Â¨Ã™Å Ã˜Â©',   flag: 'Ã°Å¸â€¡Â¸Ã°Å¸â€¡Â¦' },
-  { code: 'ru', label: 'ÃÂ Ã‘Æ’Ã‘ÂÃ‘ÂÃÂºÃÂ¸ÃÂ¹',   flag: 'Ã°Å¸â€¡Â·Ã°Å¸â€¡Âº' },
-  { code: 'pt', label: 'PortuguÃƒÂªs', flag: 'Ã°Å¸â€¡ÂµÃ°Å¸â€¡Â¹' },
-  { code: 'ja', label: 'Ã¦â€”Â¥Ã¦Å“Â¬Ã¨ÂªÅ¾',     flag: 'Ã°Å¸â€¡Â¯Ã°Å¸â€¡Âµ' },
-  { code: 'ko', label: 'Ã­â€¢Å“ÃªÂµÂ­Ã¬â€“Â´',     flag: 'Ã°Å¸â€¡Â°Ã°Å¸â€¡Â·' },
-  { code: 'it', label: 'Italiano',  flag: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â¹' },
-  { code: 'id', label: 'Bahasa Indonesia', flag: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â©' },
-  { code: 'tr', label: 'TÃƒÂ¼rkÃƒÂ§e',    flag: 'Ã°Å¸â€¡Â¹Ã°Å¸â€¡Â·' },
-  { code: 'vi', label: 'TiÃ¡ÂºÂ¿ng ViÃ¡Â»â€¡t',flag: 'Ã°Å¸â€¡Â»Ã°Å¸â€¡Â³' },
+  { code: 'en', label: 'English',          flag: '\U0001F1FA\U0001F1F8' },
+  { code: 'ta', label: 'Tamil',            flag: '\U0001F1EE\U0001F1F3' },
+  { code: 'hi', label: 'Hindi',            flag: '\U0001F1EE\U0001F1F3' },
+  { code: 'te', label: 'Telugu',           flag: '\U0001F1EE\U0001F1F3' },
+  { code: 'kn', label: 'Kannada',          flag: '\U0001F1EE\U0001F1F3' },
+  { code: 'ml', label: 'Malayalam',        flag: '\U0001F1EE\U0001F1F3' },
+  { code: 'bn', label: 'Bengali',          flag: '\U0001F1EE\U0001F1F3' },
+  { code: 'mr', label: 'Marathi',          flag: '\U0001F1EE\U0001F1F3' },
+  { code: 'es', label: 'Espanol',          flag: '\U0001F1EA\U0001F1F8' },
+  { code: 'fr', label: 'Francais',         flag: '\U0001F1EB\U0001F1F7' },
+  { code: 'de', label: 'Deutsch',          flag: '\U0001F1E9\U0001F1EA' },
+  { code: 'zh', label: 'Chinese',          flag: '\U0001F1E8\U0001F1F3' },
+  { code: 'ar', label: 'Arabic',           flag: '\U0001F1F8\U0001F1E6' },
+  { code: 'ru', label: 'Russian',          flag: '\U0001F1F7\U0001F1FA' },
+  { code: 'pt', label: 'Portugues',        flag: '\U0001F1F5\U0001F1F9' },
+  { code: 'ja', label: 'Japanese',         flag: '\U0001F1EF\U0001F1F5' },
+  { code: 'ko', label: 'Korean',           flag: '\U0001F1F0\U0001F1F7' },
+  { code: 'it', label: 'Italiano',         flag: '\U0001F1EE\U0001F1F9' },
+  { code: 'id', label: 'Bahasa Indonesia', flag: '\U0001F1EE\U0001F1E9' },
+  { code: 'tr', label: 'Turkce',           flag: '\U0001F1F9\U0001F1F7' },
+  { code: 'vi', label: 'Tieng Viet',       flag: '\U0001F1FB\U0001F1F3' },
 ];
 
 /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Voice presets per language Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
@@ -116,12 +116,12 @@ function renderMarkdown(raw: string): React.ReactNode[] {
     if (h3Match) return <React.Fragment key={lineIdx}><strong className="block text-sm font-semibold text-white/80 mt-1">{h3Match[1]}</strong></React.Fragment>;
 
     // Handle bullet/list items
-    const bulletMatch = line.match(/^[\-\*Ã¢â‚¬Â¢]\s+(.+)/);
+    const bulletMatch = line.match(/^[-*\u2022]\s+(.+)/);
     if (bulletMatch) {
       return (
         <React.Fragment key={lineIdx}>
           <span className="flex gap-2 my-0.5">
-            <span className="text-gold-400 shrink-0 mt-0.5">Ã¢â‚¬Â¢</span>
+            <span className="text-gold-400 shrink-0 mt-0.5">&bull;</span>
             <span>{renderInline(bulletMatch[1])}</span>
           </span>
         </React.Fragment>
@@ -223,41 +223,132 @@ const TRANSFORMATIONS = [
 const SELECT_DARK  = "w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-violet-500/50 cursor-pointer";
 const SELECT_LIGHT = "w-full bg-white border border-zinc-300 rounded-lg px-3 py-2 text-sm text-zinc-800 focus:outline-none focus:border-violet-500/50 cursor-pointer";
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ All available TTS voices grouped by language Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* --- All available TTS voices grouped by language --- */
 const VOICES = [
   // English
-  { value: 'en-US-ChristopherNeural', label: 'Ã°Å¸â€¡Â¬Ã°Å¸â€¡Â§ Christopher (Male, US)' },
-  { value: 'en-US-JennyNeural',       label: 'Ã°Å¸â€¡Â¬Ã°Å¸â€¡Â§ Jenny (Female, US)' },
-  { value: 'en-GB-RyanNeural',        label: 'Ã°Å¸â€¡Â¬Ã°Å¸â€¡Â§ Ryan (Male, UK)' },
-  { value: 'en-GB-SoniaNeural',       label: 'Ã°Å¸â€¡Â¬Ã°Å¸â€¡Â§ Sonia (Female, UK)' },
-  { value: 'en-IN-NeerjaNeural',      label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Neerja (Female, IN)' },
-  { value: 'en-IN-PrabhatNeural',     label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Prabhat (Male, IN)' },
+  { value: 'en-US-ChristopherNeural', label: '\U0001F1FA\U0001F1F8 Christopher (Male, US)' },
+  { value: 'en-US-JennyNeural',       label: '\U0001F1FA\U0001F1F8 Jenny (Female, US)' },
+  { value: 'en-GB-RyanNeural',        label: '\U0001F1EC\U0001F1E7 Ryan (Male, UK)' },
+  { value: 'en-GB-SoniaNeural',       label: '\U0001F1EC\U0001F1E7 Sonia (Female, UK)' },
+  { value: 'en-IN-NeerjaNeural',      label: '\U0001F1EE\U0001F1F3 Neerja (Female, IN)' },
+  { value: 'en-IN-PrabhatNeural',     label: '\U0001F1EE\U0001F1F3 Prabhat (Male, IN)' },
   // Tamil
-  { value: 'ta-IN-ValluvarNeural',    label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â®ÂµÃ Â®Â³Ã Â¯ÂÃ Â®Â³Ã Â¯ÂÃ Â®ÂµÃ Â®Â°Ã Â¯Â (Male, Tamil)' },
-  { value: 'ta-IN-PallaviNeural',     label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â®ÂªÃ Â®Â²Ã Â¯ÂÃ Â®Â²Ã Â®ÂµÃ Â®Â¿ (Female, Tamil)' },
+  { value: 'ta-IN-ValluvarNeural',    label: '\U0001F1EE\U0001F1F3 Valluvar (Male, Tamil)' },
+  { value: 'ta-IN-PallaviNeural',     label: '\U0001F1EE\U0001F1F3 Pallavi (Female, Tamil)' },
   // Hindi
-  { value: 'hi-IN-MadhurNeural',     label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â¤Â®Ã Â¤Â§Ã Â¥ÂÃ Â¤Â° (Male, Hindi)' },
-  { value: 'hi-IN-SwaraNeural',      label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â¤Â¸Ã Â¥ÂÃ Â¤ÂµÃ Â¤Â°Ã Â¤Â¾ (Female, Hindi)' },
+  { value: 'hi-IN-MadhurNeural',      label: '\U0001F1EE\U0001F1F3 Madhur (Male, Hindi)' },
+  { value: 'hi-IN-SwaraNeural',       label: '\U0001F1EE\U0001F1F3 Swara (Female, Hindi)' },
   // Telugu
-  { value: 'te-IN-MohanNeural',      label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â°Â®Ã Â±â€¹Ã Â°Â¹Ã Â°Â¨Ã Â±Â (Male, Telugu)' },
-  { value: 'te-IN-ShrutiNeural',     label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â°Â¶Ã Â±ÂÃ Â°Â°Ã Â±ÂÃ Â°Â¤Ã Â°Â¿ (Female, Telugu)' },
+  { value: 'te-IN-MohanNeural',       label: '\U0001F1EE\U0001F1F3 Mohan (Male, Telugu)' },
+  { value: 'te-IN-ShrutiNeural',      label: '\U0001F1EE\U0001F1F3 Shruti (Female, Telugu)' },
   // Kannada
-  { value: 'kn-IN-GaganNeural',      label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â²â€”Ã Â²â€”Ã Â²Â¨Ã Â³Â (Male, Kannada)' },
-  { value: 'kn-IN-SapnaNeural',      label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â²Â¸Ã Â²ÂªÃ Â³ÂÃ Â²Â¨Ã Â²Â¾ (Female, Kannada)' },
+  { value: 'kn-IN-GaganNeural',       label: '\U0001F1EE\U0001F1F3 Gagan (Male, Kannada)' },
+  { value: 'kn-IN-SapnaNeural',       label: '\U0001F1EE\U0001F1F3 Sapna (Female, Kannada)' },
   // Malayalam
-  { value: 'ml-IN-MidhunNeural',     label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â´Â®Ã Â´Â¿Ã Â´Â¦Ã ÂµÂÃ Â´Â§Ã ÂµÂÃ ÂµÂ» (Male, Malayalam)' },
-  { value: 'ml-IN-SobhanaNeural',    label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â´Â¸Ã Âµâ€¹Ã Â´Â­Ã Â´Â¨ (Female, Malayalam)' },
+  { value: 'ml-IN-MidhunNeural',      label: '\U0001F1EE\U0001F1F3 Midhun (Male, Malayalam)' },
+  { value: 'ml-IN-SobhanaNeural',     label: '\U0001F1EE\U0001F1F3 Sobhana (Female, Malayalam)' },
   // Bengali
-  { value: 'bn-IN-BashkarNeural',    label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â¦Â¬Ã Â¦Â¾Ã Â¦Â¶Ã Â¦â€¢Ã Â¦Â° (Male, Bengali)' },
-  { value: 'bn-IN-TanishaaNeural',   label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â¦Â¤Ã Â¦Â¾Ã Â¦Â¨Ã Â¦Â¿Ã Â¦Â¶Ã Â¦Â¾ (Female, Bengali)' },
+  { value: 'bn-IN-BashkarNeural',     label: '\U0001F1EE\U0001F1F3 Bashkar (Male, Bengali)' },
+  { value: 'bn-IN-TanishaaNeural',    label: '\U0001F1EE\U0001F1F3 Tanishaa (Female, Bengali)' },
   // Marathi
-  { value: 'mr-IN-ManoharNeural',    label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â¤Â®Ã Â¤Â¨Ã Â¥â€¹Ã Â¤Â¹Ã Â¤Â° (Male, Marathi)' },
-  { value: 'mr-IN-AarohiNeural',     label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â¤â€ Ã Â¤Â°Ã Â¥â€¹Ã Â¤Â¹Ã Â¥â‚¬ (Female, Marathi)' },
+  { value: 'mr-IN-ManoharNeural',     label: '\U0001F1EE\U0001F1F3 Manohar (Male, Marathi)' },
+  { value: 'mr-IN-AarohiNeural',      label: '\U0001F1EE\U0001F1F3 Aarohi (Female, Marathi)' },
 ];
 
 /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Audio Player with seek bar, skip Ã‚Â±10s Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 /* On mobile: uses Web Speech API (speechSynthesis) since there is no server audio.
    On desktop: uses HTML <audio> element with the server URL.              */
+/* --- Lightweight TTS player for podcast library items (mobile only) --- */
+function LibraryTTSPlayer({ lines, podcastLang, host1, host2, durationEst, user }: {
+  lines: { speaker: string; text: string }[];
+  podcastLang: string;
+  host1: string;
+  host2: string;
+  durationEst: string;
+  user: UserProfile;
+}) {
+  const [playing, setPlaying] = React.useState(false);
+  const [lineIdx, setLineIdx] = React.useState(0);
+  const activeRef = React.useRef(false);
+
+  const playFrom = (startIdx: number) => {
+    window.speechSynthesis.cancel();
+    activeRef.current = true;
+    setPlaying(true);
+    const langMap: Record<string, string> = {
+      en: 'en-US', ta: 'ta-IN', hi: 'hi-IN', te: 'te-IN',
+      kn: 'kn-IN', ml: 'ml-IN', bn: 'bn-IN', mr: 'mr-IN',
+      es: 'es-ES', fr: 'fr-FR', de: 'de-DE', zh: 'zh-CN',
+      ja: 'ja-JP', ko: 'ko-KR', ar: 'ar-SA', ru: 'ru-RU',
+      pt: 'pt-BR', it: 'it-IT', id: 'id-ID', tr: 'tr-TR', vi: 'vi-VN',
+    };
+    const lang = langMap[podcastLang] || 'en-US';
+    const speak = (idx: number) => {
+      if (!activeRef.current || idx >= lines.length) {
+        setPlaying(false); setLineIdx(0); activeRef.current = false; return;
+      }
+      setLineIdx(idx);
+      const utt = new SpeechSynthesisUtterance(lines[idx].text);
+      utt.lang = lang;
+      const voices = window.speechSynthesis.getVoices();
+      const lv = voices.filter(v => v.lang.startsWith(lang.split('-')[0]));
+      const isH1 = lines[idx].speaker === host1;
+      if (lv.length >= 2) utt.voice = lv[isH1 ? 0 : 1];
+      else if (lv.length === 1) utt.voice = lv[0];
+      utt.pitch = isH1 ? 0.9 : 1.15;
+      utt.rate = isH1 ? 0.95 : 1.0;
+      utt.onend = () => speak(idx + 1);
+      utt.onerror = () => speak(idx + 1);
+      window.speechSynthesis.speak(utt);
+    };
+    const voicesNow = window.speechSynthesis.getVoices();
+    if (voicesNow.length > 0) { speak(startIdx); }
+    else {
+      let started = false;
+      const go = () => { if (started) return; started = true; speak(startIdx); };
+      window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.onvoiceschanged = null; go(); };
+      setTimeout(go, 600);
+    }
+  };
+
+  const pause = () => { window.speechSynthesis.cancel(); activeRef.current = false; setPlaying(false); };
+  const toggle = () => { if (playing) pause(); else playFrom(lineIdx); };
+  const restart = () => { pause(); setLineIdx(0); };
+
+  const pct = lines.length > 0 ? (lineIdx / lines.length) * 100 : 0;
+  const isLight = user.settings?.theme === 'light';
+
+  return (
+    <div className="space-y-2">
+      <div className="relative w-full h-1.5 bg-zinc-700/50 rounded-full mt-3">
+        <div className="absolute top-0 left-0 h-full bg-violet-500 rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
+      </div>
+      <div className="flex items-center justify-between text-[10px] text-zinc-500">
+        <span>Line {playing ? lineIdx + 1 : lineIdx} / {lines.length}</span>
+        <span>{durationEst}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <button onClick={restart} className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all" title="Restart">
+          <SkipBack size={14} />
+        </button>
+        <button onClick={toggle} className="w-9 h-9 bg-violet-600 hover:bg-violet-500 rounded-full flex items-center justify-center transition-all shadow-md shadow-violet-900/30">
+          {playing ? <Pause size={16} className="text-white" /> : <Play size={16} className="text-white ml-0.5" />}
+        </button>
+        <div className="flex-1 min-w-0">
+          <p className="text-[11px] font-semibold text-zinc-300 truncate">{host1} &amp; {host2}</p>
+          <p className="text-[10px] text-zinc-600">{lines.length} exchanges &middot; TTS</p>
+        </div>
+      </div>
+      {lines[lineIdx] && playing && (
+        <div className="p-2 rounded-lg bg-violet-500/10 border border-violet-500/20">
+          <p className="text-[9px] font-bold text-violet-400 mb-0.5">{lines[lineIdx].speaker}</p>
+          <p className="text-[11px] text-zinc-300 leading-relaxed">{lines[lineIdx].text}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, audioRef, user, lines, podcastLang }: { 
   src: string; 
   host1: string; 
@@ -501,7 +592,7 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
           </button>
           <div className="flex-1">
             <p className="text-xs font-semibold text-zinc-300">{host1} &amp; {host2}</p>
-            <p className="text-[10px] text-zinc-600">{linesCount} exchanges Ã‚Â· TTS</p>
+            <p className="text-[10px] text-zinc-600">{linesCount} exchanges &middot; TTS</p>
           </div>
           {/* Speed */}
           <div className="relative">
@@ -2090,27 +2181,40 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
                         <Trash2 size={13} />
                       </button>
                     </div>
-                    <div className="mt-3 flex items-center gap-3">
-                      <audio
-                        src={`${BACKEND}/api/filespeaker/audio/${rec.audioFilename}`}
-                        controls
-                        className="flex-1 h-8"
-                        style={{ minWidth: 0 }}
-                      />
-                      <a
-                        href={`${BACKEND}/api/filespeaker/audio/${rec.audioFilename}`}
-                        download={`podcast_${rec.id}.mp3`}
-                        title="Download podcast"
-                        className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border transition-all ${
-                          isLight ? 'border-zinc-200 text-zinc-500 hover:border-violet-400 hover:text-violet-600 bg-white'
-                          : 'border-zinc-700 text-zinc-400 hover:border-violet-500/40 hover:text-violet-400 bg-zinc-800'
-                        }`}>
-                        <Download size={13} />
-                      </a>
+                    <div className="mt-3">
+                      {IS_NATIVE_MOBILE ? (
+                        <LibraryTTSPlayer
+                          lines={rec.lines || []}
+                          podcastLang={rec.language || 'en'}
+                          host1={rec.host1}
+                          host2={rec.host2}
+                          durationEst={rec.durationEst}
+                          user={user}
+                        />
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          <audio
+                            src={`${BACKEND}/api/filespeaker/audio/${rec.audioFilename}`}
+                            controls
+                            className="flex-1 h-8"
+                            style={{ minWidth: 0 }}
+                          />
+                          <a
+                            href={`${BACKEND}/api/filespeaker/audio/${rec.audioFilename}`}
+                            download={`podcast_${rec.id}.mp3`}
+                            title="Download podcast"
+                            className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border transition-all ${
+                              isLight ? 'border-zinc-200 text-zinc-500 hover:border-violet-400 hover:text-violet-600 bg-white'
+                              : 'border-zinc-700 text-zinc-400 hover:border-violet-500/40 hover:text-violet-400 bg-zinc-800'
+                            }`}>
+                            <Download size={13} />
+                          </a>
+                        </div>
+                      )}
                     </div>
                     {rec.script && (
                       <details className="mt-2 text-xs">
-                        <summary className={`cursor-pointer select-none py-1 ${isLight ? 'text-zinc-400 hover:text-zinc-700' : 'text-zinc-600 hover:text-zinc-400'}`}>View Script Ã¢â€ â€œ</summary>
+                        <summary className={`cursor-pointer select-none py-1 ${isLight ? 'text-zinc-400 hover:text-zinc-700' : 'text-zinc-600 hover:text-zinc-400'}`}>View Script &#9660;</summary>
                         <div className={`mt-2 max-h-32 overflow-y-auto space-y-1.5 pt-2 border-t ${
                           isLight ? 'border-zinc-200' : 'border-zinc-800'
                         }`}>
@@ -2135,3 +2239,9 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
     </div>
   );
 }
+
+
+
+
+
+
