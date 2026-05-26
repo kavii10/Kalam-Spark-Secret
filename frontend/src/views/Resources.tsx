@@ -11,6 +11,7 @@ import {
 } from '../services/resourceApiService';
 import { dbService } from '../services/dbService';
 import { useNavigate } from 'react-router-dom';
+import { networkService } from '../services/networkService';
 
 // ─── Glassmorphism card base style ─────────────────────────────────────────────
 const gc: React.CSSProperties = {
@@ -487,6 +488,58 @@ function ResourceActions({ item, roadmap, onUpdate, inStack = false }: { item: a
   );
 }
 
+function getLocalResourcesPlaceholder(dream: string, stageTitle: string): ResourceData {
+  const dLower = dream.toLowerCase();
+  
+  let books: BookResource[] = [
+    { title: `Foundations of ${dream}`, author: 'Academic Press', description: 'A comprehensive textbook covering core principles, methodologies, and industry standards.', link: 'https://books.google.com', source: 'local' },
+    { title: `Professional Guide to ${dream}`, author: 'Kalam Press', description: 'Practical handbook filled with case studies, project templates, and expert insights.', link: 'https://books.google.com', source: 'local' }
+  ];
+  
+  let videos: VideoResource[] = [
+    { title: `Introduction to ${dream} Course`, publisher: 'EduSpark Online', description: 'Step-by-step video lecture series detailing essential concepts and applications.', link: 'https://www.youtube.com', source: 'local' },
+    { title: `Advanced Topics in ${dream}`, publisher: 'TechAcademy', description: 'Deep dive tutorials into industry-standard tools and advanced system workflows.', link: 'https://www.youtube.com', source: 'local' }
+  ];
+
+  let papers: PaperResource[] = [
+    { title: `Recent Trends and Future Directions in ${dream}`, author: 'Global Research Journal', description: 'Scholarly overview of major breakthroughs, research papers, and technical developments.', link: 'https://arxiv.org', source: 'local' }
+  ];
+
+  let news: NewsResource[] = [
+    { title: `How technology is reshaping ${dream} careers`, date: 'Today', description: 'Industry news report on the skills, roles, and hiring patterns in demand right now.', link: 'https://news.google.com', source: 'local' }
+  ];
+
+  if (dLower.includes("software") || dLower.includes("computer") || dLower.includes("developer") || dLower.includes("code") || dLower.includes("ai") || dLower.includes("machine learning")) {
+    books = [
+      { title: 'Clean Code: A Handbook of Agile Software Craftsmanship', author: 'Robert C. Martin', description: 'The legendary guide to writing clean, maintainable, and robust software code.', link: 'https://books.google.com/books?isbn=0132350882', source: 'local' },
+      { title: 'Introduction to Algorithms', author: 'Thomas H. Cormen', description: 'The absolute bible of algorithms, data structures, and computer science foundations.', link: 'https://books.google.com/books?isbn=0262033844', source: 'local' },
+      { title: 'Designing Data-Intensive Applications', author: 'Martin Kleppmann', description: 'Unravel the complexities of databases, distributed systems, and modern software architectures.', link: 'https://books.google.com/books?isbn=1449373321', source: 'local' }
+    ];
+    videos = [
+      { title: 'Data Structures and Algorithms for Beginners', publisher: 'freeCodeCamp.org', description: 'Comprehensive video course covering arrays, linked lists, trees, graphs, and search algorithms.', link: 'https://www.youtube.com/watch?v=RBSGKlAodsM', source: 'local' },
+      { title: 'Software Architecture & System Design Basics', publisher: 'Tech Dummies', description: 'Learn how massive scalable systems (like Netflix, Google, Uber) are architected.', link: 'https://www.youtube.com/watch?v=SqcY0GlETPk', source: 'local' }
+    ];
+  } else if (dLower.includes("data") || dLower.includes("statistic") || dLower.includes("analyst")) {
+    books = [
+      { title: 'Python for Data Analysis', author: 'Wes McKinney', description: 'Learn how to manipulate, process, clean, and crunch datasets using Pandas and Numpy.', link: 'https://books.google.com/books?isbn=1491957662', source: 'local' },
+      { title: 'The Elements of Statistical Learning', author: 'Trevor Hastie', description: 'Mathematical foundations of machine learning, regression, classification, and data modeling.', link: 'https://books.google.com/books?isbn=0387848576', source: 'local' }
+    ];
+    videos = [
+      { title: 'Data Science Full Course for Beginners', publisher: 'Edureka', description: 'In-depth video covering statistics, Python, data visualization, and ML model training.', link: 'https://www.youtube.com/watch?v=-ETQ97mXXF0', source: 'local' }
+    ];
+  } else if (dLower.includes("design") || dLower.includes("ux") || dLower.includes("ui")) {
+    books = [
+      { title: 'The Design of Everyday Things', author: 'Don Norman', description: 'Cognitive psychology rules for usable product design and user experience principles.', link: 'https://books.google.com/books?isbn=0465050654', source: 'local' },
+      { title: 'Don\'t Make Me Think: A Common Sense Approach to Web Usability', author: 'Steve Krug', description: 'The definitive guide to understanding how users navigate digital layouts.', link: 'https://books.google.com/books?isbn=0321965515', source: 'local' }
+    ];
+    videos = [
+      { title: 'UI / UX Design Full Tutorial Course', publisher: 'DesignCourse', description: 'Learn wireframing, prototyping, typography, and color systems in modern UI design.', link: 'https://www.youtube.com/watch?v=c9Wg6Ry_zY0', source: 'local' }
+    ];
+  }
+
+  return { books, videos, papers, news, cachedForDream: dream, cachedForStage: 0 };
+}
+
 // ─── Main Component ─────────────────────────────────────────────────────────────
 export default function Resources({ user }: { user: UserProfile }) {
   const [activeTab, setActiveTab] = useState<Tab>('books');
@@ -563,19 +616,37 @@ export default function Resources({ user }: { user: UserProfile }) {
       );
 
       if (!cached || dreamMismatch || stageMismatch || sparseCache) {
-        const fetched = await fetchDirectResources(
-          currentUser.dream, stage.title, stage.subjects || [], currentUser.year
-        );
-        cached = {
-          books:  (Array.isArray(fetched.books)  ? fetched.books  : []).filter((b: any) => b?.link?.startsWith('http')).slice(0, 10),
-          videos: (Array.isArray(fetched.videos) ? fetched.videos : []).filter((v: any) => v?.link?.startsWith('http')).slice(0, 10),
-          papers: (Array.isArray(fetched.papers) ? fetched.papers : []).filter((p: any) => p?.link?.startsWith('http')).slice(0, 10),
-          news:   (Array.isArray(fetched.news)   ? fetched.news   : []).filter((n: any) => n?.link?.startsWith('http')).slice(0, 10),
-          cachedForDream: currentUser.dream,
-          cachedForStage: stageIdx,
-        } as any;
-        rm = { ...rm, cachedResources: cached, _loadMoreCount: 0 };
-        await dbService.saveRoadmap(currentUser, rm);
+        const isOnline = networkService.isOnline();
+        if (isOnline) {
+          try {
+            const fetched = await fetchDirectResources(
+              currentUser.dream, stage.title, stage.subjects || [], currentUser.year
+            );
+            cached = {
+              books:  (Array.isArray(fetched.books)  ? fetched.books  : []).filter((b: any) => b?.link?.startsWith('http')).slice(0, 10),
+              videos: (Array.isArray(fetched.videos) ? fetched.videos : []).filter((v: any) => v?.link?.startsWith('http')).slice(0, 10),
+              papers: (Array.isArray(fetched.papers) ? fetched.papers : []).filter((p: any) => p?.link?.startsWith('http')).slice(0, 10),
+              news:   (Array.isArray(fetched.news)   ? fetched.news   : []).filter((n: any) => n?.link?.startsWith('http')).slice(0, 10),
+              cachedForDream: currentUser.dream,
+              cachedForStage: stageIdx,
+            } as any;
+            rm = { ...rm, cachedResources: cached, _loadMoreCount: 0 };
+            await dbService.saveRoadmap(currentUser, rm);
+          } catch (fetchErr) {
+            console.warn('[Resources] Fetch direct failed online, trying cache fallback...', fetchErr);
+          }
+        }
+
+        // If we failed to fetch or are offline, try placeholder fallbacks:
+        if (!cached || !cached.books || cached.books.length === 0) {
+          if (rm.cachedResources && rm.cachedResources.books && rm.cachedResources.books.length > 0) {
+            cached = rm.cachedResources;
+          } else {
+            cached = getLocalResourcesPlaceholder(currentUser.dream || 'Professional', stage.title || 'Foundations');
+            rm = { ...rm, cachedResources: cached };
+            await dbService.saveRoadmap(currentUser, rm);
+          }
+        }
       }
 
       setRoadmap({ ...rm });

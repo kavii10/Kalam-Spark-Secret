@@ -56,27 +56,27 @@ interface PodcastRecord {
 
 /* --- Supported podcast languages --- */
 const PODCAST_LANGUAGES = [
-  { code: 'en', label: 'English',          flag: '\U0001F1FA\U0001F1F8' },
-  { code: 'ta', label: 'Tamil',            flag: '\U0001F1EE\U0001F1F3' },
-  { code: 'hi', label: 'Hindi',            flag: '\U0001F1EE\U0001F1F3' },
-  { code: 'te', label: 'Telugu',           flag: '\U0001F1EE\U0001F1F3' },
-  { code: 'kn', label: 'Kannada',          flag: '\U0001F1EE\U0001F1F3' },
-  { code: 'ml', label: 'Malayalam',        flag: '\U0001F1EE\U0001F1F3' },
-  { code: 'bn', label: 'Bengali',          flag: '\U0001F1EE\U0001F1F3' },
-  { code: 'mr', label: 'Marathi',          flag: '\U0001F1EE\U0001F1F3' },
-  { code: 'es', label: 'Espanol',          flag: '\U0001F1EA\U0001F1F8' },
-  { code: 'fr', label: 'Francais',         flag: '\U0001F1EB\U0001F1F7' },
-  { code: 'de', label: 'Deutsch',          flag: '\U0001F1E9\U0001F1EA' },
-  { code: 'zh', label: 'Chinese',          flag: '\U0001F1E8\U0001F1F3' },
-  { code: 'ar', label: 'Arabic',           flag: '\U0001F1F8\U0001F1E6' },
-  { code: 'ru', label: 'Russian',          flag: '\U0001F1F7\U0001F1FA' },
-  { code: 'pt', label: 'Portugues',        flag: '\U0001F1F5\U0001F1F9' },
-  { code: 'ja', label: 'Japanese',         flag: '\U0001F1EF\U0001F1F5' },
-  { code: 'ko', label: 'Korean',           flag: '\U0001F1F0\U0001F1F7' },
-  { code: 'it', label: 'Italiano',         flag: '\U0001F1EE\U0001F1F9' },
-  { code: 'id', label: 'Bahasa Indonesia', flag: '\U0001F1EE\U0001F1E9' },
-  { code: 'tr', label: 'Turkce',           flag: '\U0001F1F9\U0001F1F7' },
-  { code: 'vi', label: 'Tieng Viet',       flag: '\U0001F1FB\U0001F1F3' },
+  { code: 'en', label: 'English',          flag: '🇺🇸' },
+  { code: 'ta', label: 'Tamil',            flag: '🇮🇳' },
+  { code: 'hi', label: 'Hindi',            flag: '🇮🇳' },
+  { code: 'te', label: 'Telugu',           flag: '🇮🇳' },
+  { code: 'kn', label: 'Kannada',          flag: '🇮🇳' },
+  { code: 'ml', label: 'Malayalam',        flag: '🇮🇳' },
+  { code: 'bn', label: 'Bengali',          flag: '🇮🇳' },
+  { code: 'mr', label: 'Marathi',          flag: '🇮🇳' },
+  { code: 'es', label: 'Espanol',          flag: '🇪🇸' },
+  { code: 'fr', label: 'Francais',         flag: '🇫🇷' },
+  { code: 'de', label: 'Deutsch',          flag: '🇩🇪' },
+  { code: 'zh', label: 'Chinese',          flag: '🇨🇳' },
+  { code: 'ar', label: 'Arabic',           flag: '🇸🇦' },
+  { code: 'ru', label: 'Russian',          flag: '🇷🇺' },
+  { code: 'pt', label: 'Portugues',        flag: '🇵🇹' },
+  { code: 'ja', label: 'Japanese',         flag: '🇯🇵' },
+  { code: 'ko', label: 'Korean',           flag: '🇰🇷' },
+  { code: 'it', label: 'Italiano',         flag: '🇮🇹' },
+  { code: 'id', label: 'Bahasa Indonesia', flag: '🇮🇩' },
+  { code: 'tr', label: 'Turkce',           flag: '🇹🇷' },
+  { code: 'vi', label: 'Tieng Viet',       flag: '🇻🇳' },
 ];
 
 /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Voice presets per language Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
@@ -226,36 +226,36 @@ const SELECT_LIGHT = "w-full bg-white border border-zinc-300 rounded-lg px-3 py-
 /* --- All available TTS voices grouped by language --- */
 const VOICES = [
   // English
-  { value: 'en-US-ChristopherNeural', label: '\U0001F1FA\U0001F1F8 Christopher (Male, US)' },
-  { value: 'en-US-JennyNeural',       label: '\U0001F1FA\U0001F1F8 Jenny (Female, US)' },
-  { value: 'en-GB-RyanNeural',        label: '\U0001F1EC\U0001F1E7 Ryan (Male, UK)' },
-  { value: 'en-GB-SoniaNeural',       label: '\U0001F1EC\U0001F1E7 Sonia (Female, UK)' },
-  { value: 'en-IN-NeerjaNeural',      label: '\U0001F1EE\U0001F1F3 Neerja (Female, IN)' },
-  { value: 'en-IN-PrabhatNeural',     label: '\U0001F1EE\U0001F1F3 Prabhat (Male, IN)' },
+  { value: 'en-US-ChristopherNeural', label: '🇺🇸 Christopher (Male, US)' },
+  { value: 'en-US-JennyNeural',       label: '🇺🇸 Jenny (Female, US)' },
+  { value: 'en-GB-RyanNeural',        label: '🇬🇧 Ryan (Male, UK)' },
+  { value: 'en-GB-SoniaNeural',       label: '🇬🇧 Sonia (Female, UK)' },
+  { value: 'en-IN-NeerjaNeural',      label: '🇮🇳 Neerja (Female, IN)' },
+  { value: 'en-IN-PrabhatNeural',     label: '🇮🇳 Prabhat (Male, IN)' },
   // Tamil
-  { value: 'ta-IN-ValluvarNeural',    label: '\U0001F1EE\U0001F1F3 Valluvar (Male, Tamil)' },
-  { value: 'ta-IN-PallaviNeural',     label: '\U0001F1EE\U0001F1F3 Pallavi (Female, Tamil)' },
+  { value: 'ta-IN-ValluvarNeural',    label: '🇮🇳 Valluvar (Male, Tamil)' },
+  { value: 'ta-IN-PallaviNeural',     label: '🇮🇳 Pallavi (Female, Tamil)' },
   // Hindi
-  { value: 'hi-IN-MadhurNeural',      label: '\U0001F1EE\U0001F1F3 Madhur (Male, Hindi)' },
-  { value: 'hi-IN-SwaraNeural',       label: '\U0001F1EE\U0001F1F3 Swara (Female, Hindi)' },
+  { value: 'hi-IN-MadhurNeural',      label: '🇮🇳 Madhur (Male, Hindi)' },
+  { value: 'hi-IN-SwaraNeural',       label: '🇮🇳 Swara (Female, Hindi)' },
   // Telugu
-  { value: 'te-IN-MohanNeural',       label: '\U0001F1EE\U0001F1F3 Mohan (Male, Telugu)' },
-  { value: 'te-IN-ShrutiNeural',      label: '\U0001F1EE\U0001F1F3 Shruti (Female, Telugu)' },
+  { value: 'te-IN-MohanNeural',       label: '🇮🇳 Mohan (Male, Telugu)' },
+  { value: 'te-IN-ShrutiNeural',      label: '🇮🇳 Shruti (Female, Telugu)' },
   // Kannada
-  { value: 'kn-IN-GaganNeural',       label: '\U0001F1EE\U0001F1F3 Gagan (Male, Kannada)' },
-  { value: 'kn-IN-SapnaNeural',       label: '\U0001F1EE\U0001F1F3 Sapna (Female, Kannada)' },
+  { value: 'kn-IN-GaganNeural',       label: '🇮🇳 Gagan (Male, Kannada)' },
+  { value: 'kn-IN-SapnaNeural',       label: '🇮🇳 Sapna (Female, Kannada)' },
   // Malayalam
-  { value: 'ml-IN-MidhunNeural',      label: '\U0001F1EE\U0001F1F3 Midhun (Male, Malayalam)' },
-  { value: 'ml-IN-SobhanaNeural',     label: '\U0001F1EE\U0001F1F3 Sobhana (Female, Malayalam)' },
+  { value: 'ml-IN-MidhunNeural',      label: '🇮🇳 Midhun (Male, Malayalam)' },
+  { value: 'ml-IN-SobhanaNeural',     label: '🇮🇳 Sobhana (Female, Malayalam)' },
   // Bengali
-  { value: 'bn-IN-BashkarNeural',     label: '\U0001F1EE\U0001F1F3 Bashkar (Male, Bengali)' },
-  { value: 'bn-IN-TanishaaNeural',    label: '\U0001F1EE\U0001F1F3 Tanishaa (Female, Bengali)' },
+  { value: 'bn-IN-BashkarNeural',     label: '🇮🇳 Bashkar (Male, Bengali)' },
+  { value: 'bn-IN-TanishaaNeural',    label: '🇮🇳 Tanishaa (Female, Bengali)' },
   // Marathi
-  { value: 'mr-IN-ManoharNeural',     label: '\U0001F1EE\U0001F1F3 Manohar (Male, Marathi)' },
-  { value: 'mr-IN-AarohiNeural',      label: '\U0001F1EE\U0001F1F3 Aarohi (Female, Marathi)' },
+  { value: 'mr-IN-ManoharNeural',     label: '🇮🇳 Manohar (Male, Marathi)' },
+  { value: 'mr-IN-AarohiNeural',      label: '🇮🇳 Aarohi (Female, Marathi)' },
 ];
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Audio Player with seek bar, skip Ã‚Â±10s Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Audio Player with seek bar, skip ±10s Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 /* On mobile: uses Web Speech API (speechSynthesis) since there is no server audio.
    On desktop: uses HTML <audio> element with the server URL.              */
 /* --- Lightweight TTS player for podcast library items (mobile only) --- */
@@ -298,7 +298,20 @@ function LibraryTTSPlayer({ lines, podcastLang, host1, host2, durationEst, user 
       utt.pitch = isH1 ? 0.9 : 1.15;
       utt.rate = isH1 ? 0.95 : 1.0;
       utt.onend = () => speak(idx + 1);
-      utt.onerror = () => speak(idx + 1);
+      utt.onerror = (e) => {
+        console.warn('[LibraryTTSPlayer] TTS voice error, retrying with default voice:', e);
+        if (utt.voice) {
+          const fallback = new SpeechSynthesisUtterance(lines[idx].text);
+          fallback.lang = utt.lang;
+          fallback.pitch = utt.pitch;
+          fallback.rate = utt.rate;
+          fallback.onend = () => speak(idx + 1);
+          fallback.onerror = () => speak(idx + 1);
+          window.speechSynthesis.speak(fallback);
+        } else {
+          speak(idx + 1);
+        }
+      };
       window.speechSynthesis.speak(utt);
     };
     const voicesNow = window.speechSynthesis.getVoices();
@@ -374,7 +387,7 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
   const [ttsLineIdx, setTtsLineIdx] = useState(0);
   const ttsActiveRef = useRef(false);
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ MOBILE MODE: Web Speech API playback Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // --- MOBILE MODE: Web Speech API playback ---
   const playTTS = (startIdx = 0) => {
     if (!IS_NATIVE_MOBILE || !lines || lines.length === 0) return;
     window.speechSynthesis.cancel();
@@ -401,7 +414,7 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
       };
       utt.lang = langMap[langCode] || 'en-US';
 
-      // Load voices Ã¢â‚¬â€ may be empty on first call; retry after voiceschanged
+      // Load voices —  may be empty on first call; retry after voiceschanged
       const assignVoice = () => {
         const voices = window.speechSynthesis.getVoices();
         const langVoices = voices.filter(v => v.lang.startsWith(utt.lang.split('-')[0]));
@@ -411,7 +424,20 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
         utt.pitch = isHost1 ? 0.9 : 1.15;
         utt.rate = (isHost1 ? 0.95 : 1.0) * speed;
         utt.onend = () => speakLine(idx + 1);
-        utt.onerror = () => speakLine(idx + 1); // skip broken lines
+        utt.onerror = (e) => {
+          console.warn('[AudioPlayer TTS] TTS voice error, retrying with default voice:', e);
+          if (utt.voice) {
+            const fallback = new SpeechSynthesisUtterance(line.text);
+            fallback.lang = utt.lang;
+            fallback.pitch = utt.pitch;
+            fallback.rate = utt.rate;
+            fallback.onend = () => speakLine(idx + 1);
+            fallback.onerror = () => speakLine(idx + 1);
+            window.speechSynthesis.speak(fallback);
+          } else {
+            speakLine(idx + 1);
+          }
+        };
         window.speechSynthesis.speak(utt);
       };
 
@@ -755,14 +781,71 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
   );
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Per-source chat/transform/podcast state Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Ã¢â€ â‚¬Ã¢â€ â‚¬Ã¢â€ â‚¬ Per-source chat/transform/podcast state Ã¢â€ â‚¬Ã¢â€ â‚¬Ã¢â€ â‚¬ */
 interface SourceState {
   chat: ChatMsg[];
   transforms: TransformResult[];
   podcast: any;
 }
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ FileSpeaker Main Component Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* --- Helper: retrieve relevant context chunks for client-side RAG --- */
+function retrieveRelevantContext(question: string, fullText: string, maxChars: number = 8000): string {
+  if (!fullText || fullText.length <= maxChars) return fullText || '';
+
+  const paragraphs = fullText.split(/\n\s*\n/).filter(p => p.trim().length > 20);
+  
+  let chunks: string[] = [];
+  paragraphs.forEach(p => {
+    if (p.length > 1500) {
+      let start = 0;
+      while (start < p.length) {
+        chunks.push(p.substring(start, start + 1000));
+        start += 800;
+      }
+    } else {
+      chunks.push(p);
+    }
+  });
+
+  const words = question.toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !['the', 'and', 'for', 'you', 'with', 'that', 'this', 'from', 'what', 'how', 'why', 'who'].includes(w));
+
+  if (words.length === 0) {
+    return fullText.substring(0, maxChars);
+  }
+
+  const scoredChunks = chunks.map(chunk => {
+    const chunkLower = chunk.toLowerCase();
+    let score = 0;
+    words.forEach(word => {
+      let index = chunkLower.indexOf(word);
+      while (index !== -1) {
+        score++;
+        index = chunkLower.indexOf(word, index + 1);
+      }
+    });
+    return { chunk, score };
+  });
+
+  scoredChunks.sort((a, b) => b.score - a.score);
+
+  let selectedText = '';
+  for (const item of scoredChunks) {
+    if (selectedText.length + item.chunk.length > maxChars) {
+      if (selectedText.length === 0) {
+        selectedText = item.chunk.substring(0, maxChars);
+      }
+      break;
+    }
+    selectedText += (selectedText ? '\n\n' : '') + item.chunk;
+  }
+
+  return selectedText || fullText.substring(0, maxChars);
+}
+
+/* Ã¢â€ â‚¬Ã¢â€ â‚¬Ã¢â€ â‚¬ FileSpeaker Main Component Ã¢â€ â‚¬Ã¢â€ â‚¬Ã¢â€ â‚¬ */
 export default function FileSpeaker({ user, setUser, isLight }: { user: UserProfile; setUser: (u: UserProfile) => void; isLight: boolean }) {
   const SELECT_CLS = isLight ? SELECT_LIGHT : SELECT_DARK;
   const [sources, setSources] = useState<Source[]>(() => {
@@ -842,7 +925,7 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
   const patchState = (id: string, patch: Partial<SourceState>) =>
     setSourceStates(prev => ({ ...prev, [id]: { ...getState(id), ...patch } }));
 
-  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Switch source Ã¢â‚¬â€ Fix 5: each source keeps its own history Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Switch source — Fix 5: each source keeps its own history Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
   const switchSource = (src: Source) => {
     setActiveSourceId(src.source_id);
     // initialise state slot if new
@@ -917,10 +1000,10 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
             if (pageText.trim()) pages.push(`[Page ${i}]\n${pageText}`);
           }
           text = pages.join('\n\n');
-          if (!text.trim()) text = `[PDF: ${file.name} Ã¢â‚¬â€ could not extract text. Try pasting text directly.]`;
+          if (!text.trim()) text = `[PDF: ${file.name} — could not extract text. Try pasting text directly.]`;
         } catch (pdfErr) {
           console.warn('[FileSpeaker] PDF.js extraction failed:', pdfErr);
-          text = `[PDF: ${file.name} Ã¢â‚¬â€ ${file.size} bytes. Text extraction failed. Paste the text manually.]`;
+          text = `[PDF: ${file.name} — ${file.size} bytes. Text extraction failed. Paste the text manually.]`;
         }
       } else if (
         fileNameLower.endsWith('.txt') ||
@@ -930,18 +1013,18 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
         fileNameLower.endsWith('.html') ||
         fileNameLower.endsWith('.xml')
       ) {
-        // Plain text files Ã¢â‚¬â€ read directly
+        // Plain text files — read directly
         text = await file.text();
       } else if (fileNameLower.endsWith('.docx')) {
-        // Basic DOCX Ã¢â‚¬â€ read as text (imperfect but better than nothing)
+        // Basic DOCX — read as text (imperfect but better than nothing)
         text = await file.text().catch(() => `[DOCX: ${file.name}. For best results, copy-paste the text using the Text tab.]`);
       } else {
-        // Other files Ã¢â‚¬â€ try reading as text
+        // Other files — try reading as text
         text = await file.text().catch(() => `[Binary file: ${file.name}. For best results, paste the text manually.]`);
       }
 
       if (!text.trim()) {
-        text = `[File: ${file.name} Ã¢â‚¬â€ no readable text found. Use the Text tab to paste content directly.]`;
+        text = `[File: ${file.name} — no readable text found. Use the Text tab to paste content directly.]`;
       }
 
       // Limit text length to avoid memory issues on mobile
@@ -1121,7 +1204,7 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
           try {
             const contextText = sids.map(id => {
               const s = sources.find(src => src.source_id === id);
-              return `DOCUMENT: ${s?.title}\n${s?.text || s?.preview}`;
+              return `DOCUMENT: ${s?.title}\n${retrieveRelevantContext(q, s?.text || s?.preview || '', 8000)}`;
             }).join('\n\n');
 
             reply = await askDocumentRag(q, contextText, historyForApi);
@@ -1137,7 +1220,7 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
           console.log('[FileSpeaker] Falling back to local llama model...');
           const contextText = sids.map(id => {
             const s = sources.find(src => src.source_id === id);
-            return `DOCUMENT: ${s?.title}\n${s?.text || s?.preview}`;
+            return `DOCUMENT: ${s?.title}\n${retrieveRelevantContext(q, s?.text || s?.preview || '', 4000)}`;
           }).join('\n\n');
 
           // Limit context length on mobile to prevent OOM
@@ -1155,7 +1238,7 @@ Be accurate and concise. Never invent facts.`;
         } catch (localErr) {
           console.error('[FileSpeaker] Local model fallback failed:', localErr);
           // If offline model fails, return a friendly local message rather than crashing
-          reply = `Ã°Å¸â€œÂ Kalam Spark offline document reader: I see you're asking about these documents. While offline or with rate limits exceeded, and since the local model is not loaded, I recommend checking your internet connection or downloading the GGUF model in Settings. Your documents remain loaded locally in the browser/app.`;
+          reply = `📝 Kalam Spark offline document reader: I see you're asking about these documents. While offline or with rate limits exceeded, and since the local model is not loaded, I recommend checking your internet connection or downloading the GGUF model in Settings. Your documents remain loaded locally in the browser/app.`;
         }
       }
 
@@ -1170,7 +1253,7 @@ Be accurate and concise. Never invent facts.`;
     } catch (e: any) {
       setSourceStates(cur => {
         const s = cur[sid] ?? { chat: [], transforms: [], podcast: null };
-        return { ...cur, [sid]: { ...s, chat: [...s.chat, { role: 'ai', text: `Ã¢Å¡Â Ã¯Â¸Â Chat failed: ${e.message || e}` }] } };
+        return { ...cur, [sid]: { ...s, chat: [...s.chat, { role: 'ai', text: `⚠️ Chat failed: ${e.message || e}` }] } };
       });
     } finally {
       setChatLoading(false);
@@ -1284,7 +1367,7 @@ Be accurate and concise. Never invent facts.`;
       setPodcastLang(data.language);
       setHost1Voice(data.host1_voice);
       setHost2Voice(data.host2_voice);
-      setDetectedLangInfo(`Detected: ${data.language_name} Ã¢â‚¬â€ voices auto-set!`);
+      setDetectedLangInfo(`Detected: ${data.language_name} — voices auto-set!`);
     } catch (e: any) {
       setDetectedLangInfo('Could not detect language. Defaulting to English.');
     } finally {
@@ -1391,7 +1474,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
         language: podcastLang,
         language_name: PODCAST_LANGUAGES.find(l => l.code === podcastLang)?.label || 'English',
         duration_estimate: `~${Math.ceil(lines.length * 6 / 60)} min`,
-        audio_url: null,   // no server audio on mobile Ã¢â‚¬â€ we'll use Web Speech
+        audio_url: null,   // no server audio on mobile — we'll use Web Speech
         is_local: true,    // flag to indicate client-side TTS
       };
 
@@ -1473,7 +1556,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
       const newInteractions = [...(podcast.interactions || []), { q, a: data.text, audio: data.audio_url }];
       patchState(sid, { podcast: { ...podcast, interactions: newInteractions } });
 
-      // Play answer audio Ã¢â‚¬â€ BUG FIX 5: assign to ref as plain Audio object (correct)
+      // Play answer audio — BUG FIX 5: assign to ref as plain Audio object (correct)
       const answerAudio = new Audio(`${BACKEND}/api/filespeaker/audio/${data.audio_url}`);
       interactionAudioRef.current = answerAudio;
       answerAudio.onended = () => {
@@ -1584,7 +1667,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
           <Volume2 size={24} className="text-violet-400" /> File Speaker
         </h1>
         <p className="text-sm text-zinc-500 mt-1">
-          Upload documents, web links, or text Ã¢â€ â€™ Chat with them Ã‚Â· Extract insights Ã‚Â· Convert to podcast
+          Upload documents, web links, or text → Chat with them · Extract insights · Convert to podcast
         </p>
       </div>
 
@@ -1718,7 +1801,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
                       <p className={`text-xs font-semibold truncate pr-2 ${isLight ? 'text-zinc-700' : 'text-zinc-300'}`}>{src.title}</p>
                     )}
                     <p className={`text-[10px] mt-0.5 ${isLight ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                      {(src.char_count / 1000).toFixed(1)}k chars Ã‚Â· {src.chunk_count} chunks
+                      {(src.char_count / 1000).toFixed(1)}k chars · {src.chunk_count} chunks
                     </p>
                   </div>
                 </button>
@@ -1984,7 +2067,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
                           )}
                         </div>
                         {detectedLangInfo && (
-                          <p className="text-[10px] text-emerald-500 mt-1.5 absolute -bottom-5">Ã¢Å“â€œ {detectedLangInfo}</p>
+                          <p className="text-[10px] text-emerald-500 mt-1.5 absolute -bottom-5">✓ {detectedLangInfo}</p>
                         )}
                       </div>
                     </div>
@@ -2028,10 +2111,10 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
                       className="w-full bg-violet-600 hover:bg-violet-500 text-white font-bold py-3 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2.5">
                       {generatingPodcast ? <><Loader2 size={16} className="animate-spin" /> Generating Podcast... (2-5 min)</> : <><Headphones size={16} /> Generate Podcast</>}
                     </button>
-                    {generatingPodcast && <p className={`text-[11px] text-center ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>Gemma4 is writing the script and TTS is synthesizing audio...Ã¢Ëœâ€¢</p>}
+                    {generatingPodcast && <p className={`text-[11px] text-center ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>Gemma4 is writing the script and TTS is synthesizing audio...☕</p>}
                   </div>
 
-                  {/* Fix 3+4: Full audio player with progress bar, seek Ã‚Â±10s */}
+                  {/* Fix 3+4: Full audio player with progress bar, seek ±10s */}
                   {podcast && (
                     <div className={`rounded-xl border p-5 space-y-4 ${isLight ? 'border-violet-300/40 bg-violet-50' : 'border-violet-500/30 bg-violet-500/5'}`}>
                       <div className="flex items-center justify-between">
@@ -2050,7 +2133,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
                         podcastLang={podcastLang}
                       />
                       <details className="text-xs">
-                        <summary className={`cursor-pointer select-none py-1 ${isLight ? 'text-zinc-500 hover:text-zinc-800' : 'text-zinc-500 hover:text-zinc-300'}`}>View Full Script Ã¢â€ â€œ</summary>
+                        <summary className={`cursor-pointer select-none py-1 ${isLight ? 'text-zinc-500 hover:text-zinc-800' : 'text-zinc-500 hover:text-zinc-300'}`}>View Full Script ↓</summary>
                         <div className={`mt-3 space-y-2 max-h-64 overflow-y-auto pr-1 border-t pt-3 ${isLight ? 'border-violet-200' : 'border-violet-500/20'}`}>
                           {podcast.lines?.map((line: any, i: number) => (
                             <div key={i} className="flex gap-2.5 group">

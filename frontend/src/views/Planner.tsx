@@ -98,11 +98,16 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
     if (cache && cache.books && cache.books.length > 0 && cache.cachedForDream === user.dream) {
       return cache;
     }
-    // Fetch fresh for this specific stage
-    const fresh = await fetchDirectResources(user.dream, topic, subjects, user.year);
-    cache = { ...fresh, cachedForDream: user.dream, resourceOffset: 0 };
-    rm.stageCaches[stageIdx] = cache;
-    await dbService.saveRoadmap(user, rm);
+    try {
+      // Fetch fresh for this specific stage
+      const fresh = await fetchDirectResources(user.dream, topic, subjects, user.year);
+      cache = { ...fresh, cachedForDream: user.dream, resourceOffset: 0 };
+      rm.stageCaches[stageIdx] = cache;
+      await dbService.saveRoadmap(user, rm);
+    } catch (err) {
+      console.warn('[Planner] Failed to fetch resources online, returning empty cache placeholder:', err);
+      cache = { books: [], videos: [], news: [], cachedForDream: user.dream, resourceOffset: 0 };
+    }
     return cache;
   }, [user.id, user.dream, user.year]);
 

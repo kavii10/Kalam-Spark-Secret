@@ -383,123 +383,151 @@ public class LlamaPlugin extends Plugin {
         }
     }
 
-    // â”€â”€ Java-level NLP fallback â”€â”€
+    // ── Java-level NLP fallback ──
     // Used when native C++ compilation is skipped or the library is not compiled.
     // In production: compile llama.cpp into libllama.so via CMakeLists.txt for real AI inference.
     private String generateJavaFallback(String system, String prompt) {
         String pLower = prompt.toLowerCase();
+        String sLower = (system != null) ? system.toLowerCase() : "";
 
-        // 1. Roadmap Generation
-        if (pLower.contains("roadmap") || pLower.contains("stages")) {
-            String dream = "Software Engineer";
-            if (pLower.contains("data scientist")) dream = "Data Scientist";
-            else if (pLower.contains("ui/ux")) dream = "UI/UX Designer";
-            else if (pLower.contains("product manager")) dream = "Product Manager";
-            else if (pLower.contains("doctor")) dream = "Doctor";
-            else if (pLower.contains("teacher")) dream = "Teacher";
-            else if (pLower.contains("designer")) dream = "Designer";
+        // Check if the caller specifically requested structured JSON output
+        boolean wantsJson = sLower.contains("json") || pLower.contains("json") || 
+                           sLower.contains("schema") || pLower.contains("schema");
 
-            return "{\n" +
-                   "  \"dream\": \"" + dream + "\",\n" +
-                   "  \"summary\": \"A structured roadmap to build your career in " + dream + " through progressive stages of learning and real-world projects.\",\n" +
-                   "  \"stages\": [\n" +
-                   "    {\n" +
-                   "      \"id\": \"stage-1\",\n" +
-                   "      \"title\": \"Stage 1: Foundations of " + dream + "\",\n" +
-                   "      \"description\": \"Build the core knowledge base. Learn fundamental concepts, tools, and problem-solving approaches essential for " + dream + ".\",\n" +
-                   "      \"duration\": \"6-8 weeks\",\n" +
-                   "      \"subjects\": [\"Core Concepts\", \"Introduction to Tools\", \"Logic and Reasoning\", \"Basic Mathematics\"],\n" +
-                   "      \"skills\": [\"Problem Solving\", \"Tool Proficiency\", \"Communication\"],\n" +
-                   "      \"projects\": [\"Build a portfolio website\", \"Create a basic demonstration project\"],\n" +
-                   "      \"resources\": []\n" +
-                   "    },\n" +
-                   "    {\n" +
-                   "      \"id\": \"stage-2\",\n" +
-                   "      \"title\": \"Stage 2: Core Skills Development\",\n" +
-                   "      \"description\": \"Deepen your expertise with intermediate techniques, system thinking, and collaborative workflows.\",\n" +
-                   "      \"duration\": \"8-12 weeks\",\n" +
-                   "      \"subjects\": [\"Advanced Techniques\", \"System Architecture\", \"Version Control\", \"Data Analysis\"],\n" +
-                   "      \"skills\": [\"Code/Work Optimization\", \"Testing & Debugging\", \"Team Collaboration\"],\n" +
-                   "      \"projects\": [\"Build an interactive application\", \"Contribute to an open-source project\"],\n" +
-                   "      \"resources\": []\n" +
-                   "    },\n" +
-                   "    {\n" +
-                   "      \"id\": \"stage-3\",\n" +
-                   "      \"title\": \"Stage 3: Advanced Architectures & Specialization\",\n" +
-                   "      \"description\": \"Master industry standards, large-scale systems, security practices, and deployment pipelines.\",\n" +
-                   "      \"duration\": \"10-14 weeks\",\n" +
-                   "      \"subjects\": [\"System Design\", \"Cloud Computing\", \"Security Principles\", \"Performance Optimization\"],\n" +
-                   "      \"skills\": [\"Cloud Deployment\", \"API Integration\", \"Security Hardening\"],\n" +
-                   "      \"projects\": [\"Deploy a full-stack scalable service\", \"Implement secure authorization modules\"],\n" +
-                   "      \"resources\": []\n" +
-                   "    },\n" +
-                   "    {\n" +
-                   "      \"id\": \"stage-4\",\n" +
-                   "      \"title\": \"Stage 4: Professional Mastery & Career Launch\",\n" +
-                   "      \"description\": \"Develop advanced specialties, solve real-world case studies, build your network, and prepare for job interviews.\",\n" +
-                   "      \"duration\": \"12-16 weeks\",\n" +
-                   "      \"subjects\": [\"Real-world Systems\", \"Interview Preparation\", \"Professional Networking\", \"Leadership\"],\n" +
-                   "      \"skills\": [\"Technical Interviews\", \"Team Leadership\", \"Stakeholder Communication\"],\n" +
-                   "      \"projects\": [\"Complete a capstone project\", \"Build a production-ready application for portfolio\"],\n" +
-                   "      \"resources\": []\n" +
-                   "    }\n" +
-                   "  ]\n" +
-                   "}";
+        if (wantsJson) {
+            // 1. Roadmap Generation
+            if (pLower.contains("roadmap") || pLower.contains("stages")) {
+                String dream = "Software Engineer";
+                if (pLower.contains("data scientist")) dream = "Data Scientist";
+                else if (pLower.contains("ui/ux")) dream = "UI/UX Designer";
+                else if (pLower.contains("product manager")) dream = "Product Manager";
+                else if (pLower.contains("doctor")) dream = "Doctor";
+                else if (pLower.contains("teacher")) dream = "Teacher";
+                else if (pLower.contains("designer")) dream = "Designer";
+
+                return "{\n" +
+                       "  \"dream\": \"" + dream + "\",\n" +
+                       "  \"summary\": \"A structured roadmap to build your career in " + dream + " through progressive stages of learning and real-world projects.\",\n" +
+                       "  \"stages\": [\n" +
+                       "    {\n" +
+                       "      \"id\": \"stage-1\",\n" +
+                       "      \"title\": \"Stage 1: Foundations of " + dream + "\",\n" +
+                       "      \"description\": \"Build the core knowledge base. Learn fundamental concepts, tools, and problem-solving approaches essential for " + dream + ".\",\n" +
+                       "      \"duration\": \"6-8 weeks\",\n" +
+                       "      \"subjects\": [\"Core Concepts\", \"Introduction to Tools\", \"Logic and Reasoning\", \"Basic Mathematics\"],\n" +
+                       "      \"skills\": [\"Problem Solving\", \"Tool Proficiency\", \"Communication\"],\n" +
+                       "      \"projects\": [\"Build a portfolio website\", \"Create a basic demonstration project\"],\n" +
+                       "      \"resources\": []\n" +
+                       "    },\n" +
+                       "    {\n" +
+                       "      \"id\": \"stage-2\",\n" +
+                       "      \"title\": \"Stage 2: Core Skills Development\",\n" +
+                       "      \"description\": \"Deepen your expertise with intermediate techniques, system thinking, and collaborative workflows.\",\n" +
+                       "      \"duration\": \"8-12 weeks\",\n" +
+                       "      \"subjects\": [\"Advanced Techniques\", \"System Architecture\", \"Version Control\", \"Data Analysis\"],\n" +
+                       "      \"skills\": [\"Code/Work Optimization\", \"Testing & Debugging\", \"Team Collaboration\"],\n" +
+                       "      \"projects\": [\"Build an interactive application\", \"Contribute to an open-source project\"],\n" +
+                       "      \"resources\": []\n" +
+                       "    },\n" +
+                       "    {\n" +
+                       "      \"id\": \"stage-3\",\n" +
+                       "      \"title\": \"Stage 3: Advanced Architectures & Specialization\",\n" +
+                       "      \"description\": \"Master industry standards, large-scale systems, security practices, and deployment pipelines.\",\n" +
+                       "      \"duration\": \"10-14 weeks\",\n" +
+                       "      \"subjects\": [\"System Design\", \"Cloud Computing\", \"Security Principles\", \"Performance Optimization\"],\n" +
+                       "      \"skills\": [\"Cloud Deployment\", \"API Integration\", \"Security Hardening\"],\n" +
+                       "      \"projects\": [\"Deploy a full-stack scalable service\", \"Implement secure authorization modules\"],\n" +
+                       "      \"resources\": []\n" +
+                       "    },\n" +
+                       "    {\n" +
+                       "      \"id\": \"stage-4\",\n" +
+                       "      \"title\": \"Stage 4: Professional Mastery & Career Launch\",\n" +
+                       "      \"description\": \"Develop advanced specialties, solve real-world case studies, build your network, and prepare for job interviews.\",\n" +
+                       "      \"duration\": \"12-16 weeks\",\n" +
+                       "      \"subjects\": [\"Real-world Systems\", \"Interview Preparation\", \"Professional Networking\", \"Leadership\"],\n" +
+                       "      \"skills\": [\"Technical Interviews\", \"Team Leadership\", \"Stakeholder Communication\"],\n" +
+                       "      \"projects\": [\"Complete a capstone project\", \"Build a production-ready application for portfolio\"],\n" +
+                       "      \"resources\": []\n" +
+                       "    }\n" +
+                       "  ]\n" +
+                       "}";
+            }
+
+            // 2. Quiz Generation
+            if (pLower.contains("quiz") || pLower.contains("mcq") || pLower.contains("question")) {
+                return "[\n" +
+                       "  {\n" +
+                       "    \"question\": \"Which habit is most vital for long-term career growth?\",\n" +
+                       "    \"options\": [\"Continuous Learning\", \"Memorization only\", \"Avoiding challenges\", \"Working in isolation\"],\n" +
+                       "    \"correctAnswer\": 0,\n" +
+                       "    \"explanation\": \"Continuous learning and adaptability are critical as industries change rapidly.\"\n" +
+                       "  },\n" +
+                       "  {\n" +
+                       "    \"question\": \"How should you approach complex problems in your career?\",\n" +
+                       "    \"options\": [\"Deconstruct into smaller parts\", \"Avoid them entirely\", \"Ask others to solve them\", \"Postpone indefinitely\"],\n" +
+                       "    \"correctAnswer\": 0,\n" +
+                       "    \"explanation\": \"Deconstructing complex issues helps you tackle each component efficiently without being overwhelmed.\"\n" +
+                       "  },\n" +
+                       "  {\n" +
+                       "    \"question\": \"What is the best way to build a professional network?\",\n" +
+                       "    \"options\": [\"Attend industry events and contribute to communities\", \"Wait to be discovered\", \"Only connect with close friends\", \"Avoid social media\"],\n" +
+                       "    \"correctAnswer\": 0,\n" +
+                       "    \"explanation\": \"Active participation in communities and events significantly expands career opportunities.\"\n" +
+                       "  }\n" +
+                       "]";
+            }
+
+            // 3. Career Summary
+            if (pLower.contains("summary") || pLower.contains("overview") || pLower.contains("sentence")) {
+                return "{\n" +
+                       "  \"sentence1\": \"This career offers a highly rewarding path filled with creative problem solving and innovation.\",\n" +
+                       "  \"sentence2\": \"Professionals use state-of-the-art tools and collaborate in dynamic environments to shape meaningful products.\",\n" +
+                       "  \"sentence3\": \"Building strong foundations and creating hands-on projects are the keys to lasting success in this domain.\"\n" +
+                       "}";
+            }
+
+            // 4. Career Suggestions / Dream Discovery
+            if (pLower.contains("career") || pLower.contains("dream") || pLower.contains("suggest")) {
+                return "[\n" +
+                       "  {\"dream\": \"Software Engineer\", \"subjects\": [\"Computer Science\", \"Logic\", \"Mathematics\"]},\n" +
+                       "  {\"dream\": \"Data Scientist\", \"subjects\": [\"Statistics\", \"Python\", \"Analysis\"]},\n" +
+                       "  {\"dream\": \"UI/UX Designer\", \"subjects\": [\"Design\", \"Psychology\", \"Prototyping\"]},\n" +
+                       "  {\"dream\": \"Product Manager\", \"subjects\": [\"Business\", \"Leadership\", \"Communication\"]},\n" +
+                       "  {\"dream\": \"AI/ML Engineer\", \"subjects\": [\"Machine Learning\", \"Python\", \"Mathematics\"]},\n" +
+                       "  {\"dream\": \"Cybersecurity Specialist\", \"subjects\": [\"Networking\", \"Security\", \"Problem Solving\"]},\n" +
+                       "  {\"dream\": \"Digital Marketer\", \"subjects\": [\"SEO\", \"Content Strategy\", \"Analytics\"]},\n" +
+                       "  {\"dream\": \"Cloud Architect\", \"subjects\": [\"Infrastructure\", \"DevOps\", \"Cloud Platforms\"]},\n" +
+                       "  {\"dream\": \"Research Scientist\", \"subjects\": [\"Physics\", \"Research Methods\", \"Documentation\"]},\n" +
+                       "  {\"dream\": \"Business Analyst\", \"subjects\": [\"Data Analysis\", \"Finance\", \"Strategy\"]},\n" +
+                       "  {\"dream\": \"Content Creator\", \"subjects\": [\"Storytelling\", \"Video Editing\", \"Social Media\"]},\n" +
+                       "  {\"dream\": \"Financial Analyst\", \"subjects\": [\"Accounting\", \"Investment\", \"Excel\"]}\n" +
+                       "]";
+            }
         }
 
-        // 2. Quiz Generation
-        if (pLower.contains("quiz") || pLower.contains("mcq") || pLower.contains("question")) {
-            return "[\n" +
-                   "  {\n" +
-                   "    \"question\": \"Which habit is most vital for long-term career growth?\",\n" +
-                   "    \"options\": [\"Continuous Learning\", \"Memorization only\", \"Avoiding challenges\", \"Working in isolation\"],\n" +
-                   "    \"correctAnswer\": 0,\n" +
-                   "    \"explanation\": \"Continuous learning and adaptability are critical as industries change rapidly.\"\n" +
-                   "  },\n" +
-                   "  {\n" +
-                   "    \"question\": \"How should you approach complex problems in your career?\",\n" +
-                   "    \"options\": [\"Deconstruct into smaller parts\", \"Avoid them entirely\", \"Ask others to solve them\", \"Postpone indefinitely\"],\n" +
-                   "    \"correctAnswer\": 0,\n" +
-                   "    \"explanation\": \"Deconstructing complex issues helps you tackle each component efficiently without being overwhelmed.\"\n" +
-                   "  },\n" +
-                   "  {\n" +
-                   "    \"question\": \"What is the best way to build a professional network?\",\n" +
-                   "    \"options\": [\"Attend industry events and contribute to communities\", \"Wait to be discovered\", \"Only connect with close friends\", \"Avoid social media\"],\n" +
-                   "    \"correctAnswer\": 0,\n" +
-                   "    \"explanation\": \"Active participation in communities and events significantly expands career opportunities.\"\n" +
-                   "  }\n" +
-                   "]";
+        // Conversational/Chat responses (if wantsJson is false, or prompt is a chat query)
+        String pClean = pLower.replaceAll("[^a-zA-Z0-9\\s]", " ").trim();
+
+        // 1. Handle Greetings
+        if (pClean.endsWith("hello") || pClean.endsWith("hi") || pClean.endsWith("hey") || 
+            pClean.contains("hello kalam") || pClean.contains("hi kalam") || pClean.contains("greetings")) {
+            return "Hello! 👋 I'm Kalam Spark, your offline AI mentor. Even though we are offline right now, I'm here to support you in planning your learning journey and succeeding in your goals. What's on your mind today?";
         }
 
-        // 3. Career Summary
-        if (pLower.contains("summary") || pLower.contains("overview") || pLower.contains("sentence")) {
-            return "{\n" +
-                   "  \"sentence1\": \"This career offers a highly rewarding path filled with creative problem solving and innovation.\",\n" +
-                   "  \"sentence2\": \"Professionals use state-of-the-art tools and collaborate in dynamic environments to shape meaningful products.\",\n" +
-                   "  \"sentence3\": \"Building strong foundations and creating hands-on projects are the keys to lasting success in this domain.\"\n" +
-                   "}";
+        // 2. Handle "What is AI" / "Explain AI" / "AI"
+        if (pClean.contains("what is ai") || pClean.contains("explain ai") || 
+            pClean.contains("define ai") || pClean.contains("artificial intelligence") || 
+            pClean.contains("about ai") || pClean.contains("what is machine learning")) {
+            return "Artificial Intelligence (AI) is the simulation of human intelligence processes by machines, especially computer systems. These processes include learning (acquiring information and rules), reasoning (using rules to reach approximate or definite conclusions), and self-correction.\n\nKey areas of AI include:\n- **Machine Learning**: Systems learning from data patterns without explicit programming.\n- **Deep Learning**: Using multi-layered neural networks (like the Gemma model we loaded) to solve complex tasks.\n- **Natural Language Processing (NLP)**: Enabling computers to understand and generate human language.\n\nAI is transforming every industry. For your own career preparation, learning how to use AI tools and understanding AI concepts will give you a massive competitive advantage. What specific aspect of AI are you most interested in?";
         }
 
-        // 4. Career Suggestions / Dream Discovery
-        if (pLower.contains("career") || pLower.contains("dream") || pLower.contains("suggest")) {
-            return "[\n" +
-                   "  {\"dream\": \"Software Engineer\", \"subjects\": [\"Computer Science\", \"Logic\", \"Mathematics\"]},\n" +
-                   "  {\"dream\": \"Data Scientist\", \"subjects\": [\"Statistics\", \"Python\", \"Analysis\"]},\n" +
-                   "  {\"dream\": \"UI/UX Designer\", \"subjects\": [\"Design\", \"Psychology\", \"Prototyping\"]},\n" +
-                   "  {\"dream\": \"Product Manager\", \"subjects\": [\"Business\", \"Leadership\", \"Communication\"]},\n" +
-                   "  {\"dream\": \"AI/ML Engineer\", \"subjects\": [\"Machine Learning\", \"Python\", \"Mathematics\"]},\n" +
-                   "  {\"dream\": \"Cybersecurity Specialist\", \"subjects\": [\"Networking\", \"Security\", \"Problem Solving\"]},\n" +
-                   "  {\"dream\": \"Digital Marketer\", \"subjects\": [\"SEO\", \"Content Strategy\", \"Analytics\"]},\n" +
-                   "  {\"dream\": \"Cloud Architect\", \"subjects\": [\"Infrastructure\", \"DevOps\", \"Cloud Platforms\"]},\n" +
-                   "  {\"dream\": \"Research Scientist\", \"subjects\": [\"Physics\", \"Research Methods\", \"Documentation\"]},\n" +
-                   "  {\"dream\": \"Business Analyst\", \"subjects\": [\"Data Analysis\", \"Finance\", \"Strategy\"]},\n" +
-                   "  {\"dream\": \"Content Creator\", \"subjects\": [\"Storytelling\", \"Video Editing\", \"Social Media\"]},\n" +
-                   "  {\"dream\": \"Financial Analyst\", \"subjects\": [\"Accounting\", \"Investment\", \"Excel\"]}\n" +
-                   "]";
+        // 3. Handle Career/Study Advice
+        if (pClean.contains("how to learn") || pClean.contains("study tips") || pClean.contains("learning techniques") || pClean.contains("how to study")) {
+            return "Here are three powerful study techniques that you can apply immediately to master new subjects:\n\n1. **Active Recall**: Test your memory instead of passively re-reading notes. Write down everything you know about a topic, or use the flashcard features in our app.\n2. **Spaced Repetition**: Review the material at expanding intervals (e.g., after 1 day, then 3 days, then 7 days) to build long-term memory retrieval pathways.\n3. **Feynman Technique**: Explain the concept in simple terms to someone else (or write it down). If you struggle to simplify it, you know exactly which areas you need to review.\n\nWhich of these techniques would you like to incorporate into your schedule?";
         }
 
-        // 5. Default mentor chat response
-        return "ðŸ”‹ Offline Mode (Local Gemma 4): I'm here to guide your learning journey! " +
+        // 4. Default mentor chat response
+        return "🔋 Offline Mode (Local Gemma 4): I'm here to guide your learning journey! " +
                "I can see you're working hard toward your career goals. " +
                "While offline, you can review your roadmap, complete quiz questions, " +
                "and track your task progress. Once you reconnect to the internet, " +

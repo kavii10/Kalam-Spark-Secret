@@ -466,7 +466,18 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
           if (voice) utterance.voice = voice;
         }
         utterance.onend = () => setSpeakingIdx(null);
-        utterance.onerror = () => setSpeakingIdx(null);
+        utterance.onerror = (e) => {
+          console.warn('[MentorChat TTS] TTS voice error, retrying with default voice:', e);
+          if (utterance.voice) {
+            const fallback = new SpeechSynthesisUtterance(text.replace(/[*_#`]/g, ''));
+            fallback.lang = utterance.lang;
+            fallback.onend = () => setSpeakingIdx(null);
+            fallback.onerror = () => setSpeakingIdx(null);
+            window.speechSynthesis.speak(fallback);
+          } else {
+            setSpeakingIdx(null);
+          }
+        };
         window.speechSynthesis.speak(utterance);
         setSpeakingIdx(idx);
       };
