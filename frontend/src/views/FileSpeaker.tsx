@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+﻿import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   Upload, Link, FileText, MessageSquare, Zap, Headphones,
   ChevronRight, Loader2, Play, Pause, Download, X,
@@ -23,7 +23,7 @@ const getBackendUrl = () => {
 };
 const BACKEND = IS_NATIVE_MOBILE ? '' : getBackendUrl();
 
-/* ─── Types ─── */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Types Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 interface Source {
   source_id: string;
   title: string;
@@ -54,32 +54,32 @@ interface PodcastRecord {
   lines: { speaker: string; text: string }[];
 }
 
-/* ─── Supported podcast languages ─── */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Supported podcast languages Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const PODCAST_LANGUAGES = [
-  { code: 'en', label: 'English',   flag: '🇬🇧' },
-  { code: 'ta', label: 'தமிழ்',      flag: '🇮🇳' },
-  { code: 'hi', label: 'हिन्दी',      flag: '🇮🇳' },
-  { code: 'te', label: 'తెలుగు',     flag: '🇮🇳' },
-  { code: 'kn', label: 'ಕನ್ನಡ',      flag: '🇮🇳' },
-  { code: 'ml', label: 'മലയാളം',     flag: '🇮🇳' },
-  { code: 'bn', label: 'বাংলা',      flag: '🇮🇳' },
-  { code: 'mr', label: 'मराठी',      flag: '🇮🇳' },
-  { code: 'es', label: 'Español',   flag: '🇪🇸' },
-  { code: 'fr', label: 'Français',  flag: '🇫🇷' },
-  { code: 'de', label: 'Deutsch',   flag: '🇩🇪' },
-  { code: 'zh', label: '中文',       flag: '🇨🇳' },
-  { code: 'ar', label: 'العربية',   flag: '🇸🇦' },
-  { code: 'ru', label: 'Русский',   flag: '🇷🇺' },
-  { code: 'pt', label: 'Português', flag: '🇵🇹' },
-  { code: 'ja', label: '日本語',     flag: '🇯🇵' },
-  { code: 'ko', label: '한국어',     flag: '🇰🇷' },
-  { code: 'it', label: 'Italiano',  flag: '🇮🇹' },
-  { code: 'id', label: 'Bahasa Indonesia', flag: '🇮🇩' },
-  { code: 'tr', label: 'Türkçe',    flag: '🇹🇷' },
-  { code: 'vi', label: 'Tiếng Việt',flag: '🇻🇳' },
+  { code: 'en', label: 'English',   flag: 'Ã°Å¸â€¡Â¬Ã°Å¸â€¡Â§' },
+  { code: 'ta', label: 'Ã Â®Â¤Ã Â®Â®Ã Â®Â¿Ã Â®Â´Ã Â¯Â',      flag: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³' },
+  { code: 'hi', label: 'Ã Â¤Â¹Ã Â¤Â¿Ã Â¤Â¨Ã Â¥ÂÃ Â¤Â¦Ã Â¥â‚¬',      flag: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³' },
+  { code: 'te', label: 'Ã Â°Â¤Ã Â±â€ Ã Â°Â²Ã Â±ÂÃ Â°â€”Ã Â±Â',     flag: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³' },
+  { code: 'kn', label: 'Ã Â²â€¢Ã Â²Â¨Ã Â³ÂÃ Â²Â¨Ã Â²Â¡',      flag: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³' },
+  { code: 'ml', label: 'Ã Â´Â®Ã Â´Â²Ã Â´Â¯Ã Â´Â¾Ã Â´Â³Ã Â´â€š',     flag: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³' },
+  { code: 'bn', label: 'Ã Â¦Â¬Ã Â¦Â¾Ã Â¦â€šÃ Â¦Â²Ã Â¦Â¾',      flag: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³' },
+  { code: 'mr', label: 'Ã Â¤Â®Ã Â¤Â°Ã Â¤Â¾Ã Â¤Â Ã Â¥â‚¬',      flag: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³' },
+  { code: 'es', label: 'EspaÃƒÂ±ol',   flag: 'Ã°Å¸â€¡ÂªÃ°Å¸â€¡Â¸' },
+  { code: 'fr', label: 'FranÃƒÂ§ais',  flag: 'Ã°Å¸â€¡Â«Ã°Å¸â€¡Â·' },
+  { code: 'de', label: 'Deutsch',   flag: 'Ã°Å¸â€¡Â©Ã°Å¸â€¡Âª' },
+  { code: 'zh', label: 'Ã¤Â¸Â­Ã¦â€“â€¡',       flag: 'Ã°Å¸â€¡Â¨Ã°Å¸â€¡Â³' },
+  { code: 'ar', label: 'Ã˜Â§Ã™â€žÃ˜Â¹Ã˜Â±Ã˜Â¨Ã™Å Ã˜Â©',   flag: 'Ã°Å¸â€¡Â¸Ã°Å¸â€¡Â¦' },
+  { code: 'ru', label: 'ÃÂ Ã‘Æ’Ã‘ÂÃ‘ÂÃÂºÃÂ¸ÃÂ¹',   flag: 'Ã°Å¸â€¡Â·Ã°Å¸â€¡Âº' },
+  { code: 'pt', label: 'PortuguÃƒÂªs', flag: 'Ã°Å¸â€¡ÂµÃ°Å¸â€¡Â¹' },
+  { code: 'ja', label: 'Ã¦â€”Â¥Ã¦Å“Â¬Ã¨ÂªÅ¾',     flag: 'Ã°Å¸â€¡Â¯Ã°Å¸â€¡Âµ' },
+  { code: 'ko', label: 'Ã­â€¢Å“ÃªÂµÂ­Ã¬â€“Â´',     flag: 'Ã°Å¸â€¡Â°Ã°Å¸â€¡Â·' },
+  { code: 'it', label: 'Italiano',  flag: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â¹' },
+  { code: 'id', label: 'Bahasa Indonesia', flag: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â©' },
+  { code: 'tr', label: 'TÃƒÂ¼rkÃƒÂ§e',    flag: 'Ã°Å¸â€¡Â¹Ã°Å¸â€¡Â·' },
+  { code: 'vi', label: 'TiÃ¡ÂºÂ¿ng ViÃ¡Â»â€¡t',flag: 'Ã°Å¸â€¡Â»Ã°Å¸â€¡Â³' },
 ];
 
-/* ─── Voice presets per language ─── */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Voice presets per language Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const LANGUAGE_VOICE_PRESETS: Record<string, { host1: string; host2: string; rec_lang: string }> = {
   en: { host1: 'en-US-ChristopherNeural', host2: 'en-US-JennyNeural',     rec_lang: 'en-US' },
   ta: { host1: 'ta-IN-ValluvarNeural',    host2: 'ta-IN-PallaviNeural',   rec_lang: 'ta-IN' },
@@ -104,7 +104,7 @@ const LANGUAGE_VOICE_PRESETS: Record<string, { host1: string; host2: string; rec
   vi: { host1: 'vi-VN-NamMinhNeural',     host2: 'vi-VN-HoaiMyNeural',    rec_lang: 'vi-VN' },
 };
 
-/* ─── Simple Markdown renderer: bold, italic, code, lists, headings, and citations ─── */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Simple Markdown renderer: bold, italic, code, lists, headings, and citations Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 function renderMarkdown(raw: string): React.ReactNode[] {
   return raw.split('\n').map((line, lineIdx) => {
     // Handle headings
@@ -116,12 +116,12 @@ function renderMarkdown(raw: string): React.ReactNode[] {
     if (h3Match) return <React.Fragment key={lineIdx}><strong className="block text-sm font-semibold text-white/80 mt-1">{h3Match[1]}</strong></React.Fragment>;
 
     // Handle bullet/list items
-    const bulletMatch = line.match(/^[\-\*•]\s+(.+)/);
+    const bulletMatch = line.match(/^[\-\*Ã¢â‚¬Â¢]\s+(.+)/);
     if (bulletMatch) {
       return (
         <React.Fragment key={lineIdx}>
           <span className="flex gap-2 my-0.5">
-            <span className="text-gold-400 shrink-0 mt-0.5">•</span>
+            <span className="text-gold-400 shrink-0 mt-0.5">Ã¢â‚¬Â¢</span>
             <span>{renderInline(bulletMatch[1])}</span>
           </span>
         </React.Fragment>
@@ -223,40 +223,42 @@ const TRANSFORMATIONS = [
 const SELECT_DARK  = "w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-violet-500/50 cursor-pointer";
 const SELECT_LIGHT = "w-full bg-white border border-zinc-300 rounded-lg px-3 py-2 text-sm text-zinc-800 focus:outline-none focus:border-violet-500/50 cursor-pointer";
 
-/* ─── All available TTS voices grouped by language ─── */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ All available TTS voices grouped by language Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const VOICES = [
   // English
-  { value: 'en-US-ChristopherNeural', label: '🇬🇧 Christopher (Male, US)' },
-  { value: 'en-US-JennyNeural',       label: '🇬🇧 Jenny (Female, US)' },
-  { value: 'en-GB-RyanNeural',        label: '🇬🇧 Ryan (Male, UK)' },
-  { value: 'en-GB-SoniaNeural',       label: '🇬🇧 Sonia (Female, UK)' },
-  { value: 'en-IN-NeerjaNeural',      label: '🇮🇳 Neerja (Female, IN)' },
-  { value: 'en-IN-PrabhatNeural',     label: '🇮🇳 Prabhat (Male, IN)' },
+  { value: 'en-US-ChristopherNeural', label: 'Ã°Å¸â€¡Â¬Ã°Å¸â€¡Â§ Christopher (Male, US)' },
+  { value: 'en-US-JennyNeural',       label: 'Ã°Å¸â€¡Â¬Ã°Å¸â€¡Â§ Jenny (Female, US)' },
+  { value: 'en-GB-RyanNeural',        label: 'Ã°Å¸â€¡Â¬Ã°Å¸â€¡Â§ Ryan (Male, UK)' },
+  { value: 'en-GB-SoniaNeural',       label: 'Ã°Å¸â€¡Â¬Ã°Å¸â€¡Â§ Sonia (Female, UK)' },
+  { value: 'en-IN-NeerjaNeural',      label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Neerja (Female, IN)' },
+  { value: 'en-IN-PrabhatNeural',     label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Prabhat (Male, IN)' },
   // Tamil
-  { value: 'ta-IN-ValluvarNeural',    label: '🇮🇳 வள்ளுவர் (Male, Tamil)' },
-  { value: 'ta-IN-PallaviNeural',     label: '🇮🇳 பல்லவி (Female, Tamil)' },
+  { value: 'ta-IN-ValluvarNeural',    label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â®ÂµÃ Â®Â³Ã Â¯ÂÃ Â®Â³Ã Â¯ÂÃ Â®ÂµÃ Â®Â°Ã Â¯Â (Male, Tamil)' },
+  { value: 'ta-IN-PallaviNeural',     label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â®ÂªÃ Â®Â²Ã Â¯ÂÃ Â®Â²Ã Â®ÂµÃ Â®Â¿ (Female, Tamil)' },
   // Hindi
-  { value: 'hi-IN-MadhurNeural',     label: '🇮🇳 मधुर (Male, Hindi)' },
-  { value: 'hi-IN-SwaraNeural',      label: '🇮🇳 स्वरा (Female, Hindi)' },
+  { value: 'hi-IN-MadhurNeural',     label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â¤Â®Ã Â¤Â§Ã Â¥ÂÃ Â¤Â° (Male, Hindi)' },
+  { value: 'hi-IN-SwaraNeural',      label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â¤Â¸Ã Â¥ÂÃ Â¤ÂµÃ Â¤Â°Ã Â¤Â¾ (Female, Hindi)' },
   // Telugu
-  { value: 'te-IN-MohanNeural',      label: '🇮🇳 మోహన్ (Male, Telugu)' },
-  { value: 'te-IN-ShrutiNeural',     label: '🇮🇳 శ్రుతి (Female, Telugu)' },
+  { value: 'te-IN-MohanNeural',      label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â°Â®Ã Â±â€¹Ã Â°Â¹Ã Â°Â¨Ã Â±Â (Male, Telugu)' },
+  { value: 'te-IN-ShrutiNeural',     label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â°Â¶Ã Â±ÂÃ Â°Â°Ã Â±ÂÃ Â°Â¤Ã Â°Â¿ (Female, Telugu)' },
   // Kannada
-  { value: 'kn-IN-GaganNeural',      label: '🇮🇳 ಗಗನ್ (Male, Kannada)' },
-  { value: 'kn-IN-SapnaNeural',      label: '🇮🇳 ಸಪ್ನಾ (Female, Kannada)' },
+  { value: 'kn-IN-GaganNeural',      label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â²â€”Ã Â²â€”Ã Â²Â¨Ã Â³Â (Male, Kannada)' },
+  { value: 'kn-IN-SapnaNeural',      label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â²Â¸Ã Â²ÂªÃ Â³ÂÃ Â²Â¨Ã Â²Â¾ (Female, Kannada)' },
   // Malayalam
-  { value: 'ml-IN-MidhunNeural',     label: '🇮🇳 മിദ്ധുൻ (Male, Malayalam)' },
-  { value: 'ml-IN-SobhanaNeural',    label: '🇮🇳 സോഭന (Female, Malayalam)' },
+  { value: 'ml-IN-MidhunNeural',     label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â´Â®Ã Â´Â¿Ã Â´Â¦Ã ÂµÂÃ Â´Â§Ã ÂµÂÃ ÂµÂ» (Male, Malayalam)' },
+  { value: 'ml-IN-SobhanaNeural',    label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â´Â¸Ã Âµâ€¹Ã Â´Â­Ã Â´Â¨ (Female, Malayalam)' },
   // Bengali
-  { value: 'bn-IN-BashkarNeural',    label: '🇮🇳 বাশকর (Male, Bengali)' },
-  { value: 'bn-IN-TanishaaNeural',   label: '🇮🇳 তানিশা (Female, Bengali)' },
+  { value: 'bn-IN-BashkarNeural',    label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â¦Â¬Ã Â¦Â¾Ã Â¦Â¶Ã Â¦â€¢Ã Â¦Â° (Male, Bengali)' },
+  { value: 'bn-IN-TanishaaNeural',   label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â¦Â¤Ã Â¦Â¾Ã Â¦Â¨Ã Â¦Â¿Ã Â¦Â¶Ã Â¦Â¾ (Female, Bengali)' },
   // Marathi
-  { value: 'mr-IN-ManoharNeural',    label: '🇮🇳 मनोहर (Male, Marathi)' },
-  { value: 'mr-IN-AarohiNeural',     label: '🇮🇳 आरोही (Female, Marathi)' },
+  { value: 'mr-IN-ManoharNeural',    label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â¤Â®Ã Â¤Â¨Ã Â¥â€¹Ã Â¤Â¹Ã Â¤Â° (Male, Marathi)' },
+  { value: 'mr-IN-AarohiNeural',     label: 'Ã°Å¸â€¡Â®Ã°Å¸â€¡Â³ Ã Â¤â€ Ã Â¤Â°Ã Â¥â€¹Ã Â¤Â¹Ã Â¥â‚¬ (Female, Marathi)' },
 ];
 
-/* ─── Audio Player with seek bar, skip ±10s ─── */
-function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, audioRef, user }: { 
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Audio Player with seek bar, skip Ã‚Â±10s Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* On mobile: uses Web Speech API (speechSynthesis) since there is no server audio.
+   On desktop: uses HTML <audio> element with the server URL.              */
+function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, audioRef, user, lines, podcastLang }: { 
   src: string; 
   host1: string; 
   host2: string; 
@@ -264,7 +266,9 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
   durationEst: string; 
   downloadUrl: string; 
   audioRef: React.RefObject<HTMLAudioElement>; 
-  user: UserProfile 
+  user: UserProfile;
+  lines?: { speaker: string; text: string }[];
+  podcastLang?: string;
 }) {
   const [playing, setPlaying] = useState(false);
   const [current, setCurrent] = useState(0);
@@ -275,7 +279,86 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
   const progressBarRef = useRef<HTMLDivElement>(null);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
 
+  // TTS state for mobile
+  const [ttsLineIdx, setTtsLineIdx] = useState(0);
+  const ttsActiveRef = useRef(false);
+
+  // Ã¢â€â‚¬Ã¢â€â‚¬ MOBILE MODE: Web Speech API playback Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  const playTTS = (startIdx = 0) => {
+    if (!IS_NATIVE_MOBILE || !lines || lines.length === 0) return;
+    window.speechSynthesis.cancel();
+    ttsActiveRef.current = true;
+    setPlaying(true);
+
+    const speakLine = (idx: number) => {
+      if (!ttsActiveRef.current || idx >= lines.length) {
+        setPlaying(false);
+        setTtsLineIdx(0);
+        ttsActiveRef.current = false;
+        return;
+      }
+      setTtsLineIdx(idx);
+      const line = lines[idx];
+      const utt = new SpeechSynthesisUtterance(line.text);
+      const langCode = podcastLang || 'en';
+      const langMap: Record<string, string> = {
+        en: 'en-US', ta: 'ta-IN', hi: 'hi-IN', te: 'te-IN',
+        kn: 'kn-IN', ml: 'ml-IN', bn: 'bn-IN', mr: 'mr-IN',
+        es: 'es-ES', fr: 'fr-FR', de: 'de-DE', zh: 'zh-CN',
+        ja: 'ja-JP', ko: 'ko-KR', ar: 'ar-SA', ru: 'ru-RU',
+        pt: 'pt-BR', it: 'it-IT', id: 'id-ID', tr: 'tr-TR', vi: 'vi-VN',
+      };
+      utt.lang = langMap[langCode] || 'en-US';
+
+      // Load voices Ã¢â‚¬â€ may be empty on first call; retry after voiceschanged
+      const assignVoice = () => {
+        const voices = window.speechSynthesis.getVoices();
+        const langVoices = voices.filter(v => v.lang.startsWith(utt.lang.split('-')[0]));
+        const isHost1 = line.speaker === host1;
+        if (langVoices.length >= 2) utt.voice = langVoices[isHost1 ? 0 : 1];
+        else if (langVoices.length === 1) utt.voice = langVoices[0];
+        utt.pitch = isHost1 ? 0.9 : 1.15;
+        utt.rate = (isHost1 ? 0.95 : 1.0) * speed;
+        utt.onend = () => speakLine(idx + 1);
+        utt.onerror = () => speakLine(idx + 1); // skip broken lines
+        window.speechSynthesis.speak(utt);
+      };
+
+      const voices = window.speechSynthesis.getVoices();
+      if (voices.length > 0) {
+        assignVoice();
+      } else {
+        window.speechSynthesis.onvoiceschanged = () => {
+          window.speechSynthesis.onvoiceschanged = null;
+          assignVoice();
+        };
+        // Fallback: speak without a specific voice after 500ms
+        setTimeout(() => {
+          if (!window.speechSynthesis.speaking) assignVoice();
+        }, 500);
+      }
+    };
+
+    speakLine(startIdx);
+  };
+
+  const pauseTTS = () => {
+    window.speechSynthesis.cancel();
+    ttsActiveRef.current = false;
+    setPlaying(false);
+  };
+
+  const toggleTTS = () => {
+    if (playing) {
+      pauseTTS();
+    } else {
+      playTTS(ttsLineIdx);
+    }
+  };
+
+  // Ã¢â€â‚¬Ã¢â€â‚¬ DESKTOP MODE: HTML Audio element Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   useEffect(() => {
+    if (IS_NATIVE_MOBILE) return; // skip audio fetch on mobile
     let active = true;
     fetch(src)
       .then(res => res.blob())
@@ -289,12 +372,14 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
   }, [src]);
 
   useEffect(() => {
+    if (IS_NATIVE_MOBILE) return;
     return () => {
       if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
   }, [blobUrl]);
 
   useEffect(() => {
+    if (IS_NATIVE_MOBILE) return;
     const el = audioRef.current;
     if (!el) return;
     const onTime = () => {
@@ -331,7 +416,7 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
 
   const changeSpeed = (s: number) => {
     setSpeed(s);
-    if (audioRef.current) audioRef.current.playbackRate = s;
+    if (!IS_NATIVE_MOBILE && audioRef.current) audioRef.current.playbackRate = s;
     setShowSpeedMenu(false);
   };
 
@@ -378,6 +463,83 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
     };
   }, [isDragging, current, audioRef]);
 
+  // Ã¢â€â‚¬Ã¢â€â‚¬ MOBILE MODE render Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  if (IS_NATIVE_MOBILE) {
+    const totalLines = lines?.length || linesCount;
+    const progressPct = totalLines > 0 ? (ttsLineIdx / totalLines) * 100 : 0;
+    return (
+      <div className="space-y-3">
+        {/* TTS progress bar */}
+        <div className="relative w-full h-2 bg-zinc-700/50 rounded-full mt-4">
+          <div className="absolute top-0 left-0 h-full bg-violet-500 rounded-full transition-all duration-300" style={{ width: `${progressPct}%` }} />
+        </div>
+        <div className="flex items-center justify-between text-[10px] text-zinc-500">
+          <span>Line {playing ? ttsLineIdx + 1 : ttsLineIdx} / {totalLines}</span>
+          <span>{durationEst}</span>
+        </div>
+        {/* Controls */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => { pauseTTS(); setTtsLineIdx(0); }}
+            title="Restart"
+            className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all"
+          >
+            <SkipBack size={16} />
+          </button>
+          <button
+            onClick={toggleTTS}
+            className="w-12 h-12 bg-violet-600 hover:bg-violet-500 rounded-full flex items-center justify-center transition-all shadow-lg shadow-violet-900/40"
+          >
+            {playing ? <Pause size={20} className="text-white" /> : <Play size={20} className="text-white ml-0.5" />}
+          </button>
+          <button
+            onClick={() => { if (lines && ttsLineIdx + 10 < lines.length) { pauseTTS(); playTTS(ttsLineIdx + 10); } }}
+            title="Skip forward 10 lines"
+            className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all"
+          >
+            <SkipForward size={16} />
+          </button>
+          <div className="flex-1">
+            <p className="text-xs font-semibold text-zinc-300">{host1} &amp; {host2}</p>
+            <p className="text-[10px] text-zinc-600">{linesCount} exchanges Ã‚Â· TTS</p>
+          </div>
+          {/* Speed */}
+          <div className="relative">
+            {showSpeedMenu && (
+              <div className={`absolute bottom-full right-0 mb-3 backdrop-blur-2xl border rounded-2xl p-2 shadow-xl z-[100]
+                ${user.settings?.theme === 'light' ? 'bg-white/95 border-black/5' : 'bg-zinc-950/95 border-white/10'}`}>
+                <p className="text-[9px] uppercase tracking-[0.15em] font-bold px-2 py-1 mb-2 border-b text-zinc-500 border-white/5">Speed</p>
+                <div className="flex flex-row items-center gap-1">
+                  {[0.5, 0.75, 1, 1.25, 1.5, 2].map(s => (
+                    <button key={s} onClick={() => changeSpeed(s)}
+                      className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all border ${
+                        speed === s ? 'bg-violet-600/20 text-violet-600 border-violet-500/30' : 'text-zinc-400 hover:bg-white/5 border-transparent'
+                      }`}>
+                      {s}x
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <button onClick={() => setShowSpeedMenu(!showSpeedMenu)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-300">
+              <Zap size={13} />
+              <span className="text-[11px] font-black tracking-tighter">{speed}x</span>
+            </button>
+          </div>
+        </div>
+        {/* Current line display */}
+        {lines && lines[ttsLineIdx] && (
+          <div className="mt-2 p-3 rounded-xl bg-violet-500/10 border border-violet-500/20">
+            <p className="text-[10px] font-bold text-violet-400 mb-1">{lines[ttsLineIdx].speaker}</p>
+            <p className="text-xs text-zinc-300 leading-relaxed">{lines[ttsLineIdx].text}</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Ã¢â€â‚¬Ã¢â€â‚¬ DESKTOP MODE render Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
   return (
     <div className="space-y-3">
       <audio ref={audioRef} src={blobUrl || src} preload="metadata" />
@@ -436,7 +598,7 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
         </button>
 
         <div className="flex-1">
-          <p className="text-xs font-semibold text-zinc-300">{host1} & {host2}</p>
+          <p className="text-xs font-semibold text-zinc-300">{host1} &amp; {host2}</p>
           <p className="text-[10px] text-zinc-600">{linesCount} exchanges</p>
         </div>
 
@@ -478,10 +640,10 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
             onClick={() => setShowSpeedMenu(!showSpeedMenu)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all border ${
               showSpeedMenu 
-              ? 'bg-violet-600/20 border-violet-500/40 text-violet-400 shadow-[0_0_15px_rgba(124,58,237,0.1)]' 
-              : user.settings?.theme === 'light'
-                ? 'bg-zinc-100 border-black/5 text-zinc-600 hover:bg-zinc-200'
-                : 'bg-zinc-800/50 border-white/5 text-zinc-400 hover:text-white'
+                ? 'bg-violet-600/20 border-violet-500/30 text-violet-400' 
+                : user.settings?.theme === 'light'
+                  ? 'bg-white border-zinc-200 text-zinc-600 hover:border-zinc-300'
+                  : 'bg-zinc-800/80 border-white/10 text-zinc-300 hover:bg-zinc-700/80 hover:border-white/20'
             }`}
           >
             <Zap size={13} className={speed !== 1 ? 'text-violet-600 fill-violet-600/20 animate-pulse' : ''} />
@@ -502,14 +664,14 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
   );
 }
 
-/* ─── Per-source chat/transform/podcast state ─── */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Per-source chat/transform/podcast state Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 interface SourceState {
   chat: ChatMsg[];
   transforms: TransformResult[];
   podcast: any;
 }
 
-/* ─── FileSpeaker Main Component ─── */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ FileSpeaker Main Component Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 export default function FileSpeaker({ user, setUser, isLight }: { user: UserProfile; setUser: (u: UserProfile) => void; isLight: boolean }) {
   const SELECT_CLS = isLight ? SELECT_LIGHT : SELECT_DARK;
   const [sources, setSources] = useState<Source[]>(() => {
@@ -526,7 +688,7 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
   // Do not persist checked sources so we start with a clean slate each time
   const [checkedSources, setCheckedSources] = useState<string[]>([]);
 
-  // ── Sync internal FileSpeaker state to global UserProfile (for Supabase sync) ──
+  // Ã¢â€â‚¬Ã¢â€â‚¬ Sync internal FileSpeaker state to global UserProfile (for Supabase sync) Ã¢â€â‚¬Ã¢â€â‚¬
   useEffect(() => {
     const freshData = { sources, activeId: activeSourceId, states: sourceStates };
     if (JSON.stringify(user.fileSpeakerData) !== JSON.stringify(freshData)) {
@@ -582,14 +744,14 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
 
   const [sourceTab, setSourceTab] = useState<'chat' | 'transform' | 'podcast'>('chat');
 
-  /* ─── Helpers ─── */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
   const activeSource = sources.find(s => s.source_id === activeSourceId) ?? null;
   const getState = (id: string): SourceState =>
     sourceStates[id] ?? { chat: [], transforms: [], podcast: null };
   const patchState = (id: string, patch: Partial<SourceState>) =>
     setSourceStates(prev => ({ ...prev, [id]: { ...getState(id), ...patch } }));
 
-  /* ─── Switch source — Fix 5: each source keeps its own history ─── */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Switch source Ã¢â‚¬â€ Fix 5: each source keeps its own history Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
   const switchSource = (src: Source) => {
     setActiveSourceId(src.source_id);
     // initialise state slot if new
@@ -599,7 +761,7 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
     }));
   };
 
-  /* ─── Helper: register new source and switch to it (Fix 5) ─── */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Helper: register new source and switch to it (Fix 5) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
   const registerSource = (src: Source) => {
     // Check for exact source_id match to prevent strict duplicates, but allow duplicate titles (e.g. books.google.com)
     setSources(prev => {
@@ -611,11 +773,11 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
     setAddMode(null);
   };
 
-  /* ─── Upload File (client-side extraction, no backend needed on mobile) ─── */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Upload File (client-side extraction, no backend needed on mobile) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
   const handleFileUpload = useCallback(async (file: File) => {
     setUploading(true);
     try {
-      // ── Try backend first (desktop only) ──────────────────────────────────
+      // Ã¢â€â‚¬Ã¢â€â‚¬ Try backend first (desktop only) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
       if (!IS_NATIVE_MOBILE && BACKEND) {
         try {
           const form = new FormData();
@@ -634,7 +796,7 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
         }
       }
 
-      // ── Client-side extraction (works on mobile + desktop fallback) ────────
+      // Ã¢â€â‚¬Ã¢â€â‚¬ Client-side extraction (works on mobile + desktop fallback) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
       let text = '';
       const fileNameLower = file.name.toLowerCase();
 
@@ -664,10 +826,10 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
             if (pageText.trim()) pages.push(`[Page ${i}]\n${pageText}`);
           }
           text = pages.join('\n\n');
-          if (!text.trim()) text = `[PDF: ${file.name} — could not extract text. Try pasting text directly.]`;
+          if (!text.trim()) text = `[PDF: ${file.name} Ã¢â‚¬â€ could not extract text. Try pasting text directly.]`;
         } catch (pdfErr) {
           console.warn('[FileSpeaker] PDF.js extraction failed:', pdfErr);
-          text = `[PDF: ${file.name} — ${file.size} bytes. Text extraction failed. Paste the text manually.]`;
+          text = `[PDF: ${file.name} Ã¢â‚¬â€ ${file.size} bytes. Text extraction failed. Paste the text manually.]`;
         }
       } else if (
         fileNameLower.endsWith('.txt') ||
@@ -677,18 +839,18 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
         fileNameLower.endsWith('.html') ||
         fileNameLower.endsWith('.xml')
       ) {
-        // Plain text files — read directly
+        // Plain text files Ã¢â‚¬â€ read directly
         text = await file.text();
       } else if (fileNameLower.endsWith('.docx')) {
-        // Basic DOCX — read as text (imperfect but better than nothing)
+        // Basic DOCX Ã¢â‚¬â€ read as text (imperfect but better than nothing)
         text = await file.text().catch(() => `[DOCX: ${file.name}. For best results, copy-paste the text using the Text tab.]`);
       } else {
-        // Other files — try reading as text
+        // Other files Ã¢â‚¬â€ try reading as text
         text = await file.text().catch(() => `[Binary file: ${file.name}. For best results, paste the text manually.]`);
       }
 
       if (!text.trim()) {
-        text = `[File: ${file.name} — no readable text found. Use the Text tab to paste content directly.]`;
+        text = `[File: ${file.name} Ã¢â‚¬â€ no readable text found. Use the Text tab to paste content directly.]`;
       }
 
       // Limit text length to avoid memory issues on mobile
@@ -714,7 +876,7 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
     }
   }, []);
 
-  /* ─── Add URL (mobile: Gemini-powered extraction, desktop: backend first) ─── */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Add URL (mobile: Gemini-powered extraction, desktop: backend first) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
   const handleAddUrl = async () => {
     if (!urlInput.trim()) return;
     setUploading(true);
@@ -781,7 +943,7 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
     }
   };
 
-  /* ─── Add Text ─── */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Add Text Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
   const handleAddText = async () => {
     if (!textInput.trim()) return;
     setUploading(true);
@@ -826,7 +988,7 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
     finally { setUploading(false); }
   };
 
-  /* ─── Chat ─── */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Chat Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
   const handleChat = async () => {
     if (!chatInput.trim() || !activeSource || chatLoading) return;
     const q = chatInput.trim();
@@ -902,7 +1064,7 @@ Be accurate and concise. Never invent facts.`;
         } catch (localErr) {
           console.error('[FileSpeaker] Local model fallback failed:', localErr);
           // If offline model fails, return a friendly local message rather than crashing
-          reply = `📁 Kalam Spark offline document reader: I see you're asking about these documents. While offline or with rate limits exceeded, and since the local model is not loaded, I recommend checking your internet connection or downloading the GGUF model in Settings. Your documents remain loaded locally in the browser/app.`;
+          reply = `Ã°Å¸â€œÂ Kalam Spark offline document reader: I see you're asking about these documents. While offline or with rate limits exceeded, and since the local model is not loaded, I recommend checking your internet connection or downloading the GGUF model in Settings. Your documents remain loaded locally in the browser/app.`;
         }
       }
 
@@ -917,7 +1079,7 @@ Be accurate and concise. Never invent facts.`;
     } catch (e: any) {
       setSourceStates(cur => {
         const s = cur[sid] ?? { chat: [], transforms: [], podcast: null };
-        return { ...cur, [sid]: { ...s, chat: [...s.chat, { role: 'ai', text: `⚠️ Chat failed: ${e.message || e}` }] } };
+        return { ...cur, [sid]: { ...s, chat: [...s.chat, { role: 'ai', text: `Ã¢Å¡Â Ã¯Â¸Â Chat failed: ${e.message || e}` }] } };
       });
     } finally {
       setChatLoading(false);
@@ -925,7 +1087,7 @@ Be accurate and concise. Never invent facts.`;
     }
   };
 
-  /* ─── Transformations ─── */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Transformations Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
   const handleTransform = async (key: string, label: string) => {
     if (!activeSource || transforming) return;
     setTransforming(key);
@@ -980,7 +1142,7 @@ Be accurate and concise. Never invent facts.`;
     finally { setTransforming(null); }
   };
 
-  /* ─── Auto Language Detection ─── */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Auto Language Detection Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
   const handleDetectLanguage = async () => {
     if (!activeSource || detectingLang) return;
     setDetectingLang(true);
@@ -1031,7 +1193,7 @@ Be accurate and concise. Never invent facts.`;
       setPodcastLang(data.language);
       setHost1Voice(data.host1_voice);
       setHost2Voice(data.host2_voice);
-      setDetectedLangInfo(`Detected: ${data.language_name} — voices auto-set!`);
+      setDetectedLangInfo(`Detected: ${data.language_name} Ã¢â‚¬â€ voices auto-set!`);
     } catch (e: any) {
       setDetectedLangInfo('Could not detect language. Defaulting to English.');
     } finally {
@@ -1039,14 +1201,14 @@ Be accurate and concise. Never invent facts.`;
     }
   };
 
-  /* ─── Podcast ─── */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Podcast Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
   const handleGeneratePodcast = async () => {
     if (!activeSource || !podcastTopic.trim() || generatingPodcast) return;
     setGeneratingPodcast(true);
     const sid = activeSource.source_id;
     patchState(sid, { podcast: null });
     try {
-      // ── Desktop path: use backend ──────────────────────────────────────────
+      // Ã¢â€â‚¬Ã¢â€â‚¬ Desktop path: use backend Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
       if (!IS_NATIVE_MOBILE && BACKEND) {
         const res  = await fetch(`${BACKEND}/api/filespeaker/podcast`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1082,7 +1244,7 @@ Be accurate and concise. Never invent facts.`;
         return;
       }
 
-      // ── Mobile / No-backend path: generate script via LLM + play with Web Speech API ──
+      // Ã¢â€â‚¬Ã¢â€â‚¬ Mobile / No-backend path: generate script via LLM + play with Web Speech API Ã¢â€â‚¬Ã¢â€â‚¬
       const lengthInstruction = podcastLength === 'short' ? '6-8 dialogue exchanges' : podcastLength === 'long' ? '18-24 dialogue exchanges' : '12-15 dialogue exchanges';
       const systemInstruction = `You are a podcast script writer. Generate a natural, engaging podcast conversation script. Return ONLY a JSON array with no markdown wrapping.`;
       const prompt = `Write a ${lengthInstruction} podcast script between two hosts named "${host1Name}" and "${host2Name}" discussing the topic "${podcastTopic}" based on this content:
@@ -1138,7 +1300,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
         language: podcastLang,
         language_name: PODCAST_LANGUAGES.find(l => l.code === podcastLang)?.label || 'English',
         duration_estimate: `~${Math.ceil(lines.length * 6 / 60)} min`,
-        audio_url: null,   // no server audio on mobile — we'll use Web Speech
+        audio_url: null,   // no server audio on mobile Ã¢â‚¬â€ we'll use Web Speech
         is_local: true,    // flag to indicate client-side TTS
       };
 
@@ -1191,7 +1353,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
   };
 
 
-  /* ─── Podcast Interactive Q&A ─── */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Podcast Interactive Q&A Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
   const [interactQ, setInteractQ] = useState('');
   const [interactLoading, setInteractLoading] = useState(false);
   const handlePodcastInteract = async () => {
@@ -1220,7 +1382,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
       const newInteractions = [...(podcast.interactions || []), { q, a: data.text, audio: data.audio_url }];
       patchState(sid, { podcast: { ...podcast, interactions: newInteractions } });
 
-      // Play answer audio — BUG FIX 5: assign to ref as plain Audio object (correct)
+      // Play answer audio Ã¢â‚¬â€ BUG FIX 5: assign to ref as plain Audio object (correct)
       const answerAudio = new Audio(`${BACKEND}/api/filespeaker/audio/${data.audio_url}`);
       interactionAudioRef.current = answerAudio;
       answerAudio.onended = () => {
@@ -1262,7 +1424,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
     rec.start();
   };
 
-  /* ─── Rename source ─── */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Rename source Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameVal, setRenameVal]   = useState('');
   const commitRename = (id: string) => {
@@ -1270,7 +1432,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
     setRenamingId(null);
   };
 
-  /* ─── Quick URL import (from Study Center or external) ─── */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Quick URL import (from Study Center or external) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
   const [quickUrl, setQuickUrl]     = useState('');
   const [quickLoading, setQuickLoading] = useState(false);
   const handleQuickUrl = async () => {
@@ -1289,7 +1451,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
     finally { setQuickLoading(false); }
   };
 
-  /* ─── Auto-import URL from Study Center (sessionStorage) ─── */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Auto-import URL from Study Center (sessionStorage) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
   useEffect(() => {
     const fsUrl = sessionStorage.getItem('fs_import_url');
     if (!fsUrl) return;
@@ -1310,7 +1472,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
     return () => clearTimeout(t);
   }, []);
 
-  /* ─── Remove Source ─── */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Remove Source Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
   const removeSource = (id: string) => {
     setSources(prev => prev.filter(s => s.source_id !== id));
     setCheckedSources(prev => prev.filter(x => x !== id));
@@ -1322,7 +1484,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
   const transforms  = curState?.transforms ?? [];
   const podcast     = curState?.podcast ?? null;
 
-  /* ─── RENDER ─── */
+  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ RENDER Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
   return (
     <div className="fade-up h-[calc(100vh-8rem)] flex flex-col gap-6 bg-transparent">
       {/* Header */}
@@ -1331,11 +1493,11 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
           <Volume2 size={24} className="text-violet-400" /> File Speaker
         </h1>
         <p className="text-sm text-zinc-500 mt-1">
-          Upload documents, web links, or text → Chat with them · Extract insights · Convert to podcast
+          Upload documents, web links, or text Ã¢â€ â€™ Chat with them Ã‚Â· Extract insights Ã‚Â· Convert to podcast
         </p>
       </div>
 
-      {/* ── Quick URL Import Bar (Study Center / YouTube / Article links) ── */}
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬ Quick URL Import Bar (Study Center / YouTube / Article links) Ã¢â€â‚¬Ã¢â€â‚¬ */}
       <div className={`flex items-center gap-2 p-3 rounded-xl border border-violet-500/20 ${isLight ? 'bg-violet-50' : 'bg-violet-500/5'}`}>
         <Link size={14} className="text-violet-400 shrink-0" />
         <span className={`text-xs shrink-0 hidden sm:inline ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>Quick import:</span>
@@ -1354,7 +1516,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
       </div>
 
       <div className="flex flex-col lg:flex-row gap-5 flex-1 min-h-0">
-        {/* ── Left Sidebar: Source Vault ── */}
+        {/* Ã¢â€â‚¬Ã¢â€â‚¬ Left Sidebar: Source Vault Ã¢â€â‚¬Ã¢â€â‚¬ */}
         <div className="w-full lg:w-80 flex flex-col gap-3 flex-1 lg:flex-none lg:h-full overflow-hidden">
           <div className="flex items-center justify-between">
             <span className={`text-xs uppercase tracking-widest font-semibold ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>Sources ({sources.length})</span>
@@ -1465,7 +1627,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
                       <p className={`text-xs font-semibold truncate pr-2 ${isLight ? 'text-zinc-700' : 'text-zinc-300'}`}>{src.title}</p>
                     )}
                     <p className={`text-[10px] mt-0.5 ${isLight ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                      {(src.char_count / 1000).toFixed(1)}k chars · {src.chunk_count} chunks
+                      {(src.char_count / 1000).toFixed(1)}k chars Ã‚Â· {src.chunk_count} chunks
                     </p>
                   </div>
                 </button>
@@ -1486,7 +1648,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
           </div>
         </div>
 
-        {/* ── Right Panel: Workspace ── */}
+        {/* Ã¢â€â‚¬Ã¢â€â‚¬ Right Panel: Workspace Ã¢â€â‚¬Ã¢â€â‚¬ */}
         <div className={`flex-1 flex flex-col min-w-0 h-full overflow-hidden transition-all duration-300 ${
           activeSource 
             ? 'fixed inset-0 z-[60] bg-zinc-950 sm:relative sm:z-auto sm:inset-auto sm:bg-transparent' 
@@ -1545,7 +1707,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
                 </div>
               </div>
 
-              {/* ── CHAT TAB ── */}
+              {/* Ã¢â€â‚¬Ã¢â€â‚¬ CHAT TAB Ã¢â€â‚¬Ã¢â€â‚¬ */}
               {sourceTab === 'chat' && (
                 <div className="flex-1 flex flex-col overflow-hidden">
                   <div className="flex-1 overflow-y-auto p-5 space-y-4">
@@ -1600,7 +1762,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
                 </div>
               )}
 
-              {/* ── TRANSFORM TAB ── */}
+              {/* Ã¢â€â‚¬Ã¢â€â‚¬ TRANSFORM TAB Ã¢â€â‚¬Ã¢â€â‚¬ */}
               {sourceTab === 'transform' && (
                 <div className="flex-1 overflow-y-auto p-5 space-y-5">
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -1636,7 +1798,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
                 </div>
               )}
 
-              {/* ── PODCAST TAB ── */}
+              {/* Ã¢â€â‚¬Ã¢â€â‚¬ PODCAST TAB Ã¢â€â‚¬Ã¢â€â‚¬ */}
               {sourceTab === 'podcast' && (
                 <div className="flex-1 overflow-y-auto p-5 space-y-5">
                   <div className={`rounded-xl border p-5 space-y-4 ${isLight ? 'border-zinc-200 bg-white shadow-sm' : 'border-zinc-800 bg-zinc-900/40'}`}>
@@ -1731,7 +1893,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
                           )}
                         </div>
                         {detectedLangInfo && (
-                          <p className="text-[10px] text-emerald-500 mt-1.5 absolute -bottom-5">✓ {detectedLangInfo}</p>
+                          <p className="text-[10px] text-emerald-500 mt-1.5 absolute -bottom-5">Ã¢Å“â€œ {detectedLangInfo}</p>
                         )}
                       </div>
                     </div>
@@ -1775,10 +1937,10 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
                       className="w-full bg-violet-600 hover:bg-violet-500 text-white font-bold py-3 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2.5">
                       {generatingPodcast ? <><Loader2 size={16} className="animate-spin" /> Generating Podcast... (2-5 min)</> : <><Headphones size={16} /> Generate Podcast</>}
                     </button>
-                    {generatingPodcast && <p className={`text-[11px] text-center ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>Gemma4 is writing the script and TTS is synthesizing audio...☕</p>}
+                    {generatingPodcast && <p className={`text-[11px] text-center ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>Gemma4 is writing the script and TTS is synthesizing audio...Ã¢Ëœâ€¢</p>}
                   </div>
 
-                  {/* Fix 3+4: Full audio player with progress bar, seek ±10s */}
+                  {/* Fix 3+4: Full audio player with progress bar, seek Ã‚Â±10s */}
                   {podcast && (
                     <div className={`rounded-xl border p-5 space-y-4 ${isLight ? 'border-violet-300/40 bg-violet-50' : 'border-violet-500/30 bg-violet-500/5'}`}>
                       <div className="flex items-center justify-between">
@@ -1793,9 +1955,11 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
                         downloadUrl={`${BACKEND}/api/filespeaker/audio/${podcast.audio_filename}`}
                         audioRef={podcastAudioRef}
                         user={user}
+                        lines={podcast.lines || []}
+                        podcastLang={podcastLang}
                       />
                       <details className="text-xs">
-                        <summary className={`cursor-pointer select-none py-1 ${isLight ? 'text-zinc-500 hover:text-zinc-800' : 'text-zinc-500 hover:text-zinc-300'}`}>View Full Script ↓</summary>
+                        <summary className={`cursor-pointer select-none py-1 ${isLight ? 'text-zinc-500 hover:text-zinc-800' : 'text-zinc-500 hover:text-zinc-300'}`}>View Full Script Ã¢â€ â€œ</summary>
                         <div className={`mt-3 space-y-2 max-h-64 overflow-y-auto pr-1 border-t pt-3 ${isLight ? 'border-violet-200' : 'border-violet-500/20'}`}>
                           {podcast.lines?.map((line: any, i: number) => (
                             <div key={i} className="flex gap-2.5 group">
@@ -1861,9 +2025,9 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
         </div>
       </div>
 
-      {/* ──────────────────────────────
+      {/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
          PODCAST LIBRARY PANEL
-         ────────────────────────────── */}
+         Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */}
       {showLibrary && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}>
           <div className={`relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl border shadow-2xl overflow-hidden ${
@@ -1946,7 +2110,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
                     </div>
                     {rec.script && (
                       <details className="mt-2 text-xs">
-                        <summary className={`cursor-pointer select-none py-1 ${isLight ? 'text-zinc-400 hover:text-zinc-700' : 'text-zinc-600 hover:text-zinc-400'}`}>View Script ↓</summary>
+                        <summary className={`cursor-pointer select-none py-1 ${isLight ? 'text-zinc-400 hover:text-zinc-700' : 'text-zinc-600 hover:text-zinc-400'}`}>View Script Ã¢â€ â€œ</summary>
                         <div className={`mt-2 max-h-32 overflow-y-auto space-y-1.5 pt-2 border-t ${
                           isLight ? 'border-zinc-200' : 'border-zinc-800'
                         }`}>

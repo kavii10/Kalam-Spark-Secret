@@ -140,8 +140,13 @@ export const llamaPlugin = {
       const res = await LlamaPluginNative.selectModelFile();
       if (res && res.status === 'done') {
         isModelLoaded = false; // Reset to force reload from the copied internal path
+        // Save the internal path and filename so we can use it on next load
+        if (res.path) {
+          localStorage.setItem('kalamspark_model_path', res.path);
+          console.log('[LlamaPlugin] Model copied to internal path:', res.path);
+        }
         await Toast.show({
-          text: '✅ Local model copied to app storage and loaded!',
+          text: `✅ Model "${(res as any).filename || 'model.gguf'}" copied! Ready for offline AI.`,
           duration: 'short'
         });
         return true;
@@ -161,3 +166,4 @@ export const llamaPlugin = {
     }
   }
 };
+

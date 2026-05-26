@@ -20,6 +20,7 @@ public class LlamaPlugin extends Plugin {
     private static final String TAG = "LlamaPlugin";
     private boolean isLoaded = false;
     private String loadedModelPath = "";
+    private String selectedModelInternalPath = ""; // path of last user-selected model copied to internal storage
 
     /**
      * Check if the model file exists at the given path.
@@ -66,6 +67,20 @@ public class LlamaPlugin extends Plugin {
         File externalDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
         // App's private internal storage directory
         File internalDir = getContext().getFilesDir();
+
+        // If user selected a custom model, always check that path first
+        if (selectedModelInternalPath != null && !selectedModelInternalPath.isEmpty()) {
+            return new String[] {
+                selectedModelInternalPath,                                  // User-selected custom model (highest priority)
+                providedPath,                                               // Provided path (e.g. /storage/emulated/0/Download/model.gguf)
+                internalDir.getAbsolutePath() + "/" + fileName,            // App's private internal storage
+                externalDir.getAbsolutePath() + "/" + fileName,           // Environment.DIRECTORY_DOWNLOADS/filename
+                "/storage/emulated/0/Download/" + fileName,               // Standard Android emulated path
+                "/sdcard/Download/" + fileName,                            // Legacy sdcard path
+                "/mnt/sdcard/Download/" + fileName,                        // MIUI alternative
+                "/storage/emulated/0/Downloads/" + fileName,               // Some phones use 'Downloads' (plural)
+            };
+        }
         
         return new String[] {
             providedPath,                                               // Provided path (e.g. /storage/emulated/0/Download/model.gguf)
@@ -77,6 +92,7 @@ public class LlamaPlugin extends Plugin {
             "/storage/emulated/0/Downloads/" + fileName,               // Some phones use 'Downloads' (plural)
         };
     }
+
 
     /**
      * Launches the system Document Picker so the user can browse and select the model GGUF file.
@@ -156,11 +172,28 @@ public class LlamaPlugin extends Plugin {
     }
 
     private void copyModelFileAsyncTask(PluginCall call, final java.io.InputStream is, Uri uri) {
+        // Resolve the actual display name from the URI
+        String displayName = "model.gguf";
+        try (android.database.Cursor cursor = getContext().getContentResolver().query(
+                uri, new String[]{android.provider.OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int nameIdx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
+                if (nameIdx != -1) {
+                    String name = cursor.getString(nameIdx);
+                    if (name != null && !name.isEmpty()) displayName = name;
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Could not resolve display name from URI: " + e.getMessage());
+        }
+        final String finalDisplayName = displayName;
+        Log.d(TAG, "copyModelFileAsyncTask: destination filename = " + finalDisplayName);
+
         AsyncTask.execute(new Runnable() {
             @Override
             public void run() {
                 try {
-                    File destFile = new File(getContext().getFilesDir(), "google_gemma-4-E2B-it-Q2_K.gguf");
+                    File destFile = new File(getContext().getFilesDir(), finalDisplayName);
                     Log.d(TAG, "copyModelFileAsyncTask: Copying stream to " + destFile.getAbsolutePath());
                     
                     if (destFile.exists()) {
@@ -211,9 +244,14 @@ public class LlamaPlugin extends Plugin {
                     os.close();
                     is.close();
 
+                    // Save the internal path so future loadModel calls can find it
+                    selectedModelInternalPath = destFile.getAbsolutePath();
+                    Log.d(TAG, "copyModelFileAsyncTask: Saved selectedModelInternalPath = " + selectedModelInternalPath);
+
                     JSObject successObj = new JSObject();
                     successObj.put("status", "done");
                     successObj.put("path", destFile.getAbsolutePath());
+                    successObj.put("filename", finalDisplayName);
                     successObj.put("size", destFile.length());
                     call.resolve(successObj);
 
@@ -275,7 +313,7 @@ public class LlamaPlugin extends Plugin {
 
         try {
             // In full JNI integration: nativeInitLlama(resolvedPath);
-            // Currently uses Java fallback — the model "loads" by recording the path
+            // Currently uses Java fallback â€” the model "loads" by recording the path
             loadedModelPath = resolvedPath;
             isLoaded = true;
 
@@ -320,7 +358,7 @@ public class LlamaPlugin extends Plugin {
         });
     }
 
-    // ── JNI Native hooks (loaded from libllama.so compiled via CMake) ──
+    // â”€â”€ JNI Native hooks (loaded from libllama.so compiled via CMake) â”€â”€
     private native String jniGenerate(String systemInstruction, String prompt);
 
     private String nativeGenerate(String system, String prompt) {
@@ -345,7 +383,7 @@ public class LlamaPlugin extends Plugin {
         }
     }
 
-    // ── Java-level NLP fallback ──
+    // â”€â”€ Java-level NLP fallback â”€â”€
     // Used when native C++ compilation is skipped or the library is not compiled.
     // In production: compile llama.cpp into libllama.so via CMakeLists.txt for real AI inference.
     private String generateJavaFallback(String system, String prompt) {
@@ -461,7 +499,7 @@ public class LlamaPlugin extends Plugin {
         }
 
         // 5. Default mentor chat response
-        return "🔋 Offline Mode (Local Gemma 4): I'm here to guide your learning journey! " +
+        return "ðŸ”‹ Offline Mode (Local Gemma 4): I'm here to guide your learning journey! " +
                "I can see you're working hard toward your career goals. " +
                "While offline, you can review your roadmap, complete quiz questions, " +
                "and track your task progress. Once you reconnect to the internet, " +

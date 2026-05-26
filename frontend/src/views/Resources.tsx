@@ -556,8 +556,13 @@ export default function Resources({ user }: { user: UserProfile }) {
       //   3. The user has moved to a new stage in the roadmap
       const dreamMismatch = cached?.cachedForDream && cached.cachedForDream !== currentUser.dream;
       const stageMismatch = cached?.cachedForStage !== undefined && cached.cachedForStage !== stageIdx;
+      // Also invalidate if cached data is sparse (< 3 books means it was a bad/incomplete cache)
+      const sparseCache = cached && (
+        (Array.isArray(cached.books) && cached.books.length < 3) ||
+        (Array.isArray(cached.videos) && cached.videos.length < 3)
+      );
 
-      if (!cached || dreamMismatch || stageMismatch) {
+      if (!cached || dreamMismatch || stageMismatch || sparseCache) {
         const fetched = await fetchDirectResources(
           currentUser.dream, stage.title, stage.subjects || [], currentUser.year
         );

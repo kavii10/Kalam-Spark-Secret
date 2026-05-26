@@ -456,20 +456,35 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
       else if (/[\u0980-\u09FF]/.test(text)) lang = 'bn-IN'; // Bengali
       
       utterance.lang = lang;
-      
-      // Explicitly attach the voice object (browsers often ignore the 'lang' string)
+
+      const doSpeak = () => {
+        // Explicitly attach the voice object (browsers often ignore the 'lang' string)
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length > 0) {
+          // Try exact match first (e.g. 'ta-IN'), then broad match (e.g. 'ta')
+          const voice = voices.find(v => v.lang === lang) || voices.find(v => v.lang.startsWith(lang.split('-')[0]));
+          if (voice) utterance.voice = voice;
+        }
+        utterance.onend = () => setSpeakingIdx(null);
+        utterance.onerror = () => setSpeakingIdx(null);
+        window.speechSynthesis.speak(utterance);
+        setSpeakingIdx(idx);
+      };
+
+      // On Android WebView, voices may not be loaded yet — use onvoiceschanged or timeout fallback
       const voices = window.speechSynthesis.getVoices();
       if (voices.length > 0) {
-        // Try exact match first (e.g. 'ta-IN'), then broad match (e.g. 'ta')
-        let voice = voices.find(v => v.lang === lang) || voices.find(v => v.lang.startsWith(lang.split('-')[0]));
-        if (voice) {
-          utterance.voice = voice;
-        }
+        doSpeak();
+      } else {
+        window.speechSynthesis.onvoiceschanged = () => {
+          window.speechSynthesis.onvoiceschanged = null;
+          doSpeak();
+        };
+        // Fallback: speak without a specific voice after 500ms
+        setTimeout(() => {
+          if (!window.speechSynthesis.speaking) doSpeak();
+        }, 500);
       }
-
-      utterance.onend = () => setSpeakingIdx(null);
-      window.speechSynthesis.speak(utterance);
-      setSpeakingIdx(idx);
     }
   };
 
