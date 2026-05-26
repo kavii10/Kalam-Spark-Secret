@@ -291,8 +291,8 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
   // Input / select shared styles
   const inputClass = "w-full rounded-xl px-4 py-3.5 text-sm transition-all outline-none";
   const inputStyle = isLight
-    ? { background: '#f9fafb', border: '1px solid #d1d5db', color: '#111827' }
-    : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(211,156,59,0.25)', color: '#fde68a' };
+    ? { background: '#ffffff', border: '1px solid #d1d5db', color: '#111827' }
+    : { background: '#0f172a', border: '1px solid rgba(211,156,59,0.25)', color: '#fde68a' };
   const labelClr = isLight ? '#6b7280' : undefined;
   const headClr  = isLight ? '#111827' : undefined;
   const subClr   = isLight ? '#374151' : undefined;
