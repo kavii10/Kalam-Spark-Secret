@@ -1,9 +1,9 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Rocket, GraduationCap, Briefcase, User,
   ArrowRight, ArrowLeft, Lightbulb, Loader2, CheckCircle2, RefreshCw,
-  Zap, Target, BookOpen, Sparkles
+  Zap, Target, BookOpen, Sparkles, ChevronDown, Check
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import DreamDiscovery from './DreamDiscovery';
@@ -101,6 +101,101 @@ function getAutocompleteSuggestions(input: string, max = 5): string[] {
 }
 
 import { t, getCurrentLang } from '../i18n';
+
+interface CustomSelectProps {
+  value: string;
+  onChange: (val: string) => void;
+  options: { label: string; value: string }[];
+  placeholder: string;
+  isLight: boolean;
+}
+
+function CustomSelect({ value, onChange, options, placeholder, isLight }: CustomSelectProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  const selectedOpt = options.find(o => o.value === value);
+
+  return (
+    <div className="relative w-full" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full rounded-xl px-4 py-3.5 text-sm transition-all outline-none text-left flex items-center justify-between"
+        style={
+          isLight
+            ? { background: '#ffffff', border: '1px solid #d1d5db', color: value ? '#111827' : '#9ca3af' }
+            : { background: '#0f172a', border: '1px solid rgba(211,156,59,0.25)', color: value ? '#fde68a' : 'rgba(211,156,59,0.3)' }
+        }
+      >
+        <span>{selectedOpt ? selectedOpt.label : placeholder}</span>
+        <ChevronDown size={16} className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} style={{ color: isLight ? '#6b7280' : '#d97706' }} />
+      </button>
+
+      {isOpen && (
+        <div
+          className="absolute z-[1000] left-0 right-0 mt-1 max-h-60 overflow-y-auto rounded-xl p-1 shadow-lg border animate-in fade-in slide-in-from-top-2 duration-150"
+          style={
+            isLight
+              ? { background: '#ffffff', borderColor: '#e5e7eb', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }
+              : { background: '#0f172a', borderColor: 'rgba(211,156,59,0.25)', boxShadow: '0 4px 25px rgba(0,0,0,0.5)' }
+          }
+        >
+          {options.map((opt) => {
+            const isSelected = opt.value === value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  onChange(opt.value);
+                  setIsOpen(false);
+                }}
+                className="w-full text-left px-4 py-3 text-sm rounded-lg transition-colors flex items-center justify-between"
+                style={
+                  isLight
+                    ? {
+                        color: isSelected ? '#111827' : '#374151',
+                        background: isSelected ? '#f3f4f6' : 'transparent',
+                      }
+                    : {
+                        color: isSelected ? '#ffffff' : '#fde68a',
+                        background: isSelected ? 'rgba(255,255,255,0.08)' : 'transparent',
+                      }
+                }
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = isLight ? '#f3f4f6' : 'rgba(255,255,255,0.05)';
+                  e.currentTarget.style.color = isLight ? '#111827' : '#ffffff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = isSelected
+                    ? (isLight ? '#f3f4f6' : 'rgba(255,255,255,0.08)')
+                    : 'transparent';
+                  e.currentTarget.style.color = isSelected
+                    ? (isLight ? '#111827' : '#ffffff')
+                    : (isLight ? '#374151' : '#fde68a');
+                }}
+              >
+                <span>{opt.label}</span>
+                {isSelected && <Check size={14} className={isLight ? 'text-purple-600' : 'text-yellow-500'} />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface OnboardingProps {
   onComplete: (profile: Pick<UserProfile, 'name' | 'branch' | 'year' | 'dream' | 'educationLevel' | 'schoolBoard' | 'gradeOrSemester' | 'studyHoursPerDay' | 'targetYear' | 'city' | 'motivation'>) => void;
@@ -389,39 +484,38 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
                   {/* Education Level */}
                   <div>
                     <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>{t('ob_education_level', lang)}</p>
-                    <select
+                    <CustomSelect
                       value={form.educationLevel}
-                      onChange={(e) => {
-                        const level = e.target.value as any;
+                      onChange={(val) => {
+                        const level = val as 'school' | 'college' | 'graduate' | 'self-learner' | '';
                         setForm({ ...form, educationLevel: level });
                         validateGradeInput(level, form.gradeOrSemester);
                       }}
-                      className={inputClass}
-                      style={{ ...inputStyle, color: form.educationLevel ? (isLight ? '#111827' : undefined) : (isLight ? '#9ca3af' : 'rgba(211,156,59,0.3)') }}
-                    >
-                      <option value="" style={{ color: isLight ? '#111827' : '#e2e8f0', background: isLight ? '#ffffff' : '#0f172a' }}>{t('ob_choose_level', lang)}</option>
-                      <option value="school" style={{ color: isLight ? '#111827' : '#e2e8f0', background: isLight ? '#ffffff' : '#0f172a' }}>{t('ob_high_school', lang)}</option>
-                      <option value="college" style={{ color: isLight ? '#111827' : '#e2e8f0', background: isLight ? '#ffffff' : '#0f172a' }}>{t('ob_college', lang)}</option>
-                      <option value="graduate" style={{ color: isLight ? '#111827' : '#e2e8f0', background: isLight ? '#ffffff' : '#0f172a' }}>{t('ob_graduate', lang)}</option>
-                      <option value="self-learner" style={{ color: isLight ? '#111827' : '#e2e8f0', background: isLight ? '#ffffff' : '#0f172a' }}>{t('ob_self_learner', lang)}</option>
-                    </select>
+                      options={[
+                        { label: t('ob_high_school', lang), value: 'school' },
+                        { label: t('ob_college', lang), value: 'college' },
+                        { label: t('ob_graduate', lang), value: 'graduate' },
+                        { label: t('ob_self_learner', lang), value: 'self-learner' }
+                      ]}
+                      placeholder={t('ob_choose_level', lang)}
+                      isLight={isLight}
+                    />
                   </div>
 
                   {/* Conditional: School board */}
                   {form.educationLevel === 'school' && (
                     <div>
                       <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>{t('ob_school_board', lang)}</p>
-                      <select
+                      <CustomSelect
                         value={form.schoolBoard}
-                        onChange={(e) => setForm({ ...form, schoolBoard: e.target.value })}
-                        className={inputClass}
-                        style={{ ...inputStyle, color: form.schoolBoard ? (isLight ? '#111827' : undefined) : (isLight ? '#9ca3af' : 'rgba(211,156,59,0.3)') }}
-                      >
-                        <option value="" style={{ color: isLight ? '#111827' : '#e2e8f0', background: isLight ? '#ffffff' : '#0f172a' }}>{t('ob_choose_board', lang)}</option>
-                        {['CBSE', 'State Board (Tamil Nadu)', 'State Board (Karnataka)', 'State Board (Andhra Pradesh)', 'State Board (Kerala)', 'State Board (Maharashtra)', 'State Board (UP)', 'ICSE / ISC', 'IB (International)', 'Other'].map(b => (
-                          <option key={b} value={b} style={{ color: isLight ? '#111827' : '#e2e8f0', background: isLight ? '#ffffff' : '#0f172a' }}>{b}</option>
-                        ))}
-                      </select>
+                        onChange={(val) => setForm({ ...form, schoolBoard: val })}
+                        options={['CBSE', 'State Board (Tamil Nadu)', 'State Board (Karnataka)', 'State Board (Andhra Pradesh)', 'State Board (Kerala)', 'State Board (Maharashtra)', 'State Board (UP)', 'ICSE / ISC', 'IB (International)', 'Other'].map(b => ({
+                          label: b,
+                          value: b
+                        }))}
+                        placeholder={t('ob_choose_board', lang)}
+                        isLight={isLight}
+                      />
                     </div>
                   )}
 

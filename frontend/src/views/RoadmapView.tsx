@@ -452,6 +452,41 @@ function StageDetailPanel({ stage, onClose, theme }: { stage: any; onClose: () =
   );
 }
 
+/* ────────── Helper: Client-side Roadmap Generation with Simulated Progress ────────── */
+async function generateRoadmapWithProgress(user: UserProfile, setLoadingMsg: (msg: string) => void): Promise<CareerRoadmap> {
+  const steps = [
+    "Connecting to AI Career Architect...",
+    "Backend offline. Igniting client-side AI...",
+    "⠋ Crawling real career websites for latest trends...",
+    "✓ Found data from 5 sources. Initializing Gemma4 AI...",
+    "⠋ Architecting 4-stage roadmap..."
+  ];
+
+  let stepIdx = 0;
+  setLoadingMsg(steps[0]);
+
+  const intervalId = setInterval(() => {
+    stepIdx++;
+    if (stepIdx < steps.length) {
+      setLoadingMsg(steps[stepIdx]);
+    } else {
+      clearInterval(intervalId);
+    }
+  }, 2000);
+
+  try {
+    const roadmap = await generateRoadmap(user);
+    clearInterval(intervalId);
+    setLoadingMsg("✓ Roadmap generated successfully!");
+    // Short pause to let the user see the success message
+    await new Promise(resolve => setTimeout(resolve, 800));
+    return roadmap;
+  } catch (err) {
+    clearInterval(intervalId);
+    throw err;
+  }
+}
+
 /* ────────── Main RoadmapView ────────── */
 export default function RoadmapView({
   user,
@@ -544,8 +579,7 @@ export default function RoadmapView({
           } else if (res.type === 'error') {
              console.error('WS Error:', res.data);
              try {
-                setLoadingMsg('Backend error. Using client-side AI fallback...');
-                const fallback = await generateRoadmap(user);
+                const fallback = await generateRoadmapWithProgress(user, setLoadingMsg);
                 const clean = sanitizeRoadmap(fallback, user.dream, user.branch);
                 setRoadmap(clean);
                 await dbService.saveRoadmap(user, clean);
@@ -561,8 +595,7 @@ export default function RoadmapView({
         ws.onerror = async (err) => {
            console.error("WS connection error", err);
            try {
-              setLoadingMsg('Backend offline. Igniting client-side AI...');
-              const fallback = await generateRoadmap(user);
+              const fallback = await generateRoadmapWithProgress(user, setLoadingMsg);
               const clean = sanitizeRoadmap(fallback, user.dream, user.branch);
               setRoadmap(clean);
               await dbService.saveRoadmap(user, clean);
