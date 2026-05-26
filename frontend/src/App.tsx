@@ -936,21 +936,24 @@ const AppContent = ({
   const isLight = user.settings?.theme === 'light';
   if (!user.onboardingComplete) {
     return (
-      <Onboarding
-        isLight={isLight}
-        onComplete={async (profile) => {
-          const avatar = `https://api.dicebear.com/7.x/shapes/svg?seed=${encodeURIComponent(profile.name || 'user')}`;
-          const updated = { ...user, ...profile, avatar, onboardingComplete: true, currentStageIndex: 0 };
-          navigate("/roadmap");
-          setUser(updated);
-          try {
-            await dbService.saveUser(updated);
-          } catch (err) {
-            console.error('[Onboarding] Save failed — will retry on next load:', err);
-            // Don't block the user. The debounced save effect will retry shortly.
-          }
-        }}
-      />
+      <>
+        {isLight && <style>{LIGHT_THEME_CSS}</style>}
+        <Onboarding
+          isLight={isLight}
+          onComplete={async (profile) => {
+            const avatar = `https://api.dicebear.com/7.x/shapes/svg?seed=${encodeURIComponent(profile.name || 'user')}`;
+            const updated = { ...user, ...profile, avatar, onboardingComplete: true, currentStageIndex: 0 };
+            navigate("/roadmap");
+            setUser(updated);
+            try {
+              await dbService.saveUser(updated);
+            } catch (err) {
+              console.error('[Onboarding] Save failed — will retry on next load:', err);
+              // Don't block the user. The debounced save effect will retry shortly.
+            }
+          }}
+        />
+      </>
     );
   }
 
@@ -1417,20 +1420,8 @@ const AppContent = ({
 };
 
 export default function App() {
-  // Only show React splash on truly fresh launch (no cached authenticated session)
-  // This prevents the double-splash issue where users see logo -> splash -> app
-  const [showSplash, setShowSplash] = useState(() => {
-    try {
-      const cached = localStorage.getItem('kalamspark_cached_profile');
-      if (cached) {
-        const profile = JSON.parse(cached);
-        // If we have a valid cached session, skip the splash entirely
-        if (profile && profile.isAuthenticated && profile.id) return false;
-      }
-    } catch (e) {}
-    // Show splash only on fresh launch (no cached session)
-    return true;
-  });
+  // Always show React splash on fresh page load/launch for a premium cinematic entrance experience
+  const [showSplash, setShowSplash] = useState(true);
   const [user, setUser] = useState<UserProfile>(() => {
     const cachedProfileRaw = localStorage.getItem('kalamspark_cached_profile');
     if (cachedProfileRaw) {
@@ -1810,7 +1801,7 @@ export default function App() {
     return (
       <>
         {user.settings?.theme === 'light' && <style>{LIGHT_THEME_CSS}</style>}
-        <SplashScreen onComplete={() => setShowSplash(false)} isLight={false} />
+        <SplashScreen onComplete={() => setShowSplash(false)} isLight={user.settings?.theme === 'light'} />
       </>
     );
   }

@@ -399,11 +399,11 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
                       className={inputClass}
                       style={{ ...inputStyle, color: form.educationLevel ? (isLight ? '#111827' : undefined) : (isLight ? '#9ca3af' : 'rgba(211,156,59,0.3)') }}
                     >
-                      <option value="" style={{ color: isLight ? '#111827' : '#e2e8f0', background: isLight ? '#ffffff' : '#0f172a' }}>{t('ob_choose_level', lang)}</option>
-                      <option value="school" style={{ color: isLight ? '#111827' : '#e2e8f0', background: isLight ? '#ffffff' : '#0f172a' }}>{t('ob_high_school', lang)}</option>
-                      <option value="college" style={{ color: isLight ? '#111827' : '#e2e8f0', background: isLight ? '#ffffff' : '#0f172a' }}>{t('ob_college', lang)}</option>
-                      <option value="graduate" style={{ color: isLight ? '#111827' : '#e2e8f0', background: isLight ? '#ffffff' : '#0f172a' }}>{t('ob_graduate', lang)}</option>
-                      <option value="self-learner" style={{ color: isLight ? '#111827' : '#e2e8f0', background: isLight ? '#ffffff' : '#0f172a' }}>{t('ob_self_learner', lang)}</option>
+                      <option value="">{t('ob_choose_level', lang)}</option>
+                      <option value="school">{t('ob_high_school', lang)}</option>
+                      <option value="college">{t('ob_college', lang)}</option>
+                      <option value="graduate">{t('ob_graduate', lang)}</option>
+                      <option value="self-learner">{t('ob_self_learner', lang)}</option>
                     </select>
                   </div>
 
@@ -417,9 +417,9 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
                         className={inputClass}
                         style={{ ...inputStyle, color: form.schoolBoard ? (isLight ? '#111827' : undefined) : (isLight ? '#9ca3af' : 'rgba(211,156,59,0.3)') }}
                       >
-                        <option value="" style={{ color: isLight ? '#111827' : '#e2e8f0', background: isLight ? '#ffffff' : '#0f172a' }}>{t('ob_choose_board', lang)}</option>
+                        <option value="">{t('ob_choose_board', lang)}</option>
                         {['CBSE', 'State Board (Tamil Nadu)', 'State Board (Karnataka)', 'State Board (Andhra Pradesh)', 'State Board (Kerala)', 'State Board (Maharashtra)', 'State Board (UP)', 'ICSE / ISC', 'IB (International)', 'Other'].map(b => (
-                          <option key={b} value={b} style={{ color: isLight ? '#111827' : '#e2e8f0', background: isLight ? '#ffffff' : '#0f172a' }}>{b}</option>
+                          <option key={b} value={b}>{b}</option>
                         ))}
                       </select>
                     </div>
