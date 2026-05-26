@@ -93,14 +93,11 @@ export default function LoginScreen({ isLight = false, onManualLogin }: { isLigh
         
         {/* WhatsApp-style: ring border + logo PNG (no box) + app name below */}
         <div className="relative w-24 h-24 mb-4 flex items-center justify-center">
-          {/* Outer glow ring */}
-          <div className="absolute inset-0 rounded-full"
-               style={{ border: isLight ? '2.5px solid rgba(234,88,12,0.5)' : '2.5px solid rgba(255,140,66,0.6)', boxShadow: isLight ? '0 0 18px rgba(234,88,12,0.15)' : '0 0 24px rgba(255,140,66,0.2)' }} />
           {/* Logo image — transparent background PNG, no fill box */}
           <img
             src={isLight ? "/assets/logo-light.png" : "/assets/logo.png"}
             alt="Kalam Spark"
-            className="w-16 h-16 object-contain"
+            className="w-24 h-24 object-contain"
             style={{ filter: isLight ? 'drop-shadow(0 2px 6px rgba(234,88,12,0.2))' : 'drop-shadow(0 2px 8px rgba(255,140,66,0.3))' }}
           />
         </div>

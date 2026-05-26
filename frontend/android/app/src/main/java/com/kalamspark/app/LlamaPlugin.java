@@ -86,23 +86,49 @@ public class LlamaPlugin extends Plugin {
     @PluginMethod
     public void selectModelFile(PluginCall call) {
         saveCall(call);
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("*/*");
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        startActivityForResult(call, intent, "pickModelCallback");
+        try {
+            Log.d(TAG, "selectModelFile: Starting ACTION_OPEN_DOCUMENT intent");
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType("*/*");
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivityForResult(call, intent, "pickModelCallback");
+        } catch (android.content.ActivityNotFoundException e) {
+            Log.w(TAG, "selectModelFile: ACTION_OPEN_DOCUMENT not found, trying ACTION_GET_CONTENT", e);
+            try {
+                Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("*/*");
+                startActivityForResult(call, intent, "pickModelCallback");
+            } catch (Exception ex) {
+                Log.e(TAG, "selectModelFile: No document picker available on this device", ex);
+                call.reject("No document picker available on this device: " + ex.getMessage());
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "selectModelFile: Failed to launch picker", e);
+            call.reject("Failed to launch file picker: " + e.getMessage());
+        }
     }
 
     @ActivityCallback
     public void pickModelCallback(PluginCall call, ActivityResult result) {
-        if (call == null) return;
-        if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
+        if (call == null) {
+            Log.e(TAG, "pickModelCallback: PluginCall is null!");
+            return;
+        }
+        
+        int resultCode = result.getResultCode();
+        Log.d(TAG, "pickModelCallback: resultCode = " + resultCode);
+        
+        if (resultCode == Activity.RESULT_OK && result.getData() != null) {
             Uri uri = result.getData().getData();
             if (uri != null) {
+                Log.d(TAG, "pickModelCallback: Selected URI = " + uri.toString());
                 try {
                     // Try to persist read permission
                     int takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION;
                     getContext().getContentResolver().takePersistableUriPermission(uri, takeFlags);
+                    Log.d(TAG, "pickModelCallback: Successfully took persistable URI permission");
                 } catch (Exception e) {
                     Log.w(TAG, "Failed to take persistable URI permission: " + e.getMessage());
                 }
@@ -111,18 +137,22 @@ public class LlamaPlugin extends Plugin {
                 try {
                     final java.io.InputStream is = getContext().getContentResolver().openInputStream(uri);
                     if (is == null) {
+                        Log.e(TAG, "pickModelCallback: Failed to open input stream (returned null)");
                         call.reject("Failed to open model file stream (null)");
                         return;
                     }
+                    Log.d(TAG, "pickModelCallback: InputStream opened successfully, starting copy AsyncTask");
                     copyModelFileAsyncTask(call, is, uri);
                 } catch (Exception e) {
                     Log.e(TAG, "Failed to open input stream on main thread", e);
                     call.reject("Failed to open input stream: " + e.getMessage());
                 }
                 return;
+            } else {
+                Log.e(TAG, "pickModelCallback: Selected URI is null!");
             }
         }
-        call.reject("File selection failed or cancelled");
+        call.reject("File selection failed or cancelled (Result code: " + resultCode + ")");
     }
 
     private void copyModelFileAsyncTask(PluginCall call, final java.io.InputStream is, Uri uri) {

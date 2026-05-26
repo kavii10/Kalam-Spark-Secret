@@ -777,17 +777,11 @@ const SplashScreen = ({ onComplete, isLight = false }: { onComplete: () => void;
 /* ── Sidebar logo (compact) ── */
 const PhoenixLogo = ({ className = "w-8 h-8", isLight = false }) => (
   <div className={`relative flex items-center justify-center ${className}`}>
-    {/* Outer glow ring */}
-    <div className="absolute inset-0 rounded-full"
-         style={{ 
-           border: isLight ? '2px solid rgba(234,88,12,0.5)' : '2px solid rgba(255,140,66,0.6)', 
-           boxShadow: isLight ? '0 0 12px rgba(234,88,12,0.15)' : '0 0 16px rgba(255,140,66,0.2)' 
-         }} />
     {/* Logo image — transparent background PNG, no fill box */}
     <img
       src={isLight ? "/assets/logo-light.png" : "/assets/logo.png"}
       alt="Kalam Spark"
-      className="w-2/3 h-2/3 object-contain relative z-10"
+      className="w-full h-full object-contain relative z-10"
       style={{ 
         filter: isLight ? 'drop-shadow(0 2px 6px rgba(234,88,12,0.2))' : 'drop-shadow(0 2px 8px rgba(255,140,66,0.3))' 
       }}
@@ -959,7 +953,7 @@ const AppContent = ({
   }[location.pathname] ?? `Kalam Spark`;
 
   return (
-    <div className="flex min-h-screen text-gold-100/90">
+    <div className="flex h-screen w-screen overflow-hidden text-gold-100/90 select-none">
       {/* Global Reward Shower */}
       <RewardShower />
 
@@ -1009,7 +1003,7 @@ const AppContent = ({
       </aside>
 
       {/* ── Main Content ── */}
-      <main className="flex-1 flex flex-col min-w-0 relative h-screen overflow-hidden">
+      <main className="flex-1 flex flex-col min-w-0 relative h-full overflow-hidden">
         {/* Header */}
         <header className="h-16 glass-header flex items-center justify-between px-4 sm:px-6 lg:px-10 shrink-0 z-50">
           <div className="flex items-center gap-3 sm:gap-4 flex-1">

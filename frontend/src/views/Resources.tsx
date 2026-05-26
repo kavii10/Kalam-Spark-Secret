@@ -940,7 +940,7 @@ export default function Resources({ user }: { user: UserProfile }) {
 
           {activeTab === 'playlists' && (
             <div className="space-y-8">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-xl playlist-header-bg" style={{ background: 'rgba(6,3,18,0.4)', border: '1px solid rgba(168,85,247,0.2)' }}>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 rounded-xl playlist-header-bg" style={{ background: 'rgba(6,3,18,0.4)', border: '1px solid rgba(168,85,247,0.2)' }}>
                 <div>
                   <h3 className="text-sm font-semibold text-purple-300">Your Playlists</h3>
                   <p className="text-xs text-gold-500/50 mt-1">Organize resources into custom collections</p>
@@ -950,7 +950,7 @@ export default function Resources({ user }: { user: UserProfile }) {
                     type="text" 
                     placeholder="New playlist name..." 
                     id="newPlaylistNameInput"
-                    className="flex-1 sm:w-48 bg-black/20 text-sm text-gold-200 px-3 py-2 rounded-lg border border-white/10 outline-none focus:border-purple-400/50 transition-colors"
+                    className="flex-1 min-w-0 sm:w-48 bg-black/20 text-sm text-gold-200 px-3 py-2 rounded-lg border border-white/10 outline-none focus:border-purple-400/50 transition-colors"
                   />
                   <button 
                     onClick={(e) => {
@@ -963,7 +963,7 @@ export default function Resources({ user }: { user: UserProfile }) {
                       updateRoadmap(rm);
                       inp.value = '';
                     }}
-                    className="btn-primary flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-purple-600 hover:bg-purple-500"
+                    className="btn-primary flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-purple-600 hover:bg-purple-500 flex-shrink-0"
                     style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #9333ea 100%)', boxShadow: '0 4px 14px rgba(124,58,237,0.40)' }}
                   >
                     <Plus size={16} /> Create
