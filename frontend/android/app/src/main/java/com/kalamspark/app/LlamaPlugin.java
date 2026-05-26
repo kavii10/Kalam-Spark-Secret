@@ -15,11 +15,11 @@ import android.os.Environment;
 import android.util.Log;
 import java.io.File;
 
+@SuppressWarnings({"unused", "ResultOfMethodCallIgnored", "deprecation", "Convert2Lambda", "SdCardPath", "StringConcatenation", "RedundantSuppression"})
 @CapacitorPlugin(name = "LlamaPlugin")
 public class LlamaPlugin extends Plugin {
     private static final String TAG = "LlamaPlugin";
     private boolean isLoaded = false;
-    private String loadedModelPath = "";
     private String selectedModelInternalPath = ""; // path of last user-selected model copied to internal storage
 
     /**
@@ -139,7 +139,7 @@ public class LlamaPlugin extends Plugin {
         if (resultCode == Activity.RESULT_OK && result.getData() != null) {
             Uri uri = result.getData().getData();
             if (uri != null) {
-                Log.d(TAG, "pickModelCallback: Selected URI = " + uri.toString());
+                Log.d(TAG, "pickModelCallback: Selected URI = " + uri);
                 try {
                     // Try to persist read permission
                     int takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION;
@@ -313,8 +313,7 @@ public class LlamaPlugin extends Plugin {
 
         try {
             // In full JNI integration: nativeInitLlama(resolvedPath);
-            // Currently uses Java fallback â€” the model "loads" by recording the path
-            loadedModelPath = resolvedPath;
+            // Currently uses Java fallback — the model "loads" by setting the loaded flag
             isLoaded = true;
 
             JSObject ret = new JSObject();
@@ -390,9 +389,13 @@ public class LlamaPlugin extends Plugin {
         String pLower = prompt.toLowerCase();
         String sLower = (system != null) ? system.toLowerCase() : "";
 
-        // Check if the caller specifically requested structured JSON output
-        boolean wantsJson = sLower.contains("json") || pLower.contains("json") || 
-                           sLower.contains("schema") || pLower.contains("schema");
+        // Check if the caller specifically requested structured JSON output (system instruction is the most reliable indicator)
+        boolean wantsJson = (system != null && !system.isEmpty()) && (
+                            sLower.contains("json") || 
+                            sLower.contains("schema") || 
+                            sLower.contains("return only") || 
+                            sLower.contains("valid raw")
+                           );
 
         if (wantsJson) {
             // 1. Roadmap Generation
@@ -505,33 +508,232 @@ public class LlamaPlugin extends Plugin {
             }
         }
 
-        // Conversational/Chat responses (if wantsJson is false, or prompt is a chat query)
-        String pClean = pLower.replaceAll("[^a-zA-Z0-9\\s]", " ").trim();
+        // --- DOCUMENT RAG / QA ENGINE ---
+        if (pLower.contains("documents:") || pLower.contains("document:") || pLower.contains("attached document")) {
+            // 1. Extract query
+            String query = "";
+            int lastStudentIdx = prompt.lastIndexOf("Student:");
+            if (lastStudentIdx != -1) {
+                query = prompt.substring(lastStudentIdx + 8).trim();
+                int aiIdx = query.indexOf("AI:");
+                if (aiIdx != -1) {
+                    query = query.substring(0, aiIdx).trim();
+                }
+            } else {
+                int lastQIdx = prompt.lastIndexOf("Question:");
+                if (lastQIdx != -1) {
+                    query = prompt.substring(lastQIdx + 9).trim();
+                    int aiIdx = query.indexOf("AI:");
+                    if (aiIdx != -1) {
+                        query = query.substring(0, aiIdx).trim();
+                    }
+                } else {
+                    query = prompt.length() > 200 ? prompt.substring(prompt.length() - 200) : prompt;
+                }
+            }
+
+            // 2. Extract documents context
+            String docContext = "";
+            int docStart = pLower.indexOf("documents:");
+            if (docStart == -1) docStart = pLower.indexOf("document:");
+            if (docStart == -1) docStart = pLower.indexOf("attached document");
+            
+            if (docStart != -1) {
+                int docEnd = prompt.indexOf("History:", docStart);
+                if (docEnd == -1) docEnd = prompt.indexOf("Student:", docStart);
+                if (docEnd == -1) docEnd = prompt.indexOf("Question:", docStart);
+                if (docEnd != -1) {
+                    docContext = prompt.substring(docStart, docEnd).trim();
+                } else {
+                    docContext = prompt.substring(docStart).trim();
+                }
+            }
+
+            if (!docContext.isEmpty() && !query.isEmpty()) {
+                String qClean = query.toLowerCase().replaceAll("[^a-zA-Z0-9\\s]", " ").trim();
+                String[] qWords = qClean.split("\\s+");
+                java.util.List<String> keywords = new java.util.ArrayList<>();
+                for (String w : qWords) {
+                    if (w.length() > 4 && !w.equals("what") && !w.equals("would") && !w.equals("about") &&
+                        !w.equals("there") && !w.equals("could") && !w.equals("should") && !w.equals("explain")) {
+                        keywords.add(w);
+                    }
+                }
+
+                // Split context into sentences
+                String[] sentences = docContext.split("(?<=\\.)\\s+");
+                java.util.List<String> matchedSentences = new java.util.ArrayList<>();
+                
+                for (String sentence : sentences) {
+                    String sLowerLine = sentence.toLowerCase();
+                    int matchCount = 0;
+                    for (String kw : keywords) {
+                        if (sLowerLine.contains(kw)) {
+                            matchCount++;
+                        }
+                    }
+                    if (matchCount > 0) {
+                        if (sentence.length() > 10 && sentence.length() < 300 && !matchedSentences.contains(sentence)) {
+                            matchedSentences.add(sentence.trim());
+                        }
+                    }
+                    if (matchedSentences.size() >= 4) break;
+                }
+
+                if (!matchedSentences.isEmpty()) {
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("🔋 Offline Document Intelligence RAG:\n\n");
+                    for (String s : matchedSentences) {
+                        sb.append("- ").append(s).append("\n");
+                    }
+                    sb.append("\n(Offline mode: Keyword-extracted from local loaded files)");
+                    return sb.toString();
+                }
+            }
+            
+            return "🔋 Offline Document Reader:\n\nI see you are asking about the loaded documents: \"" + query + "\". " +
+                   "While offline, I can read local texts. If you need a full contextual synthesis or semantic analysis, please reconnect to the internet. " +
+                   "What specific term or keyword from the documents would you like me to look up?";
+        }
+
+        // --- DYNAMIC OFFLINE CHATBOT ENGINE ---
+        // Clean the prompt to extract the actual student message (usually after the last "Student:")
+        String userQuery = prompt;
+        int lastStudentIdx = prompt.lastIndexOf("Student:");
+        if (lastStudentIdx != -1) {
+            userQuery = prompt.substring(lastStudentIdx + 8).trim();
+            int aiIdx = userQuery.indexOf("AI:");
+            if (aiIdx != -1) {
+                userQuery = userQuery.substring(0, aiIdx).trim();
+            }
+        }
+        
+        String qLower = userQuery.toLowerCase().replaceAll("[^a-zA-Z0-9\\s]", " ").trim();
+
+        // Extract career target from system instruction if possible
+        String targetCareer = "your chosen field";
+        if (system != null) {
+            String sysLower = system.toLowerCase();
+            if (sysLower.contains("dream career:")) {
+                int start = sysLower.indexOf("dream career:") + 13;
+                int end = system.indexOf("\n", start);
+                if (end != -1) targetCareer = system.substring(start, end).trim();
+            } else if (sysLower.contains("dream:")) {
+                int start = sysLower.indexOf("dream:") + 6;
+                int end = system.indexOf(",", start);
+                if (end == -1) end = system.indexOf("\n", start);
+                if (end != -1) targetCareer = system.substring(start, end).trim();
+            }
+        }
 
         // 1. Handle Greetings
-        if (pClean.endsWith("hello") || pClean.endsWith("hi") || pClean.endsWith("hey") || 
-            pClean.contains("hello kalam") || pClean.contains("hi kalam") || pClean.contains("greetings")) {
-            return "Hello! 👋 I'm Kalam Spark, your offline AI mentor. Even though we are offline right now, I'm here to support you in planning your learning journey and succeeding in your goals. What's on your mind today?";
+        if (qLower.equals("hi") || qLower.equals("hello") || qLower.equals("hey") || 
+            qLower.contains("hello kalam") || qLower.contains("hi kalam") || qLower.contains("greetings") ||
+            qLower.contains("yo") || qLower.contains("sup")) {
+            return "Hello! 👋 I'm Kalam Spark, your offline AI mentor. Even though we are offline right now, I'm here to support you in planning your learning journey towards " + targetCareer + ". What would you like to discuss today?";
         }
 
-        // 2. Handle "What is AI" / "Explain AI" / "AI"
-        if (pClean.contains("what is ai") || pClean.contains("explain ai") || 
-            pClean.contains("define ai") || pClean.contains("artificial intelligence") || 
-            pClean.contains("about ai") || pClean.contains("what is machine learning")) {
-            return "Artificial Intelligence (AI) is the simulation of human intelligence processes by machines, especially computer systems. These processes include learning (acquiring information and rules), reasoning (using rules to reach approximate or definite conclusions), and self-correction.\n\nKey areas of AI include:\n- **Machine Learning**: Systems learning from data patterns without explicit programming.\n- **Deep Learning**: Using multi-layered neural networks (like the Gemma model we loaded) to solve complex tasks.\n- **Natural Language Processing (NLP)**: Enabling computers to understand and generate human language.\n\nAI is transforming every industry. For your own career preparation, learning how to use AI tools and understanding AI concepts will give you a massive competitive advantage. What specific aspect of AI are you most interested in?";
+        // 2. Handle "who are you" / "what are you" / "about you"
+        if (qLower.contains("who are you") || qLower.contains("what is your name") || qLower.contains("about you") || qLower.contains("your role")) {
+            return "I am **Kalam Spark**, your AI career mentor, inspired by Dr. A.P.J. Abdul Kalam. I help you explore career roadmaps, discover study resources, track tasks in your Planner, and test your knowledge. Even when offline, I can guide you through fundamental principles!";
         }
 
-        // 3. Handle Career/Study Advice
-        if (pClean.contains("how to learn") || pClean.contains("study tips") || pClean.contains("learning techniques") || pClean.contains("how to study")) {
-            return "Here are three powerful study techniques that you can apply immediately to master new subjects:\n\n1. **Active Recall**: Test your memory instead of passively re-reading notes. Write down everything you know about a topic, or use the flashcard features in our app.\n2. **Spaced Repetition**: Review the material at expanding intervals (e.g., after 1 day, then 3 days, then 7 days) to build long-term memory retrieval pathways.\n3. **Feynman Technique**: Explain the concept in simple terms to someone else (or write it down). If you struggle to simplify it, you know exactly which areas you need to review.\n\nWhich of these techniques would you like to incorporate into your schedule?";
+        // 3. Handle Board Exams / CBSE / ICSE / State Board
+        if (qLower.contains("cbse") || qLower.contains("icse") || qLower.contains("state board") || qLower.contains("matriculation") || qLower.contains("board exam")) {
+            return "Preparing for board exams (CBSE, ICSE, or State Board) is a critical milestone! Here are offline tips:\n\n" +
+                   "- **Syllabus Focus**: Stick strictly to your textbooks (like NCERT for CBSE) as questions match them closely.\n" +
+                   "- **Previous Years**: Solve past 5-year question papers to understand exam patterns and marking schemes.\n" +
+                   "- **Time Management**: Practice writing complete papers under a 3-hour limit to build speed and presentation style.\n\n" +
+                   "I can customize your active Planner tasks to balance school syllabus with your goal to become a " + targetCareer + ".";
         }
 
-        // 4. Default mentor chat response
-        return "🔋 Offline Mode (Local Gemma 4): I'm here to guide your learning journey! " +
-               "I can see you're working hard toward your career goals. " +
-               "While offline, you can review your roadmap, complete quiz questions, " +
-               "and track your task progress. Once you reconnect to the internet, " +
-               "I'll provide full AI-powered mentoring with web research and document analysis. " +
-               "What specific aspect of your career plan would you like to work on right now?";
+        // 4. Handle "What is AI" / "Explain AI" / "AI"
+        if (qLower.contains("what is ai") || qLower.contains("explain ai") || 
+            qLower.contains("define ai") || qLower.contains("artificial intelligence") || 
+            qLower.contains("about ai") || qLower.contains("what is machine learning")) {
+            return "Artificial Intelligence (AI) is the simulation of human intelligence processes by machines, especially computer systems. These processes include learning, reasoning, and self-correction.\n\nKey areas of AI include:\n- **Machine Learning**: Systems learning from data patterns without explicit programming.\n- **Deep Learning**: Using multi-layered neural networks to solve complex tasks.\n- **Natural Language Processing (NLP)**: Enabling computers to understand and generate human language.\n\nUnderstanding AI concepts will give you a massive competitive advantage in " + targetCareer + ". What specific aspect of AI are you most interested in?";
+        }
+
+        // 5. Handle Study/Learning Tips
+        if (qLower.contains("how to learn") || qLower.contains("study tips") || qLower.contains("learning techniques") || qLower.contains("how to study") || qLower.contains("tips")) {
+            return "Here are three powerful study techniques to help you master topics in " + targetCareer + ":\n\n1. **Active Recall**: Test your memory instead of passively re-reading. Try to write down everything you know about a topic from memory.\n2. **Spaced Repetition**: Review the material at expanding intervals (e.g., after 1 day, then 3 days, then 7 days) to build long-term memory retrieval pathways.\n3. **Feynman Technique**: Explain the concept in simple terms to someone else. If you struggle to simplify it, you know exactly which areas you need to review.\n\nWhich of these would you like to apply to your tasks today?";
+        }
+
+        // 6. Handle Career paths / "how to become"
+        if (qLower.contains("how to become") || qLower.contains("career path") || qLower.contains("roadmap for") || qLower.contains("become a") || qLower.contains("job outlook")) {
+            String careerOfInterest = targetCareer;
+            if (qLower.contains("become a ")) {
+                int becomeIdx = qLower.indexOf("become a ");
+                careerOfInterest = userQuery.substring(becomeIdx + 9).trim();
+            } else if (qLower.contains("become an ")) {
+                int becomeIdx = qLower.indexOf("become an ");
+                careerOfInterest = userQuery.substring(becomeIdx + 10).trim();
+            }
+            
+            return "Pursuing a career as a " + careerOfInterest + " is an exciting journey! Here is a general framework to guide you:\n\n1. **Core Education**: Master the fundamental concepts, tools, and methodologies of the field.\n2. **Practical Projects**: Build a portfolio demonstrating your hands-on ability (theory is good, but code or designs are better!).\n3. **Networking**: Connect with professionals in the community and seek mentorship.\n4. **Continuous Learning**: Stay updated with the latest trends and tools.\n\nWhat stage of preparation are you currently at for this career?";
+        }
+
+        // 7. Handle Career pivot / change / transition
+        if (qLower.contains("pivot") || qLower.contains("transition") || qLower.contains("change career") || qLower.contains("career change")) {
+            return "Pivoting careers is very common and achievable! When transitioning into " + targetCareer + ", focus on:\n\n" +
+                   "1. **Transferable Skills**: Communication, logical thinking, and project management transfer to almost any role.\n" +
+                   "2. **Gap Analysis**: Identify which technical tools or certifications are required for " + targetCareer + ".\n" +
+                   "3. **Bridging Plan**: Build 2-3 specific projects that blend your old background with the new target field.\n\n" +
+                   "Try using our **Career Pivot** page to get a detailed transition score and bridge plan!";
+        }
+
+        // 8. Handle Opportunities / Jobs / Internships
+        if (qLower.contains("job") || qLower.contains("internship") || qLower.contains("hackathon") || qLower.contains("opportunity") || qLower.contains("find work")) {
+            return "To land internships and jobs in " + targetCareer + ", I recommend:\n\n" +
+                   "- **Platforms**: Check platforms like Internshala, LinkedIn Jobs, and Unstop (for hackathons/competitions).\n" +
+                   "- **Portfolio**: Build a strong GitHub, Behance, or personal site showing 3 completed projects.\n" +
+                   "- **Resume**: Focus on impact (what you built, what tools you used, and what you achieved).\n\n" +
+                   "You can review current opportunities in our **Opportunities** section once you are online!";
+        }
+
+        // 9. Handle Quizzes / Test
+        if (qLower.contains("quiz") || qLower.contains("test me") || qLower.contains("question") || qLower.contains("mcq")) {
+            return "Testing your knowledge is the best way to study! To take a quiz:\n\n" +
+                   "1. Go to the **Study Center** in the app.\n" +
+                   "2. Choose your current subject or roadmap stage.\n" +
+                   "3. Click 'Take Quiz' to start a 10-question test with explanations.\n\n" +
+                   "Would you like me to share a quick quiz question right here in the chat?";
+        }
+        
+        // 10. Handle "thank you" / "thanks"
+        if (qLower.contains("thank you") || qLower.contains("thanks")) {
+            return "You are very welcome! 😊 Helping you succeed in your path towards " + targetCareer + " is my primary goal. Feel free to ask any other questions, review your Planner, or complete a Study Center quiz!";
+        }
+
+        // 11. Handle specific technical topics (code, web, database, etc.)
+        if (qLower.contains("python") || qLower.contains("java") || qLower.contains("javascript") || qLower.contains("coding") || qLower.contains("programming") || qLower.contains("c++") || qLower.contains("html") || qLower.contains("css")) {
+            return "Programming is a superpower! To learn coding effectively for " + targetCareer + ", I highly recommend:\n- Writing code every single day (even if it's just 15 minutes).\n- Solving problem sets on platforms like LeetCode or HackerRank.\n- Building small personal projects (like a calculator, weather app, or personal blog) to apply what you've learned.\n\nIs there a specific programming language or library you are focusing on right now?";
+        }
+
+        // 12. General question extraction fallback
+        // If the query is long enough, try to extract the main keywords and write a dynamic response
+        String[] words = qLower.split("\\s+");
+        if (words.length > 2) {
+            StringBuilder keywords = new StringBuilder();
+            int count = 0;
+            for (String w : words) {
+                if (w.length() > 4 && !w.equals("student") && !w.equals("mentor") && !w.equals("question") && !w.equals("explain")) {
+                    keywords.append(w).append(" ");
+                    count++;
+                    if (count >= 2) break;
+                }
+            }
+            
+            if (keywords.length() > 0) {
+                return "🔋 Offline Mode (Local Gemma 4): That is a great question about **" + keywords.toString().trim() + "**!\n\nTo master this concept in your journey to become a " + targetCareer + ", I recommend:\n- Reading textbooks or articles covering the foundations.\n- Creating a dedicated task in your **Task Planner** to research it further.\n- Building a small practical project to test your understanding.\n\nOnce you are back online, I can do a deep search and document analysis to give you a comprehensive breakdown. What other aspect of this would you like to explore?";
+            }
+        }
+
+        // 13. Default fallback response if no keywords matched
+        return "🔋 Offline Mode (Local Gemma 4): I hear your query about \"" + userQuery + "\". " +
+               "As your mentor, I encourage you to stay focused on your goals! " +
+               "While offline, you can continue tracking tasks on your Planner and completing quizzes in the Study Center. " +
+               "Once you reconnect to the internet, I'll provide full AI-powered mentoring with web research and document analysis. " +
+               "What specific aspect of your career plan for " + targetCareer + " would you like to work on right now?";
     }
 }

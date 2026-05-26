@@ -143,43 +143,43 @@ async function callLocalMentor(
   user: UserProfile,
   attachment?: AttachmentState
 ): Promise<string> {
+  // Try local/remote FastAPI backend first (always try backend since it might be running on localhost/locally)
+  try {
+    const payload: any = {
+      user: {
+        name: user.name || 'Student',
+        dream: user.dream || 'a great career',
+        year: user.year || 'student',
+        branch: user.branch || 'general studies',
+        currentStageIndex: user.currentStageIndex || 0,
+      },
+      messages: messages.map(m => ({ role: m.role, text: m.text })),
+      new_message: userText,
+      language: getCurrentLang() || 'en',
+    };
+
+    if (attachment) {
+      payload.attachment_base64 = attachment.base64;
+      payload.attachment_type   = attachment.mimeType;
+    }
+
+    const response = await fetch(`${BACKEND_URL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.reply) return data.reply;
+    }
+  } catch (err) {
+    console.warn('[MentorChat] Local dev backend unreachable, trying other routes...', err);
+  }
+
   const isOnline = networkService.isOnline();
 
   if (isOnline) {
-    // Try local/remote FastAPI backend first
-    try {
-      const payload: any = {
-        user: {
-          name: user.name || 'Student',
-          dream: user.dream || 'a great career',
-          year: user.year || 'student',
-          branch: user.branch || 'general studies',
-          currentStageIndex: user.currentStageIndex || 0,
-        },
-        messages: messages.map(m => ({ role: m.role, text: m.text })),
-        new_message: userText,
-        language: getCurrentLang() || 'en',
-      };
-
-      if (attachment) {
-        payload.attachment_base64 = attachment.base64;
-        payload.attachment_type   = attachment.mimeType;
-      }
-
-      const response = await fetch(`${BACKEND_URL}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.reply) return data.reply;
-      }
-    } catch (err) {
-      console.warn('[MentorChat] Dev backend unreachable, trying client-side Gemini direct...', err);
-    }
-
     // Direct client-side central service router call when online
     try {
       const reply = await getMentorChatReply(userText, messages, attachment, user);
