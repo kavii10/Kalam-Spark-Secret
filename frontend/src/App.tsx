@@ -55,7 +55,7 @@ import { notificationService } from './services/notificationService';
 
 
 const LIGHT_THEME_CSS = `
-  body { background-color: #faf7f2 !important; color: #1f2937 !important; }
+  html, body { background-color: #faf7f2 !important; color: #1f2937 !important; color-scheme: light !important; }
   .bg-black { background-color: #ffffff !important; }
   .text-white { color: #111827 !important; }
   /* Force text colors to be dark and readable, ignoring Tailwind fractional opacities */
