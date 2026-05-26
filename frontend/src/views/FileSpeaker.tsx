@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { getCurrentLang } from '../i18n';
-import { summarizeWebpage, askDocumentRag, transformDocument } from '../services/geminiService';
+import { summarizeWebpage, askDocumentRag, transformDocument, generateText } from '../services/geminiService';
 import { networkService } from '../services/networkService';
 import { llamaPlugin } from '../services/llamaPlugin';
 import { Capacitor } from '@capacitor/core';
@@ -104,68 +104,112 @@ const LANGUAGE_VOICE_PRESETS: Record<string, { host1: string; host2: string; rec
   vi: { host1: 'vi-VN-NamMinhNeural',     host2: 'vi-VN-HoaiMyNeural',    rec_lang: 'vi-VN' },
 };
 
-/* ─── Simple Markdown renderer: bold, lists, and citations ─── */
+/* ─── Simple Markdown renderer: bold, italic, code, lists, headings, and citations ─── */
 function renderMarkdown(raw: string): React.ReactNode[] {
-  return raw.split('\n').map((line, i) => {
-    let parts: React.ReactNode[] = [];
-    let rest = line;
-    let keyCounter = 0;
+  return raw.split('\n').map((line, lineIdx) => {
+    // Handle headings
+    const h3Match = line.match(/^###\s+(.+)/);
+    const h2Match = line.match(/^##\s+(.+)/);
+    const h1Match = line.match(/^#\s+(.+)/);
+    if (h1Match) return <React.Fragment key={lineIdx}><strong className="block text-base font-bold text-white mt-2 mb-1">{h1Match[1]}</strong></React.Fragment>;
+    if (h2Match) return <React.Fragment key={lineIdx}><strong className="block text-sm font-bold text-white/90 mt-1.5 mb-0.5">{h2Match[1]}</strong></React.Fragment>;
+    if (h3Match) return <React.Fragment key={lineIdx}><strong className="block text-sm font-semibold text-white/80 mt-1">{h3Match[1]}</strong></React.Fragment>;
 
-    // Regex to match **bold** OR [Source: url] OR [Page X] OR bare URLs
-    const tokenRe = /(\*{1,3}.+?\*{1,3}|\[Source:\s*(https?:\/\/[^\]]+)\]|\[Page\s*(\d+)\]|(?:https?:\/\/[^\s\]]+))/g;
-    
-    let lastIdx = 0;
-    let match: RegExpExecArray | null;
-    
-    while ((match = tokenRe.exec(rest)) !== null) {
-      if (match.index > lastIdx) {
-        parts.push(rest.slice(lastIdx, match.index));
-      }
-      
-      const fullMatch = match[0];
-      
-      if (fullMatch.startsWith('*')) {
-        // bold
-        const inner = fullMatch.replace(/\*/g, '');
-        parts.push(<strong key={keyCounter++} className="font-semibold text-white">{inner}</strong>);
-      } else if (fullMatch.startsWith('[Source:')) {
-        // formal source citation
-        const url = match[2];
-        parts.push(
-          <a key={keyCounter++} href={url} target="_blank" rel="noreferrer" 
-            className="inline-flex items-center gap-1 text-[10px] bg-violet-600/20 text-violet-300 hover:bg-violet-600/40 hover:text-white px-1.5 py-0.5 rounded-md ml-1 transition-all">
-            <Link size={10} /> source
-          </a>
-        );
-      } else if (fullMatch.startsWith('[Page')) {
-        // page citation
-        const pageNum = match[3];
-        parts.push(
-          <span key={keyCounter++} className="inline-flex items-center gap-1 text-[10px] bg-zinc-800 text-zinc-300 border border-zinc-700 px-1.5 py-0.5 rounded-md ml-1 hover:bg-zinc-700 transition-all cursor-default" title={`Cited from Page ${pageNum}`}>
-            <BookOpen size={10} /> p.{pageNum}
+    // Handle bullet/list items
+    const bulletMatch = line.match(/^[\-\*•]\s+(.+)/);
+    if (bulletMatch) {
+      return (
+        <React.Fragment key={lineIdx}>
+          <span className="flex gap-2 my-0.5">
+            <span className="text-gold-400 shrink-0 mt-0.5">•</span>
+            <span>{renderInline(bulletMatch[1])}</span>
           </span>
-        );
-      } else if (fullMatch.startsWith('http')) {
-        // bare link
-        parts.push(
-          <a key={keyCounter++} href={fullMatch} target="_blank" rel="noreferrer" className="text-violet-400 hover:text-violet-300 underline underline-offset-2">
-            {fullMatch}
-          </a>
-        );
-      }
-
-      lastIdx = match.index + fullMatch.length;
+        </React.Fragment>
+      );
     }
-    
-    if (lastIdx < rest.length) parts.push(rest.slice(lastIdx));
+
+    // Handle numbered list items
+    const numMatch = line.match(/^\d+\.\s+(.+)/);
+    if (numMatch) {
+      return (
+        <React.Fragment key={lineIdx}>
+          <span className="flex gap-2 my-0.5">
+            <span className="text-gold-400/70 shrink-0 font-mono text-xs mt-0.5">{line.match(/^(\d+)\./)?.[1]}.</span>
+            <span>{renderInline(numMatch[1])}</span>
+          </span>
+        </React.Fragment>
+      );
+    }
 
     return (
-      <React.Fragment key={i}>
-        {line.trim() === '' ? <br /> : <span className="block">{parts.length ? parts : line}</span>}
+      <React.Fragment key={lineIdx}>
+        {line.trim() === '' ? <br /> : <span className="block">{renderInline(line)}</span>}
       </React.Fragment>
     );
   });
 }
+
+function renderInline(text: string): React.ReactNode[] {
+  // Split by markdown tokens: **bold**, *italic*, `code`, [Source:...], [Page N], bare URLs
+  const parts: React.ReactNode[] = [];
+  let rest = text;
+  let keyCounter = 0;
+
+  const tokenRe = /(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`|\[Source:\s*(https?:\/\/[^\]]+)\]|\[Page\s*(\d+)\]|(?:https?:\/\/[^\s\]]+))/g;
+  let lastIdx = 0;
+  let match: RegExpExecArray | null;
+  
+  while ((match = tokenRe.exec(rest)) !== null) {
+    if (match.index > lastIdx) {
+      parts.push(rest.slice(lastIdx, match.index));
+    }
+    
+    const fullMatch = match[0];
+    
+    if (fullMatch.startsWith('***')) {
+      // bold+italic
+      parts.push(<strong key={keyCounter++} className="font-semibold italic text-white">{match[2]}</strong>);
+    } else if (fullMatch.startsWith('**')) {
+      // bold
+      parts.push(<strong key={keyCounter++} className="font-semibold text-white">{match[3]}</strong>);
+    } else if (fullMatch.startsWith('*')) {
+      // italic
+      parts.push(<em key={keyCounter++} className="italic text-white/90">{match[4]}</em>);
+    } else if (fullMatch.startsWith('`')) {
+      // code
+      parts.push(
+        <code key={keyCounter++} className="font-mono text-xs bg-white/10 text-violet-300 px-1.5 py-0.5 rounded">{match[5]}</code>
+      );
+    } else if (fullMatch.startsWith('[Source:')) {
+      const url = match[6];
+      parts.push(
+        <a key={keyCounter++} href={url} target="_blank" rel="noreferrer" 
+          className="inline-flex items-center gap-1 text-[10px] bg-violet-600/20 text-violet-300 hover:bg-violet-600/40 hover:text-white px-1.5 py-0.5 rounded-md ml-1 transition-all">
+          <Link size={10} /> source
+        </a>
+      );
+    } else if (fullMatch.startsWith('[Page')) {
+      const pageNum = match[7];
+      parts.push(
+        <span key={keyCounter++} className="inline-flex items-center gap-1 text-[10px] bg-zinc-800 text-zinc-300 border border-zinc-700 px-1.5 py-0.5 rounded-md ml-1 hover:bg-zinc-700 transition-all cursor-default" title={`Cited from Page ${pageNum}`}>
+          <BookOpen size={10} /> p.{pageNum}
+        </span>
+      );
+    } else if (fullMatch.startsWith('http')) {
+      parts.push(
+        <a key={keyCounter++} href={fullMatch} target="_blank" rel="noreferrer" className="text-violet-400 hover:text-violet-300 underline underline-offset-2">
+          {fullMatch}
+        </a>
+      );
+    }
+
+    lastIdx = match.index + fullMatch.length;
+  }
+  
+  if (lastIdx < rest.length) parts.push(rest.slice(lastIdx));
+  return parts;
+}
+
 
 const TRANSFORMATIONS = [
   { key: 'summary',      label: 'Summary',     icon: BookOpen,     desc: '250-word overview' },
@@ -1002,40 +1046,150 @@ Be accurate and concise. Never invent facts.`;
     const sid = activeSource.source_id;
     patchState(sid, { podcast: null });
     try {
-      const res  = await fetch(`${BACKEND}/api/filespeaker/podcast`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source_id: sid, source_text: activeSource.text || activeSource.preview,
-          topic: podcastTopic, host1_name: host1Name, host2_name: host2Name,
-          host1_voice: host1Voice, host2_voice: host2Voice,
-          tone: podcastTone, length: podcastLength,
-          language: podcastLang,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Podcast generation failed');
-      patchState(sid, { podcast: data });
+      // ── Desktop path: use backend ──────────────────────────────────────────
+      if (!IS_NATIVE_MOBILE && BACKEND) {
+        const res  = await fetch(`${BACKEND}/api/filespeaker/podcast`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            source_id: sid, source_text: activeSource.text || activeSource.preview,
+            topic: podcastTopic, host1_name: host1Name, host2_name: host2Name,
+            host1_voice: host1Voice, host2_voice: host2Voice,
+            tone: podcastTone, length: podcastLength,
+            language: podcastLang,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Podcast generation failed');
+        patchState(sid, { podcast: data });
+
+        // Save to Podcast Library
+        const record: PodcastRecord = {
+          id: data.podcast_id || String(Date.now()),
+          sourceTitle: activeSource.title,
+          topic: podcastTopic,
+          host1: host1Name,
+          host2: host2Name,
+          language: data.language || podcastLang,
+          languageName: data.language_name || 'English',
+          audioFilename: data.audio_filename,
+          durationEst: data.duration_estimate || '~? min',
+          linesCount: data.lines?.length || 0,
+          createdAt: Date.now(),
+          script: data.script || '',
+          lines: data.lines || [],
+        };
+        setPodcastLibrary(prev => [record, ...prev.slice(0, 49)]); // keep max 50
+        return;
+      }
+
+      // ── Mobile / No-backend path: generate script via LLM + play with Web Speech API ──
+      const lengthInstruction = podcastLength === 'short' ? '6-8 dialogue exchanges' : podcastLength === 'long' ? '18-24 dialogue exchanges' : '12-15 dialogue exchanges';
+      const systemInstruction = `You are a podcast script writer. Generate a natural, engaging podcast conversation script. Return ONLY a JSON array with no markdown wrapping.`;
+      const prompt = `Write a ${lengthInstruction} podcast script between two hosts named "${host1Name}" and "${host2Name}" discussing the topic "${podcastTopic}" based on this content:
+
+${(activeSource.text || activeSource.preview || '').substring(0, 3000)}
+
+Tone: ${podcastTone}. Language: ${podcastLang === 'en' ? 'English' : podcastLang}.
+
+Return as a JSON array of objects: [{"speaker": "${host1Name}", "text": "..."}, {"speaker": "${host2Name}", "text": "..."}, ...]
+Each line should be 1-3 natural sentences. Make it conversational and educational.`;
+
+      let scriptText = '';
+      try {
+        scriptText = await generateText({ prompt, systemInstruction, responseMimeType: 'application/json' });
+      } catch (e) {
+        console.error('[Podcast] LLM generation failed:', e);
+        throw new Error('Could not generate podcast script. Check your internet connection.');
+      }
+
+      // Parse the script JSON
+      let lines: { speaker: string; text: string }[] = [];
+      try {
+        // Try to extract JSON array from response
+        const jsonMatch = scriptText.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          lines = JSON.parse(jsonMatch[0]);
+        } else {
+          lines = JSON.parse(scriptText);
+        }
+      } catch (e) {
+        console.warn('[Podcast] Could not parse script JSON, attempting line-by-line parsing');
+        // Fallback: parse as plain text alternating speakers
+        const rawLines = scriptText.split('\n').filter(l => l.trim());
+        let i = 0;
+        for (const line of rawLines) {
+          if (line.trim()) {
+            lines.push({ speaker: i % 2 === 0 ? host1Name : host2Name, text: line.trim() });
+            i++;
+          }
+        }
+      }
+
+      if (!lines || lines.length === 0) {
+        throw new Error('Generated podcast script is empty. Please try again.');
+      }
+
+      // Build a pseudo-podcast object with all lines
+      const script = lines.map(l => `${l.speaker}: ${l.text}`).join('\n');
+      const podcastData = {
+        podcast_id: `local_${Date.now()}`,
+        script,
+        lines,
+        language: podcastLang,
+        language_name: PODCAST_LANGUAGES.find(l => l.code === podcastLang)?.label || 'English',
+        duration_estimate: `~${Math.ceil(lines.length * 6 / 60)} min`,
+        audio_url: null,   // no server audio on mobile — we'll use Web Speech
+        is_local: true,    // flag to indicate client-side TTS
+      };
+
+      patchState(sid, { podcast: podcastData });
+
+      // Auto-play with Web Speech API if available
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel(); // stop any existing speech
+        const voices = window.speechSynthesis.getVoices();
+        // Pick a language-appropriate voice if possible
+        const langVoices = voices.filter(v => v.lang.startsWith(podcastLang) || v.lang.startsWith(podcastLang.split('-')[0]));
+        
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          const utt = new SpeechSynthesisUtterance(line.text);
+          // Alternate pitch/rate between hosts to distinguish voices
+          const isHost1 = line.speaker === host1Name;
+          if (langVoices.length >= 2) {
+            utt.voice = langVoices[isHost1 ? 0 : 1];
+          } else if (langVoices.length === 1) {
+            utt.voice = langVoices[0];
+          }
+          utt.pitch = isHost1 ? 0.9 : 1.15;
+          utt.rate = isHost1 ? 0.95 : 1.0;
+          utt.lang = LANGUAGE_VOICE_PRESETS[podcastLang]?.rec_lang || 'en-US';
+          window.speechSynthesis.speak(utt);
+        }
+      }
 
       // Save to Podcast Library
       const record: PodcastRecord = {
-        id: data.podcast_id || String(Date.now()),
+        id: podcastData.podcast_id,
         sourceTitle: activeSource.title,
         topic: podcastTopic,
         host1: host1Name,
         host2: host2Name,
-        language: data.language || podcastLang,
-        languageName: data.language_name || 'English',
-        audioFilename: data.audio_filename,
-        durationEst: data.duration_estimate || '~? min',
-        linesCount: data.lines?.length || 0,
+        language: podcastLang,
+        languageName: podcastData.language_name,
+        audioFilename: '',
+        durationEst: podcastData.duration_estimate,
+        linesCount: lines.length,
         createdAt: Date.now(),
-        script: data.script || '',
-        lines: data.lines || [],
+        script,
+        lines,
       };
-      setPodcastLibrary(prev => [record, ...prev.slice(0, 49)]); // keep max 50
+      setPodcastLibrary(prev => [record, ...prev.slice(0, 49)]);
+
     } catch (e: any) { alert(`Podcast failed: ${(e as any).message}`); }
     finally { setGeneratingPodcast(false); }
   };
+
 
   /* ─── Podcast Interactive Q&A ─── */
   const [interactQ, setInteractQ] = useState('');

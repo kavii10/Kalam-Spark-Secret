@@ -5,7 +5,7 @@ import {
   Briefcase, ChevronRight, ShieldCheck, Zap, AlertCircle, CheckCircle2, Info, AlertTriangle, X
 } from "lucide-react";
 import { dbService } from '../services/dbService';
-import { GoogleGenAI, Type } from '@google/genai';
+import { analyzeCareerPivot } from '../services/geminiService';
 import { networkService } from '../services/networkService';
 import { llamaPlugin } from '../services/llamaPlugin';
 
@@ -169,47 +169,12 @@ export default function CareerPivot({ user, setUser }: Props) {
           console.warn('[CareerPivot] Backend failed, trying direct Gemini API...', err);
         }
 
-        // Route 2: Direct Gemini API fallback
+        // Route 2: Centralized LLM Router API fallback
         if (!data) {
-          const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-          if (apiKey) {
-            try {
-              const ai = new GoogleGenAI({ apiKey });
-              const systemInstruction = `You are a Career Transition Architect. Return ONLY a valid JSON object matching the requested schema. Do NOT wrap in markdown.`;
-              const response = await ai.models.generateContent({
-                model: "gemini-2.0-flash",
-                contents: `A student wants to pivot from ${user.dream} to ${newDream.trim()}. Branch: ${user.branch || ""}, Skills: ${currentSkills}.`,
-                config: {
-                  systemInstruction,
-                  responseMimeType: "application/json",
-                  responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                      transferPercentage: { type: Type.NUMBER },
-                      transferableSkills: { type: Type.ARRAY, items: { type: Type.STRING } },
-                      biggestGap: { type: Type.STRING },
-                      marketDemand: { type: Type.STRING },
-                      timeToTransition: { type: Type.STRING },
-                      bridgePlan: {
-                        type: Type.ARRAY,
-                        items: {
-                          type: Type.OBJECT,
-                          properties: {
-                            title: { type: Type.STRING },
-                            action: { type: Type.STRING }
-                          },
-                          required: ["title", "action"]
-                        }
-                      }
-                    },
-                    required: ["transferPercentage", "transferableSkills", "biggestGap", "marketDemand", "timeToTransition", "bridgePlan"]
-                  }
-                }
-              });
-              data = tryParseJson(response.text || "{}");
-            } catch (err) {
-              console.error('[CareerPivot] Direct Gemini failed:', err);
-            }
+          try {
+            data = await analyzeCareerPivot(user.dream || "", newDream.trim(), user.branch || "", user.year || "", currentSkills);
+          } catch (err) {
+            console.error('[CareerPivot] Centralized analyze failed:', err);
           }
         }
       } else {

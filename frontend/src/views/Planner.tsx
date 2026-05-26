@@ -8,10 +8,9 @@ import {
 import { DailyTask, QuizQuestion } from '../types';
 import { dbService } from '../services/dbService';
 import { fetchDirectResources, isUpscDream, fetchCurrentAffairs } from '../services/resourceApiService';
-import { generateMicroQuiz } from '../services/geminiService';
+import { generateMicroQuiz, generatePlannerTasks } from '../services/geminiService';
 import { taskRevisionService } from '../services/taskRevisionService';
 import { grantReward, makeDailyTasksReward, makePerfectQuizReward } from '../services/rewardService';
-import { GoogleGenAI, Type } from '@google/genai';
 import { networkService } from '../services/networkService';
 import { llamaPlugin } from '../services/llamaPlugin';
 
@@ -284,36 +283,13 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
           }
 
           if (pool.length === 0) {
-            const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-            if (apiKey) {
-              try {
-                const ai = new GoogleGenAI({ apiKey });
-                const response = await ai.models.generateContent({
-                  model: "gemini-2.0-flash",
-                  contents: `Create exactly ${neededTasks} actionable daily tasks for a student studying to become a ${user.dream}, currently at stage: '${topic}'.\nTheir current topics: ${subjects.join(", ")}.`,
-                  config: {
-                    systemInstruction: "You are an expert educator. Return ONLY a valid JSON array of tasks. No markdown. Each task must have a title and type.",
-                    responseMimeType: "application/json",
-                    responseSchema: {
-                      type: Type.ARRAY,
-                      items: {
-                        type: Type.OBJECT,
-                        properties: {
-                          title: { type: Type.STRING },
-                          type: { type: Type.STRING }
-                        },
-                        required: ["title", "type"]
-                      }
-                    }
-                  }
-                });
-                const data = JSON.parse(response.text || "[]");
-                if (Array.isArray(data)) {
-                  pool = data.map((t: any) => ({ title: t.title, type: t.type }));
-                }
-              } catch (err) {
-                console.error("Client Gemini task generation failed:", err);
+            try {
+              const data = await generatePlannerTasks(user.dream, topic, subjects, neededTasks);
+              if (Array.isArray(data)) {
+                pool = data.map((t: any) => ({ title: t.title, type: t.type }));
               }
+            } catch (err) {
+              console.error("Task generation service call failed:", err);
             }
           }
         } else {

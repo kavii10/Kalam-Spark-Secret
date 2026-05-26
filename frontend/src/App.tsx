@@ -89,11 +89,13 @@ const LIGHT_THEME_CSS = `
     -webkit-backdrop-filter: none !important;
     box-shadow: 0 4px 20px rgba(0,0,0,0.02) !important; 
     border-color: rgba(0,0,0,0.05) !important; 
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 50 !important;
     transform: translate3d(0, 0, 0) !important;
     -webkit-transform: translate3d(0, 0, 0) !important;
     backface-visibility: hidden !important;
     -webkit-backface-visibility: hidden !important;
-    will-change: transform !important;
   }
   @media (min-width: 1024px) {
     .glass-header {
@@ -901,18 +903,31 @@ const AppContent = ({
       setCopyStatus('copying');
       setCopyProgress(0);
       const success = await llamaPlugin.selectModelFile((progress) => {
-        setCopyProgress(progress);
+        setCopyProgress(Math.round(progress));
       });
       if (success) {
         setCopyStatus('done');
         setModelExists(true);
       } else {
         setCopyStatus('idle');
+        // User cancelled the file picker — no error message needed
       }
-    } catch (err) {
+    } catch (err: any) {
       setCopyStatus('idle');
+      const msg = err?.message || String(err);
+      // Only show an alert for real errors (not user cancellation)
+      const isCancelled = msg.toLowerCase().includes('cancel') || msg.toLowerCase().includes('result code: 0');
+      if (!isCancelled) {
+        const helpMsg = msg.includes('No document picker') 
+          ? 'Your device does not support file browsing. Please copy the .gguf model file to your Downloads folder manually.'
+          : msg.includes('Failed to open') || msg.includes('stream')
+            ? 'Could not read the selected file. Ensure the .gguf file is not corrupted and try again.'
+            : `Could not select model file: ${msg}\n\nTip: Place the file in your Downloads folder instead.`;
+        alert(`⚠️ Model Selection Failed\n\n${helpMsg}`);
+      }
     }
   };
+
 
   useEffect(() => {
     document.body.style.overflow = isSidebarOpen ? "hidden" : "auto";
@@ -1003,9 +1018,21 @@ const AppContent = ({
       </aside>
 
       {/* ── Main Content ── */}
-      <main className="flex-1 flex flex-col min-w-0 relative h-full overflow-hidden">
-        {/* Header */}
-        <header className="h-16 glass-header flex items-center justify-between px-4 sm:px-6 lg:px-10 shrink-0 z-50">
+      {/* Main is the scroll container. Header inside uses sticky top:0 to never disappear */}
+      <main className="flex-1 flex flex-col min-w-0 relative h-full overflow-y-auto overscroll-contain scroll-smooth">
+        {/* Header — sticky so it never hides on scroll */}
+        <header
+          className="h-16 glass-header flex items-center justify-between px-4 sm:px-6 lg:px-10 shrink-0"
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 50,
+            transform: 'translateZ(0)',
+            WebkitTransform: 'translateZ(0)',
+            backfaceVisibility: 'hidden',
+            WebkitBackfaceVisibility: 'hidden',
+          }}
+        >
           <div className="flex items-center gap-3 sm:gap-4 flex-1">
             <button
               className="text-gold-400/60 hover:text-gold-300 transition-colors p-2 rounded-lg hover:bg-white/5"
@@ -1113,7 +1140,7 @@ const AppContent = ({
         {user.settings?.theme === 'light' && <style>{LIGHT_THEME_CSS}</style>}
 
         {/* Page content */}
-        <div className="flex-1 overflow-y-auto relative scroll-smooth overscroll-contain">
+        <div className="flex-1 relative">
           {/* Subtle center glow on pages */}
           <div className="absolute top-20 right-10 w-[400px] h-[400px] bg-purple-700/5 blur-[120px] rounded-full pointer-events-none" />
           <div className="p-5 lg:p-8 page-transition pb-28 lg:pb-10">
@@ -1390,7 +1417,20 @@ const AppContent = ({
 };
 
 export default function App() {
-  const [showSplash, setShowSplash] = useState(true);
+  // Only show React splash on truly fresh launch (no cached authenticated session)
+  // This prevents the double-splash issue where users see logo -> splash -> app
+  const [showSplash, setShowSplash] = useState(() => {
+    try {
+      const cached = localStorage.getItem('kalamspark_cached_profile');
+      if (cached) {
+        const profile = JSON.parse(cached);
+        // If we have a valid cached session, skip the splash entirely
+        if (profile && profile.isAuthenticated && profile.id) return false;
+      }
+    } catch (e) {}
+    // Show splash only on fresh launch (no cached session)
+    return true;
+  });
   const [user, setUser] = useState<UserProfile>(() => {
     const cachedProfileRaw = localStorage.getItem('kalamspark_cached_profile');
     if (cachedProfileRaw) {

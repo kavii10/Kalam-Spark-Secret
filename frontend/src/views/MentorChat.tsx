@@ -56,14 +56,25 @@ function renderMd(text: string): string {
   if (!text) return '';
   return text
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    // Headings
+    .replace(/^### (.+)$/gm, '<strong style="display:block;font-size:0.9em;font-weight:700;margin-top:8px;margin-bottom:2px">$1</strong>')
+    .replace(/^## (.+)$/gm, '<strong style="display:block;font-size:1em;font-weight:700;margin-top:10px;margin-bottom:3px">$1</strong>')
+    .replace(/^# (.+)$/gm, '<strong style="display:block;font-size:1.1em;font-weight:800;margin-top:12px;margin-bottom:4px">$1</strong>')
+    // Bold + italic
+    .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/__(.+?)__/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/_(.+?)_/g, '<em>$1</em>')
+    // Code
     .replace(/`([^`]+)`/g, '<code style="background:rgba(124,58,237,0.15);padding:1px 5px;border-radius:4px;font-family:monospace;font-size:0.85em">$1</code>')
-    .replace(/^\d+\.\s+(.+)$/gm, '<li style="margin-left:1.2em;list-style-type:decimal">$1</li>')
-    .replace(/^[-•]\s+(.+)$/gm, '<li style="margin-left:1.2em;list-style-type:disc">$1</li>')
-    .replace(/(<li[^>]*>[^<]+<\/li>\n?)+/g, m => `<ul style="margin:6px 0;padding:0">${m}</ul>`)
+    // Lists — numbered
+    .replace(/^\d+\.\s+(.+)$/gm, '<li style="margin-left:1.2em;list-style-type:decimal;margin-bottom:2px">$1</li>')
+    // Lists — bullet (only at line start with space after dash/bullet)
+    .replace(/^[-•]\s+(.+)$/gm, '<li style="margin-left:1.2em;list-style-type:disc;margin-bottom:2px">$1</li>')
+    // Wrap consecutive list items
+    .replace(/(<li[^>]*>[\s\S]*?<\/li>\n?)+/g, m => `<ul style="margin:6px 0;padding:0">${m}</ul>`)
+    // Line breaks (only for non-block elements)
     .replace(/\n/g, '<br>');
 }
 
