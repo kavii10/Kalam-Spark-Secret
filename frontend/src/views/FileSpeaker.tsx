@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { getCurrentLang } from '../i18n';
-import { GoogleGenAI } from '@google/genai';
+import { summarizeWebpage, askDocumentRag, transformDocument } from '../services/geminiService';
 import { networkService } from '../services/networkService';
 import { llamaPlugin } from '../services/llamaPlugin';
 import { Capacitor } from '@capacitor/core';
@@ -696,11 +696,8 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
         }
       }
 
-      // Mobile + desktop fallback: use Gemini to summarize/extract from the URL
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (apiKey && networkService.isOnline()) {
-        const ai = new GoogleGenAI({ apiKey });
-        // Try to fetch the URL content via a CORS proxy, then have Gemini analyze it
+      // Mobile + desktop fallback: use central summarizeWebpage to summarize/extract from the URL
+      if (networkService.isOnline()) {
         let urlContent = '';
         try {
           // allorigins.win is a reliable CORS proxy for mobile
@@ -709,23 +706,10 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
           const proxyData = await resp.json();
           urlContent = proxyData.contents?.substring(0, 8000) || '';
         } catch (_) {
-          urlContent = ''; // Proxy failed, use Gemini's own knowledge
+          urlContent = ''; // Proxy failed, use own knowledge
         }
 
-        const prompt = urlContent
-          ? `Extract and summarize the key content from this webpage. URL: ${urlInput.trim()}\n\nPage HTML/content:\n${urlContent}`
-          : `You are given a URL: ${urlInput.trim()}. Based on the URL pattern and your knowledge, describe what this page is about and extract any meaningful content you can infer.`;
-
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.0-flash',
-          contents: prompt,
-          config: {
-            systemInstruction: 'You are a web content extractor. Extract and present the main educational content from the given page. Be comprehensive. Output plain text only.',
-            temperature: 0.1,
-          }
-        });
-
-        const extractedText = response.text || '';
+        const extractedText = await summarizeWebpage(urlInput.trim(), urlContent);
         if (extractedText.trim()) {
           const title = urlInput.trim().replace(/https?:\/\//, '').split('/')[0];
           const source: Source = {
@@ -835,46 +819,17 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
           }
         }
 
-        // Route 2: Direct client-side Gemini RAG (mobile + desktop fallback)
+        // Route 2: Centralized LLM Router client-side RAG
         if (!reply) {
           try {
-            const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-            if (apiKey) {
-              const contextText = sids.map(id => {
-                const s = sources.find(src => src.source_id === id);
-                return `DOCUMENT: ${s?.title}\n${s?.text || s?.preview}`;
-              }).join('\n\n');
+            const contextText = sids.map(id => {
+              const s = sources.find(src => src.source_id === id);
+              return `DOCUMENT: ${s?.title}\n${s?.text || s?.preview}`;
+            }).join('\n\n');
 
-              const systemInstruction = `You are Kalam Spark Document Intelligence Agent.
-You answer questions based on the provided documents.
-Be extremely accurate, helpful, and concise (under 3 paragraphs).
-Never make up facts not mentioned in the documents.`;
-
-              const ai = new GoogleGenAI({ apiKey });
-              const contents: any[] = [];
-              historyForApi.forEach(h => {
-                contents.push({
-                  role: h.role === 'ai' ? 'model' : 'user',
-                  parts: [{ text: h.text }]
-                });
-              });
-              contents.push({
-                role: 'user',
-                parts: [{ text: `Here are the documents:\n\n${contextText}\n\nQuestion: ${q}` }]
-              });
-
-              const response = await ai.models.generateContent({
-                model: "gemini-2.0-flash",
-                contents,
-                config: {
-                  systemInstruction,
-                  temperature: 0.2
-                }
-              });
-              reply = response.text || "";
-            }
+            reply = await askDocumentRag(q, contextText, historyForApi);
           } catch (geminiErr) {
-            console.warn('[FileSpeaker] Direct client-side Gemini failed (possibly quota limit):', geminiErr);
+            console.warn('[FileSpeaker] Centralized client-side RAG failed:', geminiErr);
           }
         }
       }
@@ -954,22 +909,12 @@ Be accurate and concise. Never invent facts.`;
           }
         }
 
-        // Route 2: Direct Gemini API (mobile + desktop fallback)
+        // Route 2: Centralized LLM Router API transformation
         if (!resultText) {
-          const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-          if (apiKey) {
-            const systemInstruction = `You are a professional research assistant. Perform the requested transformation on the text. Return only the transformed result. No markdown packaging.`;
-            const prompt = `Perform "${label}" (${key}) transformation on this document:\n\n${sourceText}`;
-            const ai = new GoogleGenAI({ apiKey });
-            const response = await ai.models.generateContent({
-              model: "gemini-2.0-flash",
-              contents: prompt,
-              config: {
-                systemInstruction,
-                temperature: 0.3
-              }
-            });
-            resultText = response.text || "";
+          try {
+            resultText = await transformDocument(label, key, sourceText);
+          } catch (err) {
+            console.error('[FileSpeaker] Centralized transform failed:', err);
           }
         }
       } else {

@@ -1390,9 +1390,24 @@ const AppContent = ({
 };
 
 export default function App() {
-  const [sessionLoading, setSessionLoading] = useState(true);
   const [showSplash, setShowSplash] = useState(true);
   const [user, setUser] = useState<UserProfile>(() => {
+    const cachedProfileRaw = localStorage.getItem('kalamspark_cached_profile');
+    if (cachedProfileRaw) {
+      try {
+        const cached = JSON.parse(cachedProfileRaw) as UserProfile;
+        if (cached && cached.id) {
+          if (!cached.settings?.hasManualTheme) {
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            const systemTheme = prefersDark ? 'dark' : 'light';
+            if (cached.settings) {
+              cached.settings.theme = systemTheme;
+            }
+          }
+          return cached;
+        }
+      } catch (e) {}
+    }
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const systemTheme = prefersDark ? 'dark' : 'light';
     return {
@@ -1405,6 +1420,17 @@ export default function App() {
       rewards: [],
       settings: { theme: systemTheme, autoScheduleRevisions: true, notificationsEnabled: true, soundEnabled: true },
     };
+  });
+
+  const [sessionLoading, setSessionLoading] = useState(() => {
+    const cachedProfileRaw = localStorage.getItem('kalamspark_cached_profile');
+    if (cachedProfileRaw) {
+      try {
+        const cached = JSON.parse(cachedProfileRaw);
+        return !(cached && cached.isAuthenticated && cached.id);
+      } catch (e) {}
+    }
+    return true;
   });
 
   // Tracks which user's profile has already been loaded from Supabase this session.
@@ -1744,7 +1770,7 @@ export default function App() {
     return (
       <>
         {user.settings?.theme === 'light' && <style>{LIGHT_THEME_CSS}</style>}
-        <SplashScreen onComplete={() => setShowSplash(false)} isLight={user.settings?.theme === 'light'} />
+        <SplashScreen onComplete={() => setShowSplash(false)} isLight={false} />
       </>
     );
   }

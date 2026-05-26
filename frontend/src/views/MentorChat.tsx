@@ -8,7 +8,7 @@ import {
 import { UserProfile } from '../types';
 import { dbService } from '../services/dbService';
 import { getCurrentLang } from '../i18n';
-import { GoogleGenAI } from '@google/genai';
+import { getMentorChatReply } from '../services/geminiService';
 import { networkService } from '../services/networkService';
 import { llamaPlugin } from '../services/llamaPlugin';
 
@@ -169,56 +169,12 @@ async function callLocalMentor(
       console.warn('[MentorChat] Dev backend unreachable, trying client-side Gemini direct...', err);
     }
 
-    // Direct client-side Gemini fallback when online
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-    if (apiKey) {
-      try {
-        const ai = new GoogleGenAI({ apiKey });
-        const systemInstruction = `You are Kalam Spark, a friendly and encouraging AI career mentor.
-Student: ${user.name || 'Student'}, Dream: ${user.dream || 'a great career'}, Education: ${user.year || 'student'}, Branch: ${user.branch || 'general studies'}, Stage: ${(user.currentStageIndex || 0) + 1}.
-
-- Be warm and supportive. 
-- Respond NATURALLY to simple greetings (say hello back - do NOT generate a huge roadmap).
-- Keep responses focused and practical (2-3 paragraphs max).
-- Never use markdown headers. Use **bold** for emphasis.`;
-
-        const contents: any[] = [];
-        // Map history (excluding the generic initial welcome message to prevent prompt clutter)
-        messages.slice(1).forEach(m => {
-          contents.push({
-            role: m.role === 'ai' ? 'model' : 'user',
-            parts: [{ text: m.text }]
-          });
-        });
-
-        // Add the new user message
-        const userParts: any[] = [{ text: userText }];
-        if (attachment && attachment.base64) {
-          if (attachment.mimeType.startsWith('image/') || attachment.mimeType.startsWith('video/')) {
-            userParts.push({
-              inlineData: {
-                mimeType: attachment.mimeType,
-                data: attachment.base64
-              }
-            });
-          } else if (attachment.mimeType === 'text') {
-            userParts[0].text = `[Attached Document: ${attachment.name}]\n${attachment.base64}\n\nUser Question: ${userText}`;
-          }
-        }
-        contents.push({ role: 'user', parts: userParts });
-
-        const response = await ai.models.generateContent({
-          model: "gemini-2.0-flash",
-          contents,
-          config: {
-            systemInstruction,
-            temperature: 0.7,
-          }
-        });
-        return response.text || "I hear you. Tell me more about your thoughts!";
-      } catch (geminiErr: any) {
-        console.error('[MentorChat] Client-side Gemini failed:', geminiErr);
-      }
+    // Direct client-side central service router call when online
+    try {
+      const reply = await getMentorChatReply(userText, messages, attachment, user);
+      if (reply) return reply;
+    } catch (geminiErr: any) {
+      console.error('[MentorChat] Central mentor reply failed:', geminiErr);
     }
   }
 
