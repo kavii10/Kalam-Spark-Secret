@@ -15,7 +15,7 @@ import android.os.Environment;
 import android.util.Log;
 import java.io.File;
 
-@SuppressWarnings({"unused", "ResultOfMethodCallIgnored", "deprecation", "Convert2Lambda", "SdCardPath", "StringConcatenation", "RedundantSuppression"})
+@SuppressWarnings({"unused", "ResultOfMethodCallIgnored", "deprecation", "Convert2Lambda", "SdCardPath", "StringConcatenation", "RedundantSuppression", "Convert2TextBlock", "TextBlockMigration"})
 @CapacitorPlugin(name = "LlamaPlugin")
 public class LlamaPlugin extends Plugin {
     private static final String TAG = "LlamaPlugin";
@@ -277,7 +277,6 @@ public class LlamaPlugin extends Plugin {
         // Try multiple paths to find the model file
         String[] pathsToTry = buildPathCandidates(modelPath);
         File resolvedFile = null;
-        String resolvedPath = null;
 
         for (String path : pathsToTry) {
             File candidate = new File(path);
@@ -286,7 +285,6 @@ public class LlamaPlugin extends Plugin {
                 try (java.io.FileInputStream fis = new java.io.FileInputStream(candidate)) {
                     fis.read(); // verify read access
                     resolvedFile = candidate;
-                    resolvedPath = path;
                     break;
                 } catch (Exception e) {
                     Log.d(TAG, "loadModel: candidate " + path + " exists but is unreadable: " + e.getMessage());
@@ -511,7 +509,7 @@ public class LlamaPlugin extends Plugin {
         // --- DOCUMENT RAG / QA ENGINE ---
         if (pLower.contains("documents:") || pLower.contains("document:") || pLower.contains("attached document")) {
             // 1. Extract query
-            String query = "";
+            String query;
             int lastStudentIdx = prompt.lastIndexOf("Student:");
             if (lastStudentIdx != -1) {
                 query = prompt.substring(lastStudentIdx + 8).trim();
@@ -554,7 +552,7 @@ public class LlamaPlugin extends Plugin {
                 String[] qWords = qClean.split("\\s+");
                 java.util.List<String> keywords = new java.util.ArrayList<>();
                 for (String w : qWords) {
-                    if (w.length() > 4 && !w.equals("what") && !w.equals("would") && !w.equals("about") &&
+                    if (w.length() > 4 && !w.equals("would") && !w.equals("about") &&
                         !w.equals("there") && !w.equals("could") && !w.equals("should") && !w.equals("explain")) {
                         keywords.add(w);
                     }
@@ -724,7 +722,7 @@ public class LlamaPlugin extends Plugin {
                 }
             }
             
-            if (keywords.length() > 0) {
+            if (count > 0) {
                 return "🔋 Offline Mode (Local Gemma 4): That is a great question about **" + keywords.toString().trim() + "**!\n\nTo master this concept in your journey to become a " + targetCareer + ", I recommend:\n- Reading textbooks or articles covering the foundations.\n- Creating a dedicated task in your **Task Planner** to research it further.\n- Building a small practical project to test your understanding.\n\nOnce you are back online, I can do a deep search and document analysis to give you a comprehensive breakdown. What other aspect of this would you like to explore?";
             }
         }
