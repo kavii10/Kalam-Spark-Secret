@@ -302,7 +302,7 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
       {discoveryNode}
       {!showDiscovery && (
     <div
-      className="min-h-screen flex items-center justify-center p-4 lg:p-6 relative overflow-hidden"
+      className="min-h-screen flex items-start justify-center p-4 lg:p-6 relative overflow-y-auto"
       style={{ background: isLight ? '#ffffff' : undefined }}
     >
       {/* Ambient glow */}
@@ -311,7 +311,7 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
       {isLight && <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-orange-50 blur-[80px] rounded-full pointer-events-none opacity-60" />}
       {isLight && <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-sky-50 blur-[80px] rounded-full pointer-events-none opacity-40" />}
 
-      <div className="max-w-md w-full relative z-10 fade-up">
+      <div className="max-w-md w-full relative z-10 fade-up my-4">
         {/* Logo + title */}
         <div className="flex flex-col items-center mb-7">
           <div className="w-16 h-16 mb-3">
@@ -321,12 +321,15 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
           <p className="text-sm mt-1" style={{ color: isLight ? '#9a3412' : undefined, opacity: isLight ? 0.7 : undefined }}>Let's set up your journey</p>
         </div>
 
-        {/* Card */}
+        {/* Card — scrollable on mobile for long step 2 */}
         <div
-          className="glass-card glass-inner-shadow p-6 lg:p-8"
-          style={isLight
-            ? { background: '#ffffff', border: '1px solid #e5e7eb', boxShadow: '0 4px 32px rgba(0,0,0,0.08)' }
-            : { borderColor: 'rgba(211,156,59,0.22)' }}
+          className="glass-card glass-inner-shadow p-6 lg:p-8 overflow-y-auto"
+          style={{
+            ...(isLight
+              ? { background: '#ffffff', border: '1px solid #e5e7eb', boxShadow: '0 4px 32px rgba(0,0,0,0.08)' }
+              : { borderColor: 'rgba(211,156,59,0.22)' }),
+            maxHeight: step === 2 ? 'calc(100dvh - 180px)' : undefined,
+          }}
         >
           {/* Progress bar */}
           <div className="progress-track h-1.5 mb-8">
