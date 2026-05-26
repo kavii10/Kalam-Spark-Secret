@@ -119,20 +119,37 @@ export default function DreamDiscovery({ onComplete, onSkip, isLight = false }: 
 
   const wrapper = (content: React.ReactNode) => (
     <div
-      className="min-h-screen w-full overflow-y-auto overscroll-contain"
-      style={{ background: isLight ? '#ffffff' : undefined }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        WebkitOverflowScrolling: 'touch' as any,
+        background: isLight ? '#ffffff' : '#070e20',
+        zIndex: 100,
+      }}
     >
-      {/* Ambient glows — fixed position so they don't affect scroll */}
-      {!isLight && <div className="fixed top-1/3 left-1/4 w-96 h-96 rounded-full pointer-events-none" style={{ background: 'rgba(80,40,160,0.15)', filter: 'blur(140px)', zIndex: 0 }} />}
-      {!isLight && <div className="fixed bottom-1/3 right-1/4 w-72 h-72 rounded-full pointer-events-none" style={{ background: 'rgba(60,30,120,0.12)', filter: 'blur(120px)', zIndex: 0 }} />}
-      {isLight && <div className="fixed top-0 right-0 w-[500px] h-[500px] bg-orange-50 blur-[80px] rounded-full pointer-events-none opacity-60" style={{ zIndex: 0 }} />}
-      {isLight && <div className="fixed bottom-0 left-0 w-[400px] h-[400px] bg-sky-50 blur-[80px] rounded-full pointer-events-none opacity-40" style={{ zIndex: 0 }} />}
+      {/* Ambient glows — absolute so they scroll with content but don't block */}
+      {!isLight && <div style={{ position: 'fixed', top: '33%', left: '25%', width: 384, height: 384, borderRadius: '50%', background: 'rgba(80,40,160,0.15)', filter: 'blur(140px)', pointerEvents: 'none', zIndex: 0 }} />}
+      {!isLight && <div style={{ position: 'fixed', bottom: '33%', right: '25%', width: 288, height: 288, borderRadius: '50%', background: 'rgba(60,30,120,0.12)', filter: 'blur(120px)', pointerEvents: 'none', zIndex: 0 }} />}
+      {isLight && <div style={{ position: 'fixed', top: 0, right: 0, width: 500, height: 500, borderRadius: '50%', background: '#fff7ed', filter: 'blur(80px)', pointerEvents: 'none', opacity: 0.6, zIndex: 0 }} />}
+      {isLight && <div style={{ position: 'fixed', bottom: 0, left: 0, width: 400, height: 400, borderRadius: '50%', background: '#f0f9ff', filter: 'blur(80px)', pointerEvents: 'none', opacity: 0.4, zIndex: 0 }} />}
 
-      {/* Content centred vertically and horizontally, scrollable vertically */}
+      {/* Content — centred with safe vertical padding so it can scroll */}
       <div
-        className="relative z-10 w-full flex flex-col items-center justify-center min-h-screen px-4 py-8 lg:px-6 lg:py-12"
+        style={{
+          position: 'relative',
+          zIndex: 10,
+          width: '100%',
+          minHeight: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '32px 16px',
+        }}
       >
-        <div className="w-full my-auto" style={{ maxWidth: step === 1 ? 560 : isLastPersonalityQ ? 800 : 440 }}>
+        <div style={{ width: '100%', maxWidth: step === 1 ? 560 : isLastPersonalityQ ? 800 : 440 }}>
           {content}
         </div>
       </div>
