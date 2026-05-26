@@ -302,16 +302,19 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
       {discoveryNode}
       {!showDiscovery && (
     <div
-      className="min-h-screen flex items-start justify-center p-4 lg:p-6 relative overflow-y-auto"
+      className="min-h-screen w-full overflow-y-auto overscroll-contain"
       style={{ background: isLight ? '#ffffff' : undefined }}
     >
-      {/* Ambient glow */}
-      {!isLight && <div className="absolute top-1/3 left-1/4 w-96 h-96 bg-purple-900/20 blur-[140px] rounded-full pointer-events-none" />}
-      {!isLight && <div className="absolute bottom-1/3 right-1/4 w-72 h-72 bg-yellow-900/10 blur-[120px] rounded-full pointer-events-none" />}
-      {isLight && <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-orange-50 blur-[80px] rounded-full pointer-events-none opacity-60" />}
-      {isLight && <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-sky-50 blur-[80px] rounded-full pointer-events-none opacity-40" />}
+      {/* Fixed ambient glows — don't affect document flow */}
+      {!isLight && <div className="fixed top-1/3 left-1/4 w-96 h-96 bg-purple-900/20 blur-[140px] rounded-full pointer-events-none" style={{ zIndex: 0 }} />}
+      {!isLight && <div className="fixed bottom-1/3 right-1/4 w-72 h-72 bg-yellow-900/10 blur-[120px] rounded-full pointer-events-none" style={{ zIndex: 0 }} />}
+      {isLight && <div className="fixed top-0 right-0 w-[500px] h-[500px] bg-orange-50 blur-[80px] rounded-full pointer-events-none opacity-60" style={{ zIndex: 0 }} />}
+      {isLight && <div className="fixed bottom-0 left-0 w-[400px] h-[400px] bg-sky-50 blur-[80px] rounded-full pointer-events-none opacity-40" style={{ zIndex: 0 }} />}
 
-      <div className="max-w-md w-full relative z-10 fade-up my-4">
+      {/* Page content — centred, scrollable */}
+      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen px-4 py-8 lg:px-6 lg:py-12">
+        <div className="w-full my-auto" style={{ maxWidth: 448 }}>
+
         {/* Logo + title */}
         <div className="flex flex-col items-center mb-7">
           <div className="w-16 h-16 mb-3">
@@ -321,14 +324,13 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
           <p className="text-sm mt-1" style={{ color: isLight ? '#9a3412' : undefined, opacity: isLight ? 0.7 : undefined }}>Let's set up your journey</p>
         </div>
 
-        {/* Card — scrollable on mobile for long step 2 */}
+        {/* Card — no height restriction, page itself scrolls */}
         <div
-          className="glass-card glass-inner-shadow p-6 lg:p-8 overflow-y-auto"
+          className="glass-card glass-inner-shadow p-6 lg:p-8"
           style={{
             ...(isLight
               ? { background: '#ffffff', border: '1px solid #e5e7eb', boxShadow: '0 4px 32px rgba(0,0,0,0.08)' }
               : { borderColor: 'rgba(211,156,59,0.22)' }),
-            maxHeight: step === 2 ? 'calc(100dvh - 180px)' : undefined,
           }}
         >
           {/* Progress bar */}
@@ -751,6 +753,7 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
 
         <p className="text-center text-[11px] mt-4" style={{ color: isLight ? '#9ca3af' : 'rgba(211,156,59,0.25)' }}>Step {step} of {totalSteps}</p>
       </div>
+    </div>
     </div>
       )}
     </>

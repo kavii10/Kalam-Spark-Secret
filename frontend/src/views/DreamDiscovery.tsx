@@ -118,13 +118,23 @@ export default function DreamDiscovery({ onComplete, onSkip, isLight = false }: 
   const progressPercent = (step / totalSteps) * 100;
 
   const wrapper = (content: React.ReactNode) => (
-    <div className="min-h-screen flex items-center justify-center p-4 lg:p-6" style={{ background: isLight ? '#ffffff' : undefined }}>
-      {!isLight && <div className="absolute top-1/3 left-1/4 w-96 h-96 rounded-full pointer-events-none" style={{ background: 'rgba(80,40,160,0.15)', filter: 'blur(140px)' }} />}
-      {!isLight && <div className="absolute bottom-1/3 right-1/4 w-72 h-72 rounded-full pointer-events-none" style={{ background: 'rgba(60,30,120,0.12)', filter: 'blur(120px)' }} />}
-      {isLight && <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-orange-50 blur-[80px] rounded-full pointer-events-none opacity-60" />}
-      {isLight && <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-sky-50 blur-[80px] rounded-full pointer-events-none opacity-40" />}
-      <div className="relative z-10 w-full" style={{ maxWidth: step === 1 ? 560 : isLastPersonalityQ ? 800 : 440 }}>
-        {content}
+    <div
+      className="min-h-screen w-full overflow-y-auto overscroll-contain"
+      style={{ background: isLight ? '#ffffff' : undefined }}
+    >
+      {/* Ambient glows — fixed position so they don't affect scroll */}
+      {!isLight && <div className="fixed top-1/3 left-1/4 w-96 h-96 rounded-full pointer-events-none" style={{ background: 'rgba(80,40,160,0.15)', filter: 'blur(140px)', zIndex: 0 }} />}
+      {!isLight && <div className="fixed bottom-1/3 right-1/4 w-72 h-72 rounded-full pointer-events-none" style={{ background: 'rgba(60,30,120,0.12)', filter: 'blur(120px)', zIndex: 0 }} />}
+      {isLight && <div className="fixed top-0 right-0 w-[500px] h-[500px] bg-orange-50 blur-[80px] rounded-full pointer-events-none opacity-60" style={{ zIndex: 0 }} />}
+      {isLight && <div className="fixed bottom-0 left-0 w-[400px] h-[400px] bg-sky-50 blur-[80px] rounded-full pointer-events-none opacity-40" style={{ zIndex: 0 }} />}
+
+      {/* Content centred vertically and horizontally, scrollable vertically */}
+      <div
+        className="relative z-10 w-full flex flex-col items-center justify-center min-h-screen px-4 py-8 lg:px-6 lg:py-12"
+      >
+        <div className="w-full my-auto" style={{ maxWidth: step === 1 ? 560 : isLastPersonalityQ ? 800 : 440 }}>
+          {content}
+        </div>
       </div>
     </div>
   );
@@ -339,7 +349,7 @@ export default function DreamDiscovery({ onComplete, onSkip, isLight = false }: 
             </svg>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[480px] overflow-y-auto no-scrollbar p-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-1">
             {results.map((res, i) => (
             <div key={i} 
               className="p-5 rounded-2xl flex flex-col items-center justify-between text-center transition-all hover:scale-[1.03] cursor-pointer group"
