@@ -1,5 +1,6 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import {
   Send, Bot, User, History, MessageSquare, Trash2,
   Loader2, Plus, ChevronRight, Mic, Paperclip, Image,
@@ -256,6 +257,8 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
   const [isListening, setIsListening] = useState(false);
   const [menuOpenSessionId, setMenuOpenSessionId] = useState<string | null>(null);
   const [activeMsgMenu, setActiveMsgMenu] = useState<number | null>(null);
+  const [menuAnchorRect, setMenuAnchorRect] = useState<{ top: number; right: number } | null>(null);
+  const menuOpenSessionRef = useRef<{ session: HistorySession | null }>({ session: null });
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -565,33 +568,101 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
     recognition.start();
   };
 
+  // Portal-based session context menu — rendered at document.body to escape sidebar backdrop-filter stacking context
+  const openMenuSession = sessions.find(s => s.sessionId === menuOpenSessionId) ?? null;
+  const sessionDropdownPortal = menuOpenSessionId && menuAnchorRect && openMenuSession
+    ? ReactDOM.createPortal(
+        <>
+          {/* invisible full-screen tap-away */}
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 99998 }}
+            onClick={() => setMenuOpenSessionId(null)}
+          />
+          <div
+            style={{
+              position: 'fixed',
+              top: menuAnchorRect.top,
+              right: menuAnchorRect.right,
+              zIndex: 99999,
+              backgroundColor: isLight ? '#ffffff' : '#1c1c1e',
+              border: `1px solid ${isLight ? '#e5e7eb' : '#3f3f46'}`,
+              borderRadius: '12px',
+              boxShadow: isLight
+                ? '0 8px 24px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.08)'
+                : '0 8px 32px rgba(0,0,0,0.6), 0 2px 8px rgba(0,0,0,0.4)',
+              width: '160px',
+              padding: '4px 0',
+              overflow: 'hidden',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={() => {
+                setEditingSessionId(openMenuSession.sessionId);
+                setEditTitleInput(sessionTitles[openMenuSession.sessionId] || openMenuSession.title || '');
+                setMenuOpenSessionId(null);
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                width: '100%', padding: '8px 12px',
+                fontSize: '12px', fontWeight: 500,
+                color: isLight ? '#374151' : '#e4e4e7',
+                background: 'none', border: 'none', cursor: 'pointer',
+                textAlign: 'left',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = isLight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.08)')}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+            >
+              <Edit2 size={13} />
+              <span>Rename</span>
+            </button>
+            <button
+              onClick={() => {
+                handleShareSession(openMenuSession);
+                setMenuOpenSessionId(null);
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                width: '100%', padding: '8px 12px',
+                fontSize: '12px', fontWeight: 500,
+                color: isLight ? '#374151' : '#e4e4e7',
+                background: 'none', border: 'none', cursor: 'pointer',
+                textAlign: 'left',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = isLight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.08)')}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+            >
+              <Share size={13} />
+              <span>Share Chat</span>
+            </button>
+            <div style={{ height: '1px', margin: '4px 0', backgroundColor: isLight ? '#f3f4f6' : '#3f3f46' }} />
+            <button
+              onClick={() => {
+                handleDeleteSession(openMenuSession.sessionId);
+                setMenuOpenSessionId(null);
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                width: '100%', padding: '8px 12px',
+                fontSize: '12px', fontWeight: 500,
+                color: '#f87171',
+                background: 'none', border: 'none', cursor: 'pointer',
+                textAlign: 'left',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(239,68,68,0.1)')}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+            >
+              <Trash2 size={13} />
+              <span>Delete</span>
+            </button>
+          </div>
+        </>,
+        document.body
+      )
+    : null;
+
   return (
     <div className={`h-[calc(100vh-8rem)] flex relative mentor-container rounded-2xl overflow-hidden border ${isLight ? 'border-zinc-200 bg-white' : 'border-zinc-800/60 bg-zinc-950/40'}`}>
-      <style>{`
-        .mentor-session-dropdown {
-          background-color: ${isLight ? '#ffffff' : '#18181b'} !important;
-          background: ${isLight ? '#ffffff' : '#18181b'} !important;
-          opacity: 1 !important;
-          backdrop-filter: none !important;
-          -webkit-backdrop-filter: none !important;
-          isolation: isolate !important;
-          z-index: 10000 !important;
-        }
-        .mentor-session-dropdown button {
-          opacity: 1 !important;
-          color: ${isLight ? '#374151' : '#e4e4e7'} !important;
-          background: transparent !important;
-        }
-        .mentor-session-dropdown button:hover {
-          background-color: ${isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.08)'} !important;
-        }
-        .mentor-session-dropdown .text-red-400 {
-          color: #f87171 !important;
-        }
-        .mentor-session-dropdown .text-red-400:hover {
-          background-color: rgba(239, 68, 68, 0.1) !important;
-        }
-      `}</style>
       
       {/* Backdrop overlay (Mobile & Desktop) */}
       {showSidebar && (
@@ -669,7 +740,18 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
                   <button 
                     onClick={(e) => {
                       e.stopPropagation();
-                      setMenuOpenSessionId(menuOpenSessionId === s.sessionId ? null : s.sessionId);
+                      if (menuOpenSessionId === s.sessionId) {
+                        setMenuOpenSessionId(null);
+                        setMenuAnchorRect(null);
+                      } else {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        // Position below button, aligned to right edge of button
+                        setMenuAnchorRect({
+                          top: rect.bottom + 4,
+                          right: window.innerWidth - rect.right,
+                        });
+                        setMenuOpenSessionId(s.sessionId);
+                      }
                     }}
                     className={`p-1.5 rounded-lg transition-all ${
                       menuOpenSessionId === s.sessionId 
@@ -679,62 +761,15 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
                   >
                     <MoreVertical size={14} />
                   </button>
-
-                  {menuOpenSessionId === s.sessionId && (
-                    <div 
-                      className={`absolute right-0 top-full mt-1 w-36 py-1 rounded-xl shadow-xl z-[100] border mentor-session-dropdown ${
-                        isLight ? 'bg-white border-zinc-200 shadow-black/5' : 'bg-zinc-950 border-zinc-800 shadow-black/40'
-                      }`}
-                      style={{
-                        backgroundColor: isLight ? '#ffffff' : '#18181b',
-                        opacity: 1,
-                        backdropFilter: 'none',
-                        WebkitBackdropFilter: 'none',
-                        isolation: 'isolate'
-                      }}
-                      onClick={e => e.stopPropagation()}
-                    >
-                      <button
-                        onClick={() => {
-                          setEditingSessionId(s.sessionId);
-                          setEditTitleInput(sessionTitles[s.sessionId] || s.title || '');
-                          setMenuOpenSessionId(null);
-                        }}
-                        className={`w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-violet-500/10 transition-colors ${
-                          isLight ? 'text-zinc-700' : 'text-zinc-300'
-                        }`}
-                      >
-                        <Edit2 size={12} /> Rename
-                      </button>
-                      <button
-                        onClick={() => {
-                          handleShareSession(s);
-                          setMenuOpenSessionId(null);
-                        }}
-                        className={`w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-violet-500/10 transition-colors ${
-                          isLight ? 'text-zinc-700' : 'text-zinc-300'
-                        }`}
-                      >
-                        <Share size={12} /> Share Chat
-                      </button>
-                      <div className={`h-px my-1 ${isLight ? 'bg-zinc-100' : 'bg-zinc-700'}`} />
-                      <button
-                        onClick={() => {
-                          handleDeleteSession(s.sessionId);
-                          setMenuOpenSessionId(null);
-                        }}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
-                      >
-                        <Trash2 size={12} /> Delete
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
             ))}
           </div>
         </div>
       </div>
+
+      {/* Portal-rendered session dropdown — outside sidebar's backdrop-filter stacking context */}
+      {sessionDropdownPortal}
 
       {/* ── Main Chat Area ── */}
       <div className="flex-1 flex flex-col min-w-0">
