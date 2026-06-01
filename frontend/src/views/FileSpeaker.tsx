@@ -362,6 +362,53 @@ function LibraryTTSPlayer({ lines, podcastLang, host1, host2, durationEst, user 
   );
 }
 
+function LibraryAudioPlayer({ audioFilename }: { audioFilename: string }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleLoadAndPlay = async () => {
+    if (blobUrl || loading) return;
+    setLoading(true);
+    try {
+      const url = `${BACKEND}/api/filespeaker/audio/${audioFilename}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Load failed");
+      const blob = await res.blob();
+      setBlobUrl(URL.createObjectURL(blob));
+    } catch (e) {
+      console.error("Failed to load audio inline", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [blobUrl]);
+
+  return (
+    <div className="flex-1 flex items-center gap-2" onClick={handleLoadAndPlay}>
+      {loading ? (
+        <div className="flex items-center gap-2 text-xs text-zinc-500 py-2">
+          <Loader2 size={12} className="animate-spin text-violet-500" />
+          <span>Loading audio inline...</span>
+        </div>
+      ) : (
+        <audio
+          src={blobUrl || undefined}
+          controls
+          preload="none"
+          className="flex-1 h-8"
+          style={{ minWidth: 0 }}
+          onPlay={handleLoadAndPlay}
+        />
+      )}
+    </div>
+  );
+}
+
 function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, audioRef, user, lines, podcastLang }: { 
   src: string; 
   host1: string; 
@@ -382,6 +429,44 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
   const [isDragging, setIsDragging] = useState(false);
   const progressBarRef = useRef<HTMLDivElement>(null);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownload = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (downloading) return;
+
+    const filename = `podcast_${linesCount}_lines.mp3`;
+    
+    if (blobUrl) {
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+
+    setDownloading(true);
+    try {
+      const res = await fetch(downloadUrl);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
+    } catch (err: any) {
+      alert(`Download failed: ${err.message || err}`);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   // TTS state for mobile
   const [ttsLineIdx, setTtsLineIdx] = useState(0);
@@ -768,14 +853,14 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
           </button>
         </div>
 
-        <a 
-          href={downloadUrl} 
-          download 
-          className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all" 
+        <button 
+          onClick={handleDownload}
+          disabled={downloading}
+          className="p-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all disabled:opacity-50 flex items-center justify-center cursor-pointer" 
           title="Download MP3"
         >
-          <Download size={15} />
-        </a>
+          {downloading ? <Loader2 size={15} className="animate-spin text-violet-400" /> : <Download size={15} />}
+        </button>
       </div>
     </div>
   );
@@ -919,6 +1004,35 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
   });
   const [showLibrary, setShowLibrary] = useState(false);
   useEffect(() => { localStorage.setItem('fs_podcast_library', JSON.stringify(podcastLibrary)); }, [podcastLibrary]);
+
+  const [downloadingIds, setDownloadingIds] = useState<Record<string, boolean>>({});
+
+  const downloadPodcastFromLibrary = async (recId: string, filename: string, audioFilename: string) => {
+    if (downloadingIds[recId]) return;
+    setDownloadingIds(prev => ({ ...prev, [recId]: true }));
+    try {
+      const url = `${BACKEND}/api/filespeaker/audio/${audioFilename}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
+    } catch (err: any) {
+      alert(`Download failed: ${err.message || err}`);
+    } finally {
+      setDownloadingIds(prev => {
+        const next = { ...prev };
+        delete next[recId];
+        return next;
+      });
+    }
+  };
 
   const [sourceTab, setSourceTab] = useState<'chat' | 'transform' | 'podcast'>('chat');
 
@@ -1560,7 +1674,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
       const newInteractions = [...(podcast.interactions || []), { q, a: data.text, audio: data.audio_url }];
       patchState(sid, { podcast: { ...podcast, interactions: newInteractions } });
 
-      // Play answer audio — BUG FIX 5: assign to ref as plain Audio object (correct)
+      // Play answer audio —  BUG FIX 5: assign to ref as plain Audio object (correct)
       const answerAudio = new Audio(`${BACKEND}/api/filespeaker/audio/${data.audio_url}`);
       interactionAudioRef.current = answerAudio;
       answerAudio.onended = () => {
@@ -2443,22 +2557,21 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
                         />
                       ) : (
                         <div className="flex items-center gap-3">
-                          <audio
-                            src={`${BACKEND}/api/filespeaker/audio/${rec.audioFilename}`}
-                            controls
-                            className="flex-1 h-8"
-                            style={{ minWidth: 0 }}
-                          />
-                          <a
-                            href={`${BACKEND}/api/filespeaker/audio/${rec.audioFilename}`}
-                            download={`podcast_${rec.id}.mp3`}
+                          <LibraryAudioPlayer audioFilename={rec.audioFilename} />
+                          <button
+                            onClick={() => downloadPodcastFromLibrary(rec.id, `podcast_${rec.id}.mp3`, rec.audioFilename)}
+                            disabled={downloadingIds[rec.id]}
                             title="Download podcast"
-                            className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border transition-all ${
+                            className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border transition-all disabled:opacity-50 cursor-pointer ${
                               isLight ? 'border-zinc-200 text-zinc-500 hover:border-violet-400 hover:text-violet-600 bg-white'
                               : 'border-zinc-700 text-zinc-400 hover:border-violet-500/40 hover:text-violet-400 bg-zinc-800'
                             }`}>
-                            <Download size={13} />
-                          </a>
+                            {downloadingIds[rec.id] ? (
+                              <Loader2 size={13} className="animate-spin text-violet-400" />
+                            ) : (
+                              <Download size={13} />
+                            )}
+                          </button>
                         </div>
                       )}
                     </div>

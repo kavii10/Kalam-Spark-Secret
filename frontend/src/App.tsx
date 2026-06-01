@@ -1471,6 +1471,8 @@ export default function App() {
     return true;
   });
 
+  const [sessionLoadingMsg, setSessionLoadingMsg] = useState('Verifying session...');
+
   // Tracks which user's profile has already been loaded from Supabase this session.
   // Stores the user ID string when loaded, null when not. Used to prevent the
   // onAuthStateChange duplicate call from overwriting a successfully-loaded profile.
@@ -1631,6 +1633,16 @@ export default function App() {
               };
             }
           }
+
+          // Await background database restore if the local IndexedDB was wiped (Google/OAuth login)
+          setSessionLoadingMsg('Synchronizing your workspace...');
+          const hasLocalRoadmap = await dbService.getRoadmap(finalUser.id).catch(() => null);
+          if (!hasLocalRoadmap) {
+            await dbService.populateLocalDB(finalUser.id).catch(err =>
+              console.warn('[App] populateLocalDB failed during session change:', err)
+            );
+          }
+
           setUser(finalUser);
           // Save to localStorage cache for instant restore on next app open
           localStorage.setItem('kalamspark_cached_profile', JSON.stringify({ ...finalUser, isAuthenticated: true }));
@@ -1904,7 +1916,16 @@ export default function App() {
   }
 
   if (sessionLoading) {
-    return <div className="fixed inset-0 bg-black flex items-center justify-center"><div className="w-8 h-8 border-4 border-gold-500 border-t-transparent rounded-full animate-spin" /></div>;
+    const isLight = user.settings?.theme === 'light';
+    return (
+      <div className={`fixed inset-0 flex flex-col items-center justify-center gap-4 ${isLight ? 'bg-zinc-50' : 'bg-zinc-950'}`}>
+        {isLight && <style>{LIGHT_THEME_CSS}</style>}
+        <div className="w-10 h-10 border-4 border-violet-500 border-t-transparent rounded-full animate-spin" />
+        <p className={`text-sm font-semibold animate-pulse ${isLight ? 'text-zinc-600' : 'text-zinc-400'}`}>
+          {sessionLoadingMsg}
+        </p>
+      </div>
+    );
   }
 
   // ── Manual Zero-Verification Login ──
@@ -1945,12 +1966,17 @@ export default function App() {
       if (dbUser) {
         // Log in as existing user
         profileLoadedRef.current = dbUser.id;
+        
+        // Populate IndexedDB with all user data BEFORE routing to app, to prevent race conditions
+        setSessionLoadingMsg('Restoring your learning progress...');
+        await dbService.populateLocalDB(dbUser.id).catch(err => {
+          console.warn('[App] populateLocalDB failed:', err);
+        });
+
         setUser({ ...dbUser, isAuthenticated: true });
         localStorage.setItem("kalamspark_manual_email", cleanEmail);
         // Cache for instant restore on next app open
         localStorage.setItem('kalamspark_cached_profile', JSON.stringify({ ...dbUser, isAuthenticated: true }));
-        // Populate IndexedDB with all user data in background
-        dbService.populateLocalDB(dbUser.id).catch(() => {});
       } else {
         // Create new user instantly
         const newId = `manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;

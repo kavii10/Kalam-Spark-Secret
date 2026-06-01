@@ -123,12 +123,16 @@ function BookCard({ item }: { item: BookResource }) {
     navigate('/filespeaker');
   };
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button')) return;
+    window.open(item.link, '_blank', 'noopener,noreferrer');
+  };
+
   return (
-    <a
-      href={item.link}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="resource-card block rounded-xl overflow-hidden flex flex-col h-[290px] transition-all hover:scale-[1.02] hover:shadow-lg"
+    <div
+      onClick={handleCardClick}
+      className="resource-card block rounded-xl overflow-hidden flex flex-col h-[290px] transition-all hover:scale-[1.02] hover:shadow-lg cursor-pointer"
       style={gc}
     >
       <div
@@ -170,13 +174,13 @@ function BookCard({ item }: { item: BookResource }) {
             Open Book <ExternalLink size={9} />
           </span>
           <button onClick={sendToFileSpeaker}
-            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600/40 transition-all"
+            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600/40 transition-all cursor-pointer"
             title="Send to File Speaker">
             <Volume2 size={9} /> Speak
           </button>
         </div>
       </div>
-    </a>
+    </div>
   );
 }
 
@@ -196,12 +200,16 @@ function VideoCard({ item }: { item: VideoResource }) {
     navigate('/filespeaker');
   };
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button')) return;
+    window.open(item.link, '_blank', 'noopener,noreferrer');
+  };
+
   return (
-    <a
-      href={item.link}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="resource-card block rounded-xl overflow-hidden flex flex-col h-[290px] group transition-all hover:scale-[1.02] hover:shadow-lg"
+    <div
+      onClick={handleCardClick}
+      className="resource-card block rounded-xl overflow-hidden flex flex-col h-[290px] group transition-all hover:scale-[1.02] hover:shadow-lg cursor-pointer"
       style={gc}
     >
       <div className="relative h-[130px] shrink-0" style={{ background: 'rgba(0,0,0,0.3)' }}>
@@ -235,13 +243,13 @@ function VideoCard({ item }: { item: VideoResource }) {
             Watch Now <ExternalLink size={9} />
           </span>
           <button onClick={sendToFileSpeaker}
-            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600/40 transition-all"
+            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600/40 transition-all cursor-pointer"
             title="Send to File Speaker">
             <Volume2 size={9} /> Speak
           </button>
         </div>
       </div>
-    </a>
+    </div>
   );
 }
 
@@ -254,12 +262,16 @@ function PaperCard({ item }: { item: PaperResource }) {
     navigate('/filespeaker');
   };
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button')) return;
+    window.open(item.link, '_blank', 'noopener,noreferrer');
+  };
+
   return (
-    <a
-      href={item.link}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="resource-card block rounded-xl overflow-hidden flex flex-col h-[260px] transition-all hover:scale-[1.02] hover:shadow-lg"
+    <div
+      onClick={handleCardClick}
+      className="resource-card block rounded-xl overflow-hidden flex flex-col h-[260px] transition-all hover:scale-[1.02] hover:shadow-lg cursor-pointer"
       style={gc}
     >
       <div
@@ -287,13 +299,13 @@ function PaperCard({ item }: { item: PaperResource }) {
             Read Paper <ExternalLink size={9} />
           </span>
           <button onClick={sendToFileSpeaker}
-            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600/40 transition-all"
+            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600/40 transition-all cursor-pointer"
             title="Send to File Speaker">
             <Volume2 size={9} /> Speak
           </button>
         </div>
       </div>
-    </a>
+    </div>
   );
 }
 
@@ -306,12 +318,16 @@ function NewsCard({ item }: { item: NewsResource }) {
     navigate('/filespeaker');
   };
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button')) return;
+    window.open(item.link, '_blank', 'noopener,noreferrer');
+  };
+
   return (
-    <a
-      href={item.link}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="resource-card block rounded-xl overflow-hidden flex flex-col h-[220px] transition-all hover:scale-[1.02] hover:shadow-lg"
+    <div
+      onClick={handleCardClick}
+      className="resource-card block rounded-xl overflow-hidden flex flex-col h-[220px] transition-all hover:scale-[1.02] hover:shadow-lg cursor-pointer"
       style={gc}
     >
       {item.imageUrl && (
@@ -342,13 +358,13 @@ function NewsCard({ item }: { item: NewsResource }) {
             Read Article <ExternalLink size={9} />
           </span>
           <button onClick={sendToFileSpeaker}
-            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600/40 transition-all"
+            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600/40 transition-all cursor-pointer"
             title="Send to File Speaker">
             <Volume2 size={9} /> Speak
           </button>
         </div>
       </div>
-    </a>
+    </div>
   );
 }
 

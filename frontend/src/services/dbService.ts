@@ -501,6 +501,16 @@ export const dbService = {
 
   async clearSession(): Promise<void> {
     localStorage.setItem('kalamspark_explicitly_logged_out', 'true');
+
+    // Attempt to flush any unsynced offline operations before wiping data (best-effort)
+    if (networkService.isOnline()) {
+      try {
+        await offlineSyncService.flush();
+      } catch (e) {
+        console.warn('[dbService] Sync flush before signout failed:', e);
+      }
+    }
+
     try { await supabase.auth.signOut(); } catch (e) { /* ignore */ }
 
     // Wipe IndexedDB (also removes emergency snapshot)
