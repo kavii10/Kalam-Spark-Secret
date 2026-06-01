@@ -192,41 +192,80 @@ async function callLocalMentor(
 
   // Offline Mode (or both backend & client Gemini failed)
   if (llamaPlugin.isSupported()) {
-    console.log('[MentorChat] Running offline mode, calling local llama model...');
+    console.log('[MentorChat] Running offline mode, calling local quantized model...');
+
     if (attachment && (attachment.mimeType.startsWith('image/') || attachment.mimeType.startsWith('video/'))) {
-      // Local llama.cpp compiled on mobile won't easily support vision without multi-modal model
-      // Tell the user nicely
-      alert("Image or video attachments cannot be processed in offline mode. Processing text only.");
+      alert('Image/video attachments are not supported in offline mode. Text only will be processed.');
     }
 
     try {
-      const systemInstruction = `You are Kalam Spark, a friendly and encouraging AI career mentor.
-Student Name: ${user.name || 'Student'}
-Dream Career: ${user.dream || 'a great career'}
-Education Level: ${user.year || 'student'}
-Branch: ${user.branch || 'general studies'}
-Current Stage: ${(user.currentStageIndex || 0) + 1}
+      // ── System prompt: directive and question-specific ──
+      // Key: explicitly tell the model WHAT the question is and to answer it DIRECTLY.
+      // This prevents small quantized models from falling into generic template patterns.
+      const systemInstruction = [
+        `You are a helpful AI career mentor named Kalam Spark.`,
+        `Student: ${user.name || 'Student'}`,
+        `Dream: ${user.dream || 'a successful career'}`,
+        `Field: ${user.branch || 'general studies'}, ${user.year || 'student'}`,
+        ``,
+        `RULES:`,
+        `- Answer the student's question DIRECTLY and SPECIFICALLY. Do not give generic advice.`,
+        `- DO NOT start your reply with "Offline Mode", "Local Gemma", "🔋", or any prefix label.`,
+        `- DO NOT use a bullet-point list template. Give a natural conversational reply.`,
+        `- Keep the answer focused on what the student actually asked.`,
+        `- 2-3 short paragraphs maximum. Be concise and helpful.`,
+        `- Use **bold** only for key terms.`,
+      ].join('\n');
 
-- Be warm and supportive. 
-- Respond NATURALLY and briefly (2-3 paragraphs max).
-- Never use markdown headers. Use **bold** for emphasis.`;
-
-      // Build chat prompt history
-      const historyStr = messages.slice(1)
-        .map(m => `${m.role === 'ai' ? 'AI' : 'Student'}: ${m.text}`)
+      // ── Build conversation history ──
+      // Strip "🔋 Offline Mode", "Local Gemma", and similar prefixes from previous AI messages
+      // so the model does NOT mimic those patterns in its next response.
+      const cleanHistory = messages
+        .slice(1) // skip welcome message
+        .slice(-10) // only last 10 messages for context window efficiency
+        .map(m => {
+          const role = m.role === 'ai' ? 'Assistant' : 'User';
+          // Remove any offline-mode prefix patterns that the model might copy
+          let text = m.text
+            .replace(/^🔋\s*\w[^:]*:\s*/u, '') // removes "🔋 Offline Mode (Local Gemma 4):" etc.
+            .replace(/^(Offline Mode|Local Gemma|Kalam Spark Offline Mentor)[^:]*:\s*/i, '')
+            .trim();
+          return `${role}: ${text}`;
+        })
         .join('\n');
-      const prompt = `${historyStr}\nStudent: ${userText}\nAI:`;
+
+      // ── Final prompt: put the question at the END so it's the last thing the model sees ──
+      const prompt = cleanHistory
+        ? `${cleanHistory}\nUser: ${userText}\nAssistant:`
+        : `User: ${userText}\nAssistant:`;
 
       const reply = await llamaPlugin.getCompletion(prompt, systemInstruction);
-      if (reply) return reply;
+
+      if (reply && reply.trim()) {
+        // Strip any prefix the model might still output (safety net)
+        const cleaned = reply
+          .replace(/^🔋\s*\w[^:]*:\s*/u, '')
+          .replace(/^(Offline Mode|Local Gemma|Kalam Spark Offline Mentor)[^:]*:\s*/i, '')
+          .trim();
+        return cleaned || reply;
+      }
     } catch (e: any) {
-      console.error('[MentorChat] Offline local model execution failed:', e);
-      return `🔋 Kalam Spark Offline Mentor: I hear your question about "${userText}". While we are offline or still loading the local model, I'm here to support you! Review your active tasks on the Planner, or complete a quiz in the Study Center. What aspect of your career path as an ${user.dream || 'ML engineer'} would you like to work on right now?`;
+      console.error('[MentorChat] Local model inference failed:', e);
+      // Show the REAL error — not a fake answer.
+      // This tells the user what's actually wrong instead of pretending to answer.
+      const errMsg = e?.message || String(e) || 'Unknown error';
+      const isModelMissing = errMsg.toLowerCase().includes('not found') || errMsg.toLowerCase().includes('load');
+      if (isModelMissing) {
+        return `⚠️ **Local AI model not found.** Place the file \`google_gemma-4-E2B-it-Q2_K.gguf\` in your phone's **Downloads** folder, then try again.`;
+      }
+      return `⚠️ **Local AI error:** ${errMsg}\n\nTry restarting the app or re-loading the model file from Settings.`;
     }
   }
 
-  return `🔋 Kalam Spark Offline Mentor: I hear your question about "${userText}". While we are offline or still loading the local model, I'm here to support you! Review your active tasks on the Planner, or complete a quiz in the Study Center. What aspect of your career path as an ${user.dream || 'ML engineer'} would you like to work on right now?`;
+  // No local model available and no internet
+  return `⚠️ **You are offline** and no local AI model is loaded.\n\nTo use the mentor offline:\n1. Download the Gemma model file from Settings\n2. Place it in your Downloads folder\n3. The app will load it automatically next time`;
 }
+
 
 /* ─── Welcome message ─── */
 const makeWelcome = (user: UserProfile): ChatMessage => ({
