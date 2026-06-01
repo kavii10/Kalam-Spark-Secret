@@ -580,7 +580,7 @@ const LIGHT_THEME_CSS = `
   .text-violet-300, .text-violet-400 { color: #6d28d9 !important; }
   .bg-violet-600\\/15, .bg-violet-600\\/20, .bg-violet-500\\/10 { background-color: #f3e8ff !important; border-color: #d8b4fe !important; }
   input.bg-zinc-900, input.bg-zinc-800, input.bg-zinc-800\\/50, input.bg-black\\/40 { background-color: #ffffff !important; color: #0f172a !important; border-color: #cbd5e1 !important; }
-  option.bg-zinc-900 { background-color: #ffffff !important; color: #0f172a !important; }
+  option, select option { background-color: #ffffff !important; color: #0f172a !important; }
 
   /* ── Language accordion button in settings ── */
   .settings-lang-btn, button.settings-lang-btn {
