@@ -850,12 +850,18 @@ const AppContent = ({
       import('@capacitor/network').then(({ Network }) => {
         Network.addListener('networkStatusChange', (status) => {
           setIsOnline(status.connected);
+          if (status.connected) {
+            offlineSyncService.flush();
+          }
         }).then(h => {
           nativeListener = h;
         });
       });
     } else {
-      const handleOnline = () => setIsOnline(true);
+      const handleOnline = () => {
+        setIsOnline(true);
+        offlineSyncService.flush();
+      };
       const handleOffline = () => setIsOnline(false);
       window.addEventListener('online', handleOnline);
       window.addEventListener('offline', handleOffline);

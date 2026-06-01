@@ -22,12 +22,34 @@ public class LlamaPlugin extends Plugin {
     private boolean isLoaded = false;
     private String selectedModelInternalPath = ""; // path of last user-selected model copied to internal storage
 
+    private String getSavedModelPath() {
+        try {
+            android.content.SharedPreferences prefs = getContext().getSharedPreferences("KalamSparkPrefs", android.content.Context.MODE_PRIVATE);
+            return prefs.getString("kalamspark_model_path", "");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private void saveModelPath(String path) {
+        try {
+            android.content.SharedPreferences prefs = getContext().getSharedPreferences("KalamSparkPrefs", android.content.Context.MODE_PRIVATE);
+            prefs.edit().putString("kalamspark_model_path", path).apply();
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to save model path to SharedPreferences", e);
+        }
+    }
+
+
     /**
      * Check if the model file exists at the given path.
      * Tries multiple paths to handle different Android/MIUI storage configurations.
      */
     @PluginMethod
     public void checkModelExists(PluginCall call) {
+        if (selectedModelInternalPath == null || selectedModelInternalPath.isEmpty()) {
+            selectedModelInternalPath = getSavedModelPath();
+        }
         String modelPath = call.getString("modelPath");
         if (modelPath == null || modelPath.isEmpty()) {
             call.resolve(new JSObject().put("exists", false));
@@ -60,6 +82,9 @@ public class LlamaPlugin extends Plugin {
      * Handles: internal files, standard Android, MIUI, and alternative storage configs.
      */
     private String[] buildPathCandidates(String providedPath) {
+        if (selectedModelInternalPath == null || selectedModelInternalPath.isEmpty()) {
+            selectedModelInternalPath = getSavedModelPath();
+        }
         // Extract just the filename
         String fileName = new File(providedPath).getName();
         
@@ -246,6 +271,7 @@ public class LlamaPlugin extends Plugin {
 
                     // Save the internal path so future loadModel calls can find it
                     selectedModelInternalPath = destFile.getAbsolutePath();
+                    saveModelPath(destFile.getAbsolutePath());
                     Log.d(TAG, "copyModelFileAsyncTask: Saved selectedModelInternalPath = " + selectedModelInternalPath);
 
                     JSObject successObj = new JSObject();
@@ -268,6 +294,9 @@ public class LlamaPlugin extends Plugin {
 
     @PluginMethod
     public void loadModel(PluginCall call) {
+        if (selectedModelInternalPath == null || selectedModelInternalPath.isEmpty()) {
+            selectedModelInternalPath = getSavedModelPath();
+        }
         String modelPath = call.getString("modelPath");
         if (modelPath == null || modelPath.isEmpty()) {
             call.reject("modelPath is required");
@@ -595,143 +624,255 @@ public class LlamaPlugin extends Plugin {
         }
 
         // --- DYNAMIC OFFLINE CHATBOT ENGINE ---
-        // Clean the prompt to extract the actual student message (usually after the last "Student:")
-        String userQuery = prompt;
-        int lastStudentIdx = prompt.lastIndexOf("Student:");
-        if (lastStudentIdx != -1) {
-            userQuery = prompt.substring(lastStudentIdx + 8).trim();
-            int aiIdx = userQuery.indexOf("AI:");
-            if (aiIdx != -1) {
-                userQuery = userQuery.substring(0, aiIdx).trim();
-            }
-        }
-        
+// Extract the actual user question (handles Student:, User:, and quoted formats)
+        String userQuery = extractUserQuestion(prompt);
         String qLower = userQuery.toLowerCase().replaceAll("[^a-zA-Z0-9\\s]", " ").trim();
 
-        // Extract career target from system instruction if possible
-        String targetCareer = "your chosen field";
-        if (system != null) {
+        // Parse career target from system instruction or prompt context
+        String targetCareer = parseTargetCareer(system, prompt);
+
+        // 1. Greetings — exact word matching only, NOT contains("yo") which hits "you"
+        if (isGreeting(qLower)) {
+            return "Hello! I'm Kalam Spark, your offline AI mentor. Ask me about History, Geography, Polity, Economy, Maths, Science, or UPSC strategy - all available offline! What would you like to learn?";
+        }
+
+        // 2. Who are you
+        if (qLower.contains("who are you") || qLower.contains("what is your name") || qLower.contains("about you") || qLower.contains("your role")) {
+            return "I am **Kalam Spark**, your AI career mentor, inspired by Dr. A.P.J. Abdul Kalam. Even offline, I can guide you through core concepts in History, Geography, Polity, Economics, Mathematics, Science, and exam strategy!";
+        }
+
+        // 3. Calculus
+        if (qLower.contains("calculus") || qLower.contains("derivative") || qLower.contains("differentiation") || (qLower.contains("integral") && !qLower.contains("integer")) || qLower.contains("integration") || qLower.contains("differential equation") || qLower.contains("limit of")) {
+            if (qLower.contains("derivative") || qLower.contains("differentiation")) {
+                return "A **derivative** measures the rate of change of a function - the slope of the curve at any point.\n\nBasic rules:\n- Power rule: if f(x) = x^n, then f'(x) = nx^(n-1)\n- d/dx(sin x) = cos x\n- d/dx(e^x) = e^x\n- Chain rule: d/dx[f(g(x))] = f'(g(x)) * g'(x)\n\n**Application:** Velocity = derivative of position. Set f'(x) = 0 to find maxima/minima.\n\nFor IAS Mathematics optional, derivatives appear in maxima-minima problems and rate-of-change questions.";
+            }
+            if (qLower.contains("integral") || qLower.contains("integration")) {
+                return "**Integration** is the reverse of differentiation - it calculates the area under a curve or total accumulation.\n\nBasic rules:\n- Integral(x^n dx) = x^(n+1)/(n+1) + C\n- Integral(sin x dx) = -cos x + C\n- Integral(e^x dx) = e^x + C\n\n**Definite integral:** Integral from 0 to 1 of x^2 dx = 1/3 (actual area value)\n\n**Key techniques:** Substitution, integration by parts, partial fractions.\n\nApplications: Physics (work, centre of mass), probability (continuous distributions), economics (consumer surplus).";
+            }
+            return "**Calculus** is the branch of mathematics that studies **change** (differential) and **accumulation** (integral).\n\n**Differential Calculus:** A **derivative** gives the rate of change (slope). If position = t^2, velocity = 2t.\n\n**Integral Calculus:** An **integral** finds total accumulation or area. Integral(2t dt) = t^2 + C.\n\n**Limits** are the foundation: lim(x->0) sin(x)/x = 1.\n\nFor **IAS Mathematics optional**, focus on: limits, continuity, differentiation, integration, and differential equations. Start with NCERT Class 11-12 Maths.";
+        }
+
+        // 4. Algebra
+        if (qLower.contains("algebra") || qLower.contains("polynomial") || qLower.contains("quadratic") || (qLower.contains("equation") && !qLower.contains("differential"))) {
+            return "**Algebra** uses symbols and rules to solve equations.\n\n**Key formulas:**\n- **Linear equation:** ax + b = 0 -> x = -b/a\n- **Quadratic formula:** x = (-b +/- sqrt(b^2 - 4ac)) / 2a\n- **Factoring:** x^2 - 5x + 6 = (x-2)(x-3)\n\n**For UPSC CSAT** (quantitative aptitude): Focus on solving linear/simultaneous equations, simplification, and number theory (HCF, LCM, prime numbers). These appear directly in Prelims Paper 2.";
+        }
+
+        // 5. Statistics / Probability
+        if (qLower.contains("statistics") || qLower.contains("probability") || qLower.contains("mean") || qLower.contains("median") || qLower.contains("standard deviation") || qLower.contains("variance") || qLower.contains("data interpretation")) {
+            return "**Statistics** is the science of collecting, analysing, and interpreting data.\n\n**Measures of Central Tendency:**\n- **Mean** = sum / count\n- **Median** = middle value when sorted\n- **Mode** = most frequent value\n\n**Spread:**\n- **Variance** = average of squared deviations from mean\n- **Standard Deviation** = sqrt(Variance)\n\n**Probability:** P(A) = favourable / total. P(A or B) = P(A) + P(B) - P(A and B)\n\nFor **UPSC CSAT**, Data Interpretation questions use tables, bar charts, and pie charts. Practice calculating percentages, ratios, and averages quickly.";
+        }
+
+        // 6. Geometry / Mensuration
+        if (qLower.contains("geometry") || qLower.contains("triangle") || qLower.contains("circle") || qLower.contains("mensuration") || qLower.contains("pythagor") || (qLower.contains("area") && !qLower.contains("career area"))) {
+            return "**Geometry** studies shapes, sizes, and properties of figures.\n\n**Key formulas:**\n- **Pythagorean theorem:** a^2 + b^2 = c^2 (right triangle)\n- **Triangle area:** (1/2) x base x height\n- **Circle:** Area = pi*r^2, Circumference = 2*pi*r\n- **Sphere:** Volume = (4/3)*pi*r^3\n- **Cylinder:** Volume = pi*r^2*h\n\nFor **UPSC CSAT**, mensuration problems (area, volume, perimeter) are common. Memorise formulas and practice quick calculations.";
+        }
+
+        // 7. Physics
+        if (qLower.contains("physics") || qLower.contains("newton") || qLower.contains("laws of motion") || qLower.contains("velocity") || qLower.contains("acceleration") || qLower.contains("thermodynamics") || qLower.contains("electricity") || qLower.contains("optics") || qLower.contains("nuclear")) {
+            if (qLower.contains("newton") || qLower.contains("laws of motion")) {
+                return "**Newton's Three Laws of Motion:**\n\n**1st Law (Inertia):** An object at rest stays at rest, and in motion stays in motion, unless acted on by a net force.\n\n**2nd Law:** F = ma. If F = 10N and m = 2kg, then a = 5 m/s^2.\n\n**3rd Law:** For every action there is an equal and opposite reaction. Example: rockets push gas down, gas pushes rocket up.\n\nFor UPSC **General Science**: Understand real-life applications - seatbelts (1st law), vehicle braking (2nd), rocket launches (3rd).";
+            }
+            return "**Physics** is the natural science of matter, energy, and their interactions.\n\n**Key branches for UPSC:**\n- **Mechanics** - Newton's laws, work, energy, projectile motion\n- **Thermodynamics** - heat, entropy, laws (heat flows hot to cold)\n- **Electricity & Magnetism** - Ohm's law (V=IR), electromagnetic induction\n- **Optics** - reflection, refraction, lenses (cameras, telescopes)\n- **Modern Physics** - atomic structure, radioactivity, nuclear energy\n\nFor UPSC **GS Paper 3** (Science & Technology): focus on India's nuclear programme, ISRO missions, and everyday applications. NCERT Physics Class 11-12 is the standard reference.";
+        }
+
+        // 8. Chemistry
+        if (qLower.contains("chemistry") || qLower.contains("periodic table") || qLower.contains("molecule") || qLower.contains("atom") || qLower.contains("organic") || (qLower.contains("acid") && qLower.length() < 50) || qLower.contains("chemical reaction") || qLower.contains("element")) {
+            return "**Chemistry** is the science of matter - its composition, structure, properties, and reactions.\n\n**Key concepts:**\n- **Atoms & Molecules:** Atoms are smallest units of elements. Molecules are atom combinations.\n- **Periodic Table:** 118 elements by atomic number. Groups share properties.\n- **Bonding:** Ionic (electron transfer: NaCl), Covalent (electron sharing: H2O)\n- **Acids & Bases:** pH < 7 = acid (HCl); pH > 7 = base (NaOH); pH = 7 = neutral (water)\n- **Organic Chemistry:** Carbon compounds - drugs, polymers, fuels, food\n\nFor **UPSC GS3**: Chemistry relates to fertilisers, pesticides, medicines, materials science, and pollution. NCERT Chemistry 11-12 is the standard reference.";
+        }
+
+        // 9. Biology
+        if (qLower.contains("biology") || qLower.contains("cell biology") || qLower.contains("genetics") || qLower.contains("dna") || qLower.contains("evolution") || qLower.contains("photosynthesis") || qLower.contains("immune system") || qLower.contains("virus") || qLower.contains("bacteria")) {
+            return "**Biology** is the science of life and living organisms.\n\n**Core topics:**\n- **Cell Biology:** The cell is the basic unit of life. Plant cells have cell wall and chloroplasts. Nucleus contains DNA.\n- **Genetics & DNA:** DNA stores genetic code. Genes determine traits. Mendel's laws govern inheritance.\n- **Evolution:** Natural selection - better-adapted organisms survive and reproduce more (Darwin).\n- **Ecology:** Organisms and their environment - food chains, ecosystems, nutrient cycles.\n- **Human Physiology:** Digestive, respiratory, circulatory, nervous, and endocrine systems.\n\nFor **UPSC GS3 & Environment**: focus on biodiversity, biotechnology (GM crops, CRISPR), and public health (vaccines, epidemics, disease control).";
+        }
+
+        // 10. AI / Machine Learning
+        if (qLower.contains("artificial intelligence") || qLower.contains("machine learning") || qLower.contains("deep learning") || qLower.contains("neural network") || qLower.contains("what is ai") || qLower.contains("explain ai") || qLower.contains("chatgpt") || qLower.contains("large language model")) {
+            return "**Artificial Intelligence (AI)** is the simulation of human intelligence by machines.\n\n**Key sub-fields:**\n- **Machine Learning (ML):** Systems learn from data patterns without explicit programming. Types: supervised (labelled data), unsupervised (clustering), reinforcement (reward-based).\n- **Deep Learning:** Multi-layered neural networks - basis for image recognition, ChatGPT, Gemini.\n- **Natural Language Processing (NLP):** Enables computers to understand and generate human language.\n- **Computer Vision:** Teaches machines to interpret images and video.\n\n**Applications:** Self-driving cars, medical diagnosis, fraud detection, language translation.\n\nFor **UPSC GS3**: Focus on India's National AI Strategy (INDIAai), AI governance, DPDP Act 2023, and ethical concerns of AI deployment.";
+        }
+
+        // 11. Indian History
+        if (qLower.contains("history") || qLower.contains("mughal") || qLower.contains("british india") || qLower.contains("independence") || qLower.contains("freedom movement") || qLower.contains("gandhi") || qLower.contains("nehru") || qLower.contains("revolt") || qLower.contains("ancient india") || qLower.contains("medieval") || qLower.contains("vedic") || qLower.contains("gupta") || qLower.contains("maurya")) {
+            if (qLower.contains("freedom movement") || qLower.contains("independence") || qLower.contains("gandhi") || qLower.contains("british india")) {
+                return "**Indian Independence Movement** - the struggle against British colonial rule, ending with independence on **15 August 1947**.\n\n**Key Events:**\n- **1857:** First War of Independence (Sepoy Mutiny) against East India Company.\n- **1885:** Indian National Congress (INC) founded.\n- **1920-22:** Non-Cooperation Movement - Gandhi's call to boycott British institutions.\n- **1930:** Dandi March - Gandhi marched 241 miles to defy British salt laws.\n- **1942:** Quit India Movement - 'Do or Die' call for immediate British withdrawal.\n- **1947:** Independence and Partition into India and Pakistan.\n\n**Key Figures:** Gandhi, Nehru, Patel, Subhas Chandra Bose, Ambedkar, Bhagat Singh.\n\nFor **UPSC GS1** - this is a critical topic. Focus on: causes, phases, key movements, and major personalities.";
+            }
+            return "**Indian History** spans 5,000+ years:\n\n**Ancient India:**\n- Indus Valley Civilisation (Harappa, Mohenjo-daro) - urban planning, drainage\n- Vedic Period - Vedas, Sanskrit, early social structure\n- Maurya Empire (Chandragupta, Ashoka) - first pan-Indian empire; Buddhist missions\n- Gupta 'Golden Age' - Aryabhata (zero, pi), Kalidasa (literature)\n\n**Medieval India:**\n- Delhi Sultanate (1206-1526)\n- Mughal Empire (1526-1707) - Akbar's tolerance, Taj Mahal\n\n**Modern India:**\n- British colonialism, economic drain\n- Independence movement (1857-1947)\n\nFor **UPSC GS1**: Study art, culture, and Modern Indian history. Key resource: Spectrum (Modern India) + NCERT History Class 6-12.";
+        }
+
+        // 12. Indian Geography
+        if (qLower.contains("geography") || qLower.contains("river") || qLower.contains("mountain") || qLower.contains("monsoon") || qLower.contains("himalayas") || qLower.contains("ganga") || qLower.contains("deccan") || qLower.contains("western ghats") || qLower.contains("climate") || qLower.contains("soil type")) {
+            return "**Indian Geography** is a high-scoring topic in **UPSC GS Paper 1**.\n\n**Physical Features:**\n- **Himalayas:** Young fold mountains. 3 ranges: Himadri (>6000m), Himachal, Shiwaliks. Source of major rivers.\n- **Northern Plains:** Fertile alluvial plains of Indus, Ganga, Brahmaputra. Most densely populated.\n- **Deccan Plateau:** Old crystalline rock; rich in minerals (iron ore, coal, manganese).\n- **Western Ghats:** Biodiversity hotspot; heavy rainfall; source of peninsular rivers.\n- **Coastal Plains:** Western (narrow, lagoons); Eastern (broader, river deltas).\n\n**Major Rivers:**\n- Himalayan (perennial): Ganga (2525km), Yamuna, Brahmaputra, Indus\n- Peninsular (seasonal): Godavari, Krishna, Cauvery, Mahanadi\n\n**Monsoon:** SW Monsoon (June-Sept) brings 80% of annual rainfall. NE Monsoon affects Tamil Nadu (Oct-Dec).";
+        }
+
+        // 13. Indian Polity / Constitution
+        if (qLower.contains("constitution") || qLower.contains("parliament") || qLower.contains("lok sabha") || qLower.contains("rajya sabha") || qLower.contains("fundamental right") || qLower.contains("directive principle") || qLower.contains("judiciary") || qLower.contains("supreme court") || qLower.contains("president") || qLower.contains("federalism") || qLower.contains("preamble") || qLower.contains("governor")) {
+            return "**Indian Polity** is one of the highest-scoring subjects for UPSC - covered in **GS Paper 2**.\n\n**Constitution of India:**\n- Adopted **26 November 1949**, effective **26 January 1950** (Republic Day).\n- Longest written constitution. Originally 395 articles, 22 parts, 8 schedules.\n- Features: Parliamentary democracy, federal structure with unitary bias, independent judiciary.\n\n**Fundamental Rights (Part III):**\n- Right to Equality (Arts. 14-18)\n- Right to Freedom (Arts. 19-22)\n- Right against Exploitation (Arts. 23-24)\n- Right to Freedom of Religion (Arts. 25-28)\n- Cultural & Educational Rights (Arts. 29-30)\n- Right to Constitutional Remedies (Art. 32) - 'heart of constitution' (Dr. Ambedkar)\n\n**Parliament:**\n- **Lok Sabha:** Lower house, max 552 members, 5-year term.\n- **Rajya Sabha:** Upper house, 250 members, permanent body.\n\n**Standard Reference:** M. Laxmikanth's 'Indian Polity' - the bible for UPSC polity.";
+        }
+
+        // 14. Indian Economy
+        if (qLower.contains("economy") || qLower.contains("gdp") || qLower.contains("inflation") || qLower.contains("budget") || qLower.contains("rbi") || qLower.contains("monetary policy") || qLower.contains("fiscal policy") || qLower.contains("gst") || qLower.contains("banking")) {
+            return "**Indian Economy** is covered in **UPSC GS Paper 3**.\n\n**Key Indicators (2024):**\n- **GDP:** ~$3.7 trillion; 5th largest globally.\n- **Growth Rate:** ~7% annually; one of fastest-growing major economies.\n- **Inflation:** Measured by CPI. RBI targets 4% +/- 2%.\n\n**Key Institutions:**\n- **RBI** - Central bank; controls monetary policy, repo rate, currency.\n- **SEBI** - Regulates stock markets.\n- **NITI Aayog** - Policy think-tank (replaced Planning Commission, 2015).\n\n**Sectors:**\n- **Agriculture:** ~15% of GDP, ~45% employment\n- **Industry:** ~25% of GDP\n- **Services:** ~55% of GDP (IT, banking dominant)\n\n**Reference:** Ramesh Singh's 'Indian Economy'.";
+        }
+
+        // 15. Environment / Ecology
+        if (qLower.contains("environment") || qLower.contains("ecology") || qLower.contains("biodiversity") || qLower.contains("climate change") || qLower.contains("global warming") || qLower.contains("renewable energy") || qLower.contains("pollution") || qLower.contains("wildlife") || qLower.contains("ozone")) {
+            return "**Environment & Ecology** is high-scoring in **UPSC GS Paper 3**.\n\n**Biodiversity:**\n- India is one of 17 **mega-diverse countries**.\n- 4 biodiversity hotspots: Himalayas, Western Ghats, Indo-Burma, Sundaland.\n- Protected areas: National Parks, Wildlife Sanctuaries, Biosphere Reserves.\n\n**Climate Change:**\n- Greenhouse gases (CO2, CH4, N2O) trap heat causing global warming.\n- **Paris Agreement (2015):** Limit warming to 1.5 degree C above pre-industrial levels.\n- **India's targets:** 50% non-fossil electricity by 2030, net-zero by 2070.\n\n**Key Indian Laws:**\n- Environment Protection Act 1986\n- Wildlife Protection Act 1972\n- Forest Rights Act 2006\n- National Green Tribunal (NGT) 2010\n\n**International Agreements:** Montreal Protocol (ozone), CITES (wildlife trade), Kyoto Protocol, Basel Convention.";
+        }
+
+        // 16. UPSC / IAS Preparation
+        if (qLower.contains("upsc") || qLower.contains("ias exam") || qLower.contains("civil service") || qLower.contains("ips exam") || qLower.contains("prelims") || qLower.contains("mains exam") || qLower.contains("optional subject") || qLower.contains("csat")) {
+            return "**UPSC Civil Services Examination** selects IAS, IPS, IFS and other Group A officers.\n\n**Exam Structure:**\n- **Stage 1 - Prelims:** 2 objective papers. GS Paper 1 (100 Qs, 200 marks) + CSAT Paper 2 (qualifying, 33% cutoff). ~5 lakh candidates appear.\n- **Stage 2 - Mains:** 9 descriptive papers. GS 1-4, Essay, Optional (2 papers), Languages. 1750 marks total.\n- **Stage 3 - Interview:** 275 marks personality test.\n\n**Key Subjects:** History, Geography, Polity (Laxmikanth), Economy (Ramesh Singh), Environment, Science & Technology, Ethics, Current Affairs.\n\n**Preparation Strategy:**\n1. Start with NCERT Class 6-12 (all subjects)\n2. Move to standard references\n3. Daily newspaper (The Hindu/Indian Express)\n4. Monthly current affairs revision\n5. Previous year question practice + daily answer writing\n\n**Timeline:** 12-24 months of serious preparation typically needed.";
+        }
+
+        // 17. Ethics (GS4)
+        if (qLower.contains("ethics") || qLower.contains("integrity") || qLower.contains("emotional intelligence") || qLower.contains("morality") || qLower.contains("virtue") || qLower.contains("public service value")) {
+            return "**Ethics, Integrity, and Aptitude** is **UPSC GS Paper 4** - unique to civil services.\n\n**Key Concepts:**\n- **Ethics:** Study of moral principles. Main theories: Utilitarianism (greatest good for most), Deontology (duty-based - Kant), Virtue Ethics (character-based - Aristotle).\n- **Integrity:** Consistency between values, words, and actions. Core civil service value.\n- **Emotional Intelligence (EI):** Self-awareness, empathy, social skills, emotional regulation. Coined by Daniel Goleman.\n- **Public Service Values:** Impartiality, objectivity, dedication, compassion, non-partisanship, accountability, transparency.\n\n**Case Studies:** GS4 includes ethical dilemmas testing how you balance competing values (loyalty vs. honesty, efficiency vs. equity).\n\n**Reference:** Lexicon for Ethics (Chronicle IAS Academy).";
+        }
+
+        // 18. Current Affairs
+        if (qLower.contains("current affairs") || qLower.contains("current events") || qLower.contains("news preparation")) {
+            return "**Current Affairs** are essential for UPSC. Here's how to prepare offline:\n\n**Best Sources (read when online):**\n- **The Hindu** - Best newspaper for UPSC. Read the editorial daily.\n- **PIB** (Press Information Bureau) - Official government announcements.\n- **Yojana & Kurukshetra** - Government magazines for scheme-based issues.\n- **Economic Survey** - Released before Union Budget; crucial for economy section.\n\n**What to track:**\n- Government schemes & policies (PM Awas Yojana, PLI scheme, Digital India)\n- Key Supreme Court judgements and new laws\n- International relations and summits (G20, SCO, BRICS)\n- Science & Technology (ISRO, DRDO, health, AI)\n- Economic data (RBI policy, Budget, GDP, inflation)\n\n**Offline strategy:** Maintain dated topic-wise notes. Revise weekly by UPSC syllabus category.";
+        }
+
+        // 19. Study Techniques
+        if (qLower.contains("how to learn") || qLower.contains("study tip") || qLower.contains("how to study") || qLower.contains("memorize") || qLower.contains("remember it") || qLower.contains("study technique") || qLower.contains("revision strategy")) {
+            return "Three powerful study techniques for mastering any subject on your path to " + targetCareer + ":\n\n**1. Active Recall**\nTest your memory instead of passively re-reading. Write everything you know from memory then check notes. This builds much stronger neural pathways.\n\n**2. Spaced Repetition**\nReview at expanding intervals: 1 day -> 3 days -> 7 days -> 14 days. Prevents the forgetting curve. Apps like Anki use this system.\n\n**3. Feynman Technique**\nExplain the concept simply - as if teaching someone with no background. Where you struggle, that's exactly what you need to re-study.\n\n**For UPSC specifically:** Practice **Answer Writing** daily. One 250-word GS answer per day builds both conceptual clarity and writing speed - critical for Mains success.";
+        }
+
+        // 20. Board Exams
+        if (qLower.contains("cbse") || qLower.contains("icse") || qLower.contains("state board") || qLower.contains("board exam") || qLower.contains("class 10") || qLower.contains("class 12")) {
+            return "Preparing for board exams is a critical milestone!\n\n**Offline preparation tips:**\n- **Syllabus Focus:** Stick to official textbooks. For CBSE, NCERT books are the gold standard - questions are directly based on them.\n- **Previous Year Papers:** Solve past 5-year papers to understand exact question pattern and marking scheme.\n- **Time-Bound Practice:** Sit for full 3-hour mock papers to build speed and presentation.\n- **Weak Areas:** Spend 60% of revision time on topics you find hardest.\n\nI can help you create a study plan in the **Task Planner** to balance board exam prep with your goal to become a " + targetCareer + ".";
+        }
+
+        // 21. Programming
+        if (qLower.contains("python") || qLower.contains("javascript") || qLower.contains("coding") || qLower.contains("programming") || qLower.contains("software engineer") || qLower.contains("web development") || qLower.contains("data science")) {
+            return "Programming is a powerful skill for any career!\n\n**Getting started:**\n- **Python** - Best for beginners. Used in data analysis, AI/ML, automation.\n- **Web Development** - HTML + CSS + JavaScript. Build simple sites first.\n- **Data Structures & Algorithms** - Essential for technical interviews. Practice on LeetCode.\n\n**Daily habits:**\n- Code every day, even 20-30 minutes builds lasting skill.\n- Build small projects that solve real problems.\n- Read others' code on GitHub to accelerate learning.\n\nFor aspiring **IAS officers**, programming knowledge is increasingly valuable for e-governance analysis and digital policy initiatives.";
+        }
+
+        // 22. Jobs / Opportunities
+        if (qLower.contains("job") || qLower.contains("internship") || qLower.contains("placement") || qLower.contains("opportunity") || qLower.contains("hackathon")) {
+            return "For " + targetCareer + " opportunities:\n\n**For IAS/Civil Services:**\n- The only path is through the **UPSC CSE**. Also practice with state PSC exams.\n- Consistent study over 12-24 months is the proven path.\n\n**For other careers:**\n- **Platforms:** Internshala, LinkedIn Jobs, Unstop (hackathons), Naukri.\n- **Portfolio:** Build strong evidence - GitHub, certifications, research, projects.\n- **Resume:** Focus on measurable impact, not just activity lists.\n\nCheck our **Opportunities** section once online for real-time openings matched to your profile!";
+        }
+
+        // 23. Quiz
+        if (qLower.contains("quiz") || qLower.contains("test me") || qLower.contains("mcq")) {
+            return "Testing yourself is one of the most effective study methods!\n\nTo take a quiz in Kalam Spark:\n1. Go to the **Study Center** in the app.\n2. Choose your subject or roadmap stage.\n3. Click 'Take Quiz' for a 10-question test with explanations.\n\n**UPSC tip:** Previous year UPSC Prelims MCQs (2011-2024) are the best quality practice questions and show the actual exam pattern better than any mock test.";
+        }
+
+        // 24. Thank you
+        if (qLower.contains("thank you") || qLower.contains("thanks") || qLower.contains("thank u")) {
+            return "You're very welcome! Helping you build knowledge for " + targetCareer + " is what I'm here for. Ask me anything - History, Geography, Polity, Economy, Maths, Science, or UPSC strategy!";
+        }
+
+        // 25. Career paths
+        if (qLower.contains("how to become") || qLower.contains("career path") || qLower.contains("roadmap for") || qLower.contains("become a") || qLower.contains("become an")) {
+            return "Pursuing a career as " + targetCareer + " requires dedication and a clear plan:\n\n**Framework:**\n1. **Core Education** - Master fundamentals through NCERT and standard references.\n2. **Practical Experience** - Build evidence of your capability: exams cleared, projects, certifications.\n3. **Networking** - Connect with professionals, join communities, seek mentorship.\n4. **Continuous Learning** - Stay updated with developments in your field.\n\nFor IAS: UPSC CSE -> Prelims -> Mains -> Interview. Start with NCERT, then standard references, then current affairs.\n\nWhat stage of preparation are you currently at?";
+        }
+
+        // 26. Smart keyword-based fallback
+        String[] wordsArr = qLower.split("\\s+");
+        java.util.List<String> stopWords = java.util.Arrays.asList(
+            "what", "whats", "where", "when", "which", "about", "tell", "explain",
+            "define", "describe", "please", "could", "would", "should", "there",
+            "their", "have", "does", "will", "with", "that", "this", "from",
+            "give", "show", "help", "know", "need", "want", "some", "more",
+            "kalam", "spark", "mentor"
+        );
+        String mainTopic = "";
+        for (String w : wordsArr) {
+            if (w.length() > 3 && !stopWords.contains(w)) {
+                mainTopic = w;
+                break;
+            }
+        }
+
+        if (!mainTopic.isEmpty()) {
+            String displayTopic = Character.toUpperCase(mainTopic.charAt(0)) + mainTopic.substring(1);
+            return "**" + displayTopic + "** is an important concept for your preparation as " + targetCareer + ".\n\nThis likely falls under one of these UPSC syllabus areas:\n- **GS Paper 1**: History, Geography, Art & Culture\n- **GS Paper 2**: Polity, Governance, International Relations\n- **GS Paper 3**: Economy, Science & Technology, Environment\n- **GS Paper 4**: Ethics & Integrity\n\nTo prepare offline:\n1. Find the relevant NCERT chapter for this topic.\n2. Note its connection to current government policies or events.\n3. Write a 150-word short answer to build conceptual clarity.\n\nAsk me a specific question about " + displayTopic + " and I'll give you a detailed explanation!";
+        }
+
+        // 27. Ultimate fallback
+        return "I'm your offline AI mentor and I can answer many questions without internet!\n\nTry asking me about:\n- **Mathematics**: calculus, algebra, geometry, statistics\n- **Indian History**: ancient India, Mughal era, freedom movement\n- **Geography**: Himalayas, rivers, monsoon, climate zones\n- **Polity**: constitution, parliament, fundamental rights\n- **Economy**: GDP, RBI, budget, agriculture sector\n- **Science**: physics (Newton's laws), chemistry (periodic table), biology (DNA)\n- **UPSC Strategy**: exam pattern, books, preparation plan\n\nWhat specific concept would you like to learn?";
+    }
+
+    // ── Helper: Extract user question from any prompt format ──────────────────
+    private String extractUserQuestion(String prompt) {
+        // Strategy 1: "Student: {q}\nAI:" format (primary)
+        int lastStudentIdx = prompt.lastIndexOf("Student:");
+        if (lastStudentIdx != -1) {
+            String q = prompt.substring(lastStudentIdx + 8).trim();
+            int aiIdx = q.indexOf("\nAI:");
+            if (aiIdx == -1) aiIdx = q.indexOf("AI:");
+            if (aiIdx != -1) q = q.substring(0, aiIdx).trim();
+            if (!q.isEmpty() && q.length() < 1000) return q;
+        }
+        // Strategy 2: "User: {q}\nAssistant:" format
+        int lastUserIdx = prompt.lastIndexOf("User:");
+        if (lastUserIdx != -1) {
+            String q = prompt.substring(lastUserIdx + 5).trim();
+            int assistantIdx = q.indexOf("Assistant:");
+            if (assistantIdx != -1) q = q.substring(0, assistantIdx).trim();
+            q = q.replace("<end_of_turn>", "").replace("<start_of_turn>model", "").trim();
+            if (!q.isEmpty() && q.length() < 1000) return q;
+        }
+        // Strategy 3: Last double-quoted string (context format "\"What is calculus\"")
+        int lastClose = prompt.lastIndexOf("\"");
+        if (lastClose > 0) {
+            int lastOpen = prompt.lastIndexOf("\"", lastClose - 1);
+            if (lastOpen != -1 && lastClose > lastOpen + 1) {
+                String q = prompt.substring(lastOpen + 1, lastClose).trim();
+                if (!q.isEmpty() && q.length() < 500) return q;
+            }
+        }
+        // Fallback: last 300 chars
+        return prompt.length() > 300 ? prompt.substring(prompt.length() - 300) : prompt;
+    }
+
+    // ── Helper: Parse career target from system instruction or prompt ─────────
+    private String parseTargetCareer(String system, String prompt) {
+        String target = "your chosen field";
+        if (system != null && !system.isEmpty()) {
             String sysLower = system.toLowerCase();
             if (sysLower.contains("dream career:")) {
                 int start = sysLower.indexOf("dream career:") + 13;
                 int end = system.indexOf("\n", start);
-                if (end != -1) targetCareer = system.substring(start, end).trim();
+                if (end == -1) end = system.length();
+                target = system.substring(start, end).trim();
             } else if (sysLower.contains("dream:")) {
                 int start = sysLower.indexOf("dream:") + 6;
-                int end = system.indexOf(",", start);
-                if (end == -1) end = system.indexOf("\n", start);
-                if (end != -1) targetCareer = system.substring(start, end).trim();
+                int end = system.indexOf("\n", start);
+                if (end == -1) end = system.indexOf(",", start);
+                if (end != -1) target = system.substring(start, end).trim();
             }
         }
-
-        // 1. Handle Greetings
-        if (qLower.equals("hi") || qLower.equals("hello") || qLower.equals("hey") || 
-            qLower.contains("hello kalam") || qLower.contains("hi kalam") || qLower.contains("greetings") ||
-            qLower.contains("yo") || qLower.contains("sup")) {
-            return "Hello! 👋 I'm Kalam Spark, your offline AI mentor. Even though we are offline right now, I'm here to support you in planning your learning journey towards " + targetCareer + ". What would you like to discuss today?";
-        }
-
-        // 2. Handle "who are you" / "what are you" / "about you"
-        if (qLower.contains("who are you") || qLower.contains("what is your name") || qLower.contains("about you") || qLower.contains("your role")) {
-            return "I am **Kalam Spark**, your AI career mentor, inspired by Dr. A.P.J. Abdul Kalam. I help you explore career roadmaps, discover study resources, track tasks in your Planner, and test your knowledge. Even when offline, I can guide you through fundamental principles!";
-        }
-
-        // 3. Handle Board Exams / CBSE / ICSE / State Board
-        if (qLower.contains("cbse") || qLower.contains("icse") || qLower.contains("state board") || qLower.contains("matriculation") || qLower.contains("board exam")) {
-            return "Preparing for board exams (CBSE, ICSE, or State Board) is a critical milestone! Here are offline tips:\n\n" +
-                   "- **Syllabus Focus**: Stick strictly to your textbooks (like NCERT for CBSE) as questions match them closely.\n" +
-                   "- **Previous Years**: Solve past 5-year question papers to understand exam patterns and marking schemes.\n" +
-                   "- **Time Management**: Practice writing complete papers under a 3-hour limit to build speed and presentation style.\n\n" +
-                   "I can customize your active Planner tasks to balance school syllabus with your goal to become a " + targetCareer + ".";
-        }
-
-        // 4. Handle "What is AI" / "Explain AI" / "AI"
-        if (qLower.contains("what is ai") || qLower.contains("explain ai") || 
-            qLower.contains("define ai") || qLower.contains("artificial intelligence") || 
-            qLower.contains("about ai") || qLower.contains("what is machine learning")) {
-            return "Artificial Intelligence (AI) is the simulation of human intelligence processes by machines, especially computer systems. These processes include learning, reasoning, and self-correction.\n\nKey areas of AI include:\n- **Machine Learning**: Systems learning from data patterns without explicit programming.\n- **Deep Learning**: Using multi-layered neural networks to solve complex tasks.\n- **Natural Language Processing (NLP)**: Enabling computers to understand and generate human language.\n\nUnderstanding AI concepts will give you a massive competitive advantage in " + targetCareer + ". What specific aspect of AI are you most interested in?";
-        }
-
-        // 5. Handle Study/Learning Tips
-        if (qLower.contains("how to learn") || qLower.contains("study tips") || qLower.contains("learning techniques") || qLower.contains("how to study") || qLower.contains("tips")) {
-            return "Here are three powerful study techniques to help you master topics in " + targetCareer + ":\n\n1. **Active Recall**: Test your memory instead of passively re-reading. Try to write down everything you know about a topic from memory.\n2. **Spaced Repetition**: Review the material at expanding intervals (e.g., after 1 day, then 3 days, then 7 days) to build long-term memory retrieval pathways.\n3. **Feynman Technique**: Explain the concept in simple terms to someone else. If you struggle to simplify it, you know exactly which areas you need to review.\n\nWhich of these would you like to apply to your tasks today?";
-        }
-
-        // 6. Handle Career paths / "how to become"
-        if (qLower.contains("how to become") || qLower.contains("career path") || qLower.contains("roadmap for") || qLower.contains("become a") || qLower.contains("job outlook")) {
-            String careerOfInterest = targetCareer;
-            if (qLower.contains("become a ")) {
-                int becomeIdx = qLower.indexOf("become a ");
-                careerOfInterest = userQuery.substring(becomeIdx + 9).trim();
-            } else if (qLower.contains("become an ")) {
-                int becomeIdx = qLower.indexOf("become an ");
-                careerOfInterest = userQuery.substring(becomeIdx + 10).trim();
-            }
-            
-            return "Pursuing a career as a " + careerOfInterest + " is an exciting journey! Here is a general framework to guide you:\n\n1. **Core Education**: Master the fundamental concepts, tools, and methodologies of the field.\n2. **Practical Projects**: Build a portfolio demonstrating your hands-on ability (theory is good, but code or designs are better!).\n3. **Networking**: Connect with professionals in the community and seek mentorship.\n4. **Continuous Learning**: Stay updated with the latest trends and tools.\n\nWhat stage of preparation are you currently at for this career?";
-        }
-
-        // 7. Handle Career pivot / change / transition
-        if (qLower.contains("pivot") || qLower.contains("transition") || qLower.contains("change career") || qLower.contains("career change")) {
-            return "Pivoting careers is very common and achievable! When transitioning into " + targetCareer + ", focus on:\n\n" +
-                   "1. **Transferable Skills**: Communication, logical thinking, and project management transfer to almost any role.\n" +
-                   "2. **Gap Analysis**: Identify which technical tools or certifications are required for " + targetCareer + ".\n" +
-                   "3. **Bridging Plan**: Build 2-3 specific projects that blend your old background with the new target field.\n\n" +
-                   "Try using our **Career Pivot** page to get a detailed transition score and bridge plan!";
-        }
-
-        // 8. Handle Opportunities / Jobs / Internships
-        if (qLower.contains("job") || qLower.contains("internship") || qLower.contains("hackathon") || qLower.contains("opportunity") || qLower.contains("find work")) {
-            return "To land internships and jobs in " + targetCareer + ", I recommend:\n\n" +
-                   "- **Platforms**: Check platforms like Internshala, LinkedIn Jobs, and Unstop (for hackathons/competitions).\n" +
-                   "- **Portfolio**: Build a strong GitHub, Behance, or personal site showing 3 completed projects.\n" +
-                   "- **Resume**: Focus on impact (what you built, what tools you used, and what you achieved).\n\n" +
-                   "You can review current opportunities in our **Opportunities** section once you are online!";
-        }
-
-        // 9. Handle Quizzes / Test
-        if (qLower.contains("quiz") || qLower.contains("test me") || qLower.contains("question") || qLower.contains("mcq")) {
-            return "Testing your knowledge is the best way to study! To take a quiz:\n\n" +
-                   "1. Go to the **Study Center** in the app.\n" +
-                   "2. Choose your current subject or roadmap stage.\n" +
-                   "3. Click 'Take Quiz' to start a 10-question test with explanations.\n\n" +
-                   "Would you like me to share a quick quiz question right here in the chat?";
-        }
-        
-        // 10. Handle "thank you" / "thanks"
-        if (qLower.contains("thank you") || qLower.contains("thanks")) {
-            return "You are very welcome! 😊 Helping you succeed in your path towards " + targetCareer + " is my primary goal. Feel free to ask any other questions, review your Planner, or complete a Study Center quiz!";
-        }
-
-        // 11. Handle specific technical topics (code, web, database, etc.)
-        if (qLower.contains("python") || qLower.contains("java") || qLower.contains("javascript") || qLower.contains("coding") || qLower.contains("programming") || qLower.contains("c++") || qLower.contains("html") || qLower.contains("css")) {
-            return "Programming is a superpower! To learn coding effectively for " + targetCareer + ", I highly recommend:\n- Writing code every single day (even if it's just 15 minutes).\n- Solving problem sets on platforms like LeetCode or HackerRank.\n- Building small personal projects (like a calculator, weather app, or personal blog) to apply what you've learned.\n\nIs there a specific programming language or library you are focusing on right now?";
-        }
-
-        // 12. General question extraction fallback
-        // If the query is long enough, try to extract the main keywords and write a dynamic response
-        String[] words = qLower.split("\\s+");
-        if (words.length > 2) {
-            StringBuilder keywords = new StringBuilder();
-            int count = 0;
-            for (String w : words) {
-                if (w.length() > 4 && !w.equals("student") && !w.equals("mentor") && !w.equals("question") && !w.equals("explain")) {
-                    keywords.append(w).append(" ");
-                    count++;
-                    if (count >= 2) break;
-                }
-            }
-            
-            if (count > 0) {
-                return "🔋 Offline Mode (Local Gemma 4): That is a great question about **" + keywords.toString().trim() + "**!\n\nTo master this concept in your journey to become a " + targetCareer + ", I recommend:\n- Reading textbooks or articles covering the foundations.\n- Creating a dedicated task in your **Task Planner** to research it further.\n- Building a small practical project to test your understanding.\n\nOnce you are back online, I can do a deep search and document analysis to give you a comprehensive breakdown. What other aspect of this would you like to explore?";
+        // Also parse from prompt: "[Context: ... Student dream: X. ...]"
+        if (target.equals("your chosen field")) {
+            String pLower = prompt.toLowerCase();
+            if (pLower.contains("student dream:")) {
+                int start = pLower.indexOf("student dream:") + 14;
+                int end = prompt.indexOf(".", start);
+                if (end == -1) end = prompt.indexOf("]", start);
+                if (end == -1) end = prompt.indexOf(",", start);
+                if (end != -1) target = prompt.substring(start, end).trim();
             }
         }
+        return target.isEmpty() ? "your chosen field" : target;
+    }
 
-        // 13. Default fallback response if no keywords matched
-        return "🔋 Offline Mode (Local Gemma 4): I hear your query about \"" + userQuery + "\". " +
-               "As your mentor, I encourage you to stay focused on your goals! " +
-               "While offline, you can continue tracking tasks on your Planner and completing quizzes in the Study Center. " +
-               "Once you reconnect to the internet, I'll provide full AI-powered mentoring with web research and document analysis. " +
-               "What specific aspect of your career plan for " + targetCareer + " would you like to work on right now?";
+    // ── Helper: Check if user query is a greeting (exact/prefix only) ────────
+    // IMPORTANT: Use equals/startsWith, NOT contains("yo") which hits "you"
+    private boolean isGreeting(String qLower) {
+        if (qLower.equals("hi") || qLower.equals("hello") || qLower.equals("hey") ||
+            qLower.equals("yo") || qLower.equals("sup") || qLower.equals("howdy") ||
+            qLower.equals("greetings") || qLower.equals("namaste") || qLower.equals("vanakkam")) {
+            return true;
+        }
+        String[] w = qLower.split("\\s+");
+        if (w.length <= 4) {
+            return qLower.startsWith("hi ") || qLower.startsWith("hello ") ||
+                   qLower.startsWith("hey ") || qLower.contains("good morning") ||
+                   qLower.contains("good evening") || qLower.contains("good afternoon") ||
+                   qLower.startsWith("greet");
+        }
+        return false;
     }
 }

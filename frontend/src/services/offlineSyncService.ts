@@ -186,27 +186,29 @@ class OfflineSyncService {
 
   private async _executeOp(op: SyncOperation): Promise<void> {
     const { type, payload } = op;
+    // Strip frontend-only metadata properties like _device_id before passing to Supabase queries
+    const { _device_id, ...dbPayload } = payload;
 
     switch (type) {
       case 'save_user': {
         // Try full schema first, fall back to minimal
         const { error: fullErr } = await supabase
           .from('users')
-          .upsert(payload, { onConflict: 'id' });
+          .upsert(dbPayload, { onConflict: 'id' });
         if (!fullErr) {
           // Also update settings separately (separate column)
-          if (payload.settings) {
-            await supabase.from('users').update({ settings: payload.settings }).eq('id', payload.id);
+          if (dbPayload.settings) {
+            await supabase.from('users').update({ settings: dbPayload.settings }).eq('id', dbPayload.id);
           }
           return;
         }
         // Fallback minimal save
         const minPayload = {
-          id: payload.id, name: payload.name, email: payload.email,
-          avatar: payload.avatar, branch: payload.branch, year: payload.year,
-          dream: payload.dream, current_stage_index: payload.current_stage_index,
-          onboarding_complete: payload.onboarding_complete, xp: payload.xp,
-          streak: payload.streak, last_sync: payload.last_sync,
+          id: dbPayload.id, name: dbPayload.name, email: dbPayload.email,
+          avatar: dbPayload.avatar, branch: dbPayload.branch, year: dbPayload.year,
+          dream: dbPayload.dream, current_stage_index: dbPayload.current_stage_index,
+          onboarding_complete: dbPayload.onboarding_complete, xp: dbPayload.xp,
+          streak: dbPayload.streak, last_sync: dbPayload.last_sync,
         };
         const { error: minErr } = await supabase.from('users').upsert(minPayload, { onConflict: 'id' });
         if (minErr) throw minErr;
@@ -214,43 +216,43 @@ class OfflineSyncService {
       }
 
       case 'save_task': {
-        const { error } = await supabase.from('tasks').upsert(payload, { onConflict: 'id' });
+        const { error } = await supabase.from('tasks').upsert(dbPayload, { onConflict: 'id' });
         if (error) throw error;
         break;
       }
 
       case 'delete_task': {
-        const { error } = await supabase.from('tasks').delete().eq('id', payload.id);
+        const { error } = await supabase.from('tasks').delete().eq('id', dbPayload.id);
         if (error) throw error;
         break;
       }
 
       case 'save_stage': {
-        const { error } = await supabase.from('completed_stages').insert(payload);
+        const { error } = await supabase.from('completed_stages').insert(dbPayload);
         if (error && error.code !== '23505') throw error; // ignore duplicates
         break;
       }
 
       case 'clear_stages': {
-        const { error } = await supabase.from('completed_stages').delete().eq('user_id', payload.user_id);
+        const { error } = await supabase.from('completed_stages').delete().eq('user_id', dbPayload.user_id);
         if (error) throw error;
         break;
       }
 
       case 'save_roadmap': {
-        const { error } = await supabase.from('roadmaps').upsert(payload, { onConflict: 'user_id' });
+        const { error } = await supabase.from('roadmaps').upsert(dbPayload, { onConflict: 'user_id' });
         if (error) throw error;
         break;
       }
 
       case 'save_mentor_msg': {
-        const { error } = await supabase.from('mentor_messages').insert(payload);
+        const { error } = await supabase.from('mentor_messages').insert(dbPayload);
         if (error && error.code !== '23505') throw error; // ignore duplicates
         break;
       }
 
       case 'clear_mentor': {
-        const { error } = await supabase.from('mentor_messages').delete().eq('user_id', payload.user_id);
+        const { error } = await supabase.from('mentor_messages').delete().eq('user_id', dbPayload.user_id);
         if (error) throw error;
         break;
       }
@@ -258,16 +260,16 @@ class OfflineSyncService {
       case 'delete_mentor_session': {
         const { error } = await supabase.from('mentor_messages')
           .delete()
-          .eq('user_id', payload.user_id)
-          .eq('session_id', payload.session_id);
+          .eq('user_id', dbPayload.user_id)
+          .eq('session_id', dbPayload.session_id);
         if (error) throw error;
         break;
       }
 
       case 'save_reward': {
         const { error } = await supabase.from('users')
-          .update({ rewards: payload.rewards })
-          .eq('id', payload.user_id);
+          .update({ rewards: dbPayload.rewards })
+          .eq('id', dbPayload.user_id);
         if (error) throw error;
         break;
       }

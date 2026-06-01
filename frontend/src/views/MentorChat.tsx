@@ -989,8 +989,10 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
                 disabled={(!input.trim() && !attachment) || isTyping}
                 className={`w-[48px] h-[48px] shrink-0 rounded-2xl flex items-center justify-center transition-all ${
                   (input.trim() || attachment) && !isTyping 
-                    ? 'bg-violet-600 shadow-lg shadow-violet-900/40 hover:bg-violet-500 hover:scale-[1.02] active:scale-95' 
-                    : 'bg-zinc-800'
+                    ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/30 hover:bg-violet-500 hover:scale-[1.02] active:scale-95 cursor-pointer' 
+                    : isLight 
+                      ? 'bg-zinc-100 text-zinc-400 border border-zinc-200 cursor-not-allowed' 
+                      : 'bg-zinc-800/40 text-zinc-600 border border-zinc-800/60 cursor-not-allowed'
                 }`}
                 title="Send message"
               >
@@ -998,7 +1000,7 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
                   ? <Loader2 size={20} className="animate-spin" color="white" />
                   : <Send
                       size={20}
-                      color={(input.trim() || attachment) && !isTyping ? '#ffffff' : '#52525b'}
+                      color={(input.trim() || attachment) && !isTyping ? '#ffffff' : (isLight ? '#a1a1aa' : '#52525b')}
                       strokeWidth={2.5}
                       style={{ marginLeft: (input.trim() || attachment) && !isTyping ? '2px' : '0' }}
                     />

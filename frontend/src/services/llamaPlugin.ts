@@ -36,7 +36,7 @@ export const llamaPlugin = {
 
   async checkModelExists(): Promise<boolean> {
     if (!this.isSupported()) return false;
-    const path = getModelDefaultPath();
+    const path = localStorage.getItem('kalamspark_model_path') || getModelDefaultPath();
     try {
       // Delegate to native Java/Swift plugin — it uses java.io.File which can access external storage
       const result = await LlamaPluginNative.checkModelExists({ modelPath: path });
@@ -61,7 +61,7 @@ export const llamaPlugin = {
     }
 
     isLoadingModel = true;
-    const path = getModelDefaultPath();
+    const path = localStorage.getItem('kalamspark_model_path') || getModelDefaultPath();
     console.log('[LlamaPlugin] Loading model from:', path);
 
     try {
