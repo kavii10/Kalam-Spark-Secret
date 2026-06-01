@@ -47,7 +47,7 @@ const en: Translations = {
   dash_stage: 'Stage', dash_progress: 'Progress', dash_daily_inspiration: 'Daily Inspiration',
   dash_todays_tasks: "Today's Tasks", dash_study_center: 'Study Center',
   dash_ask_mentor: 'Ask AI Mentor', dash_roadmap_progress: 'Roadmap Progress',
-  dash_view_plan: 'View Plan ->', dash_rewards: 'My Rewards',
+  dash_view_plan: 'View Plan', dash_rewards: 'My Rewards',
   dash_no_rewards: 'No rewards yet — complete tasks, stages, and quizzes to earn badges!',
   dash_rewards_earn_hint: 'Keep going to earn your first badge!',
   ob_setup_journey: "Let's set up your journey", ob_whats_name: "What's your name?",

@@ -269,6 +269,16 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
     }
   }, [input]);
 
+  // Click-away listener to close session history options menu
+  useEffect(() => {
+    if (!menuOpenSessionId) return;
+    const handleOutsideClick = () => {
+      setMenuOpenSessionId(null);
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => document.removeEventListener('click', handleOutsideClick);
+  }, [menuOpenSessionId]);
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -648,8 +658,9 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
                   {menuOpenSessionId === s.sessionId && (
                     <div 
                       className={`absolute right-0 top-full mt-1 w-36 py-1 rounded-xl shadow-xl z-[100] border animate-in fade-in zoom-in-95 duration-100 ${
-                        isLight ? 'bg-white border-zinc-200' : 'bg-zinc-800 border-zinc-700'
+                        isLight ? 'bg-white border-zinc-200 shadow-black/5' : 'border-zinc-700/80 shadow-black/40'
                       }`}
+                      style={!isLight ? { background: '#18181b' } : undefined}
                       onClick={e => e.stopPropagation()}
                     >
                       <button
