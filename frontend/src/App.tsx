@@ -1636,8 +1636,8 @@ export default function App() {
 
           // Await background database restore if the local IndexedDB was wiped (Google/OAuth login)
           setSessionLoadingMsg('Synchronizing your workspace...');
-          const hasLocalRoadmap = await dbService.getRoadmap(finalUser.id).catch(() => null);
-          if (!hasLocalRoadmap) {
+          const localRoadmap = await localDB.get('roadmaps', finalUser.id).catch(() => null);
+          if (!localRoadmap) {
             await dbService.populateLocalDB(finalUser.id).catch(err =>
               console.warn('[App] populateLocalDB failed during session change:', err)
             );

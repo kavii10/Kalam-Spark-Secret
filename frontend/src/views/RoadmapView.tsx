@@ -529,7 +529,7 @@ export default function RoadmapView({
         const forceRefresh = localStorage.getItem("kalamspark_force_refresh") === "true";
         const existing = await dbService.getRoadmap(user.id);
         
-        if (!forceRefresh && existing && existing.stages && existing.stages.length === 4 && existing.dream?.toLowerCase() === user.dream.trim().toLowerCase()) {
+        if (!forceRefresh && existing && existing.stages && existing.stages.length > 0 && existing.stages[0].id !== 'fallback-stage-1' && existing.dream?.toLowerCase() === user.dream.trim().toLowerCase()) {
           const clean = sanitizeRoadmap(existing, user.dream, user.branch);
           setRoadmap(clean);
           await dbService.saveRoadmap(user, clean);
@@ -572,6 +572,10 @@ export default function RoadmapView({
              setLoadingMsg(res.msg || 'Generating your roadmap...');
           } else if (res.type === 'result') {
              const clean = sanitizeRoadmap(res.data, user.dream, user.branch);
+             if (existing) {
+               clean.playlists = existing.playlists || [];
+               clean.watchLater = existing.watchLater || [];
+             }
              setRoadmap(clean);
              await dbService.saveRoadmap(user, clean);
              setLoading(false);
@@ -581,6 +585,10 @@ export default function RoadmapView({
              try {
                 const fallback = await generateRoadmapWithProgress(user, setLoadingMsg);
                 const clean = sanitizeRoadmap(fallback, user.dream, user.branch);
+                if (existing) {
+                  clean.playlists = existing.playlists || [];
+                  clean.watchLater = existing.watchLater || [];
+                }
                 setRoadmap(clean);
                 await dbService.saveRoadmap(user, clean);
                 setLoading(false);
@@ -597,6 +605,10 @@ export default function RoadmapView({
            try {
               const fallback = await generateRoadmapWithProgress(user, setLoadingMsg);
               const clean = sanitizeRoadmap(fallback, user.dream, user.branch);
+              if (existing) {
+                clean.playlists = existing.playlists || [];
+                clean.watchLater = existing.watchLater || [];
+              }
               setRoadmap(clean);
               await dbService.saveRoadmap(user, clean);
               setLoading(false);

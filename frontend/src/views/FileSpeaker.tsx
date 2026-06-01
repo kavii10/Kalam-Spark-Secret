@@ -1749,6 +1749,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
     if (!fsUrl) return;
     sessionStorage.removeItem('fs_import_url');
     setQuickUrl(fsUrl);
+    setQuickLoading(true);
     // small delay so component is ready, then auto-trigger
     const t = setTimeout(async () => {
       try {
@@ -1757,9 +1758,18 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
           body: JSON.stringify({ url: fsUrl }),
         });
         const data = await res.json();
-        if (res.ok) registerSource({ ...data, text: data.preview, addedAt: Date.now() });
-      } catch {}
-      setQuickUrl('');
+        if (res.ok) {
+          registerSource({ ...data, text: data.preview, addedAt: Date.now() });
+          setQuickUrl('');
+        } else {
+          throw new Error(data.detail || 'URL extraction failed');
+        }
+      } catch (err: any) {
+        console.error("Auto-import failed:", err);
+        alert(`Auto-import failed: ${err.message || err}`);
+      } finally {
+        setQuickLoading(false);
+      }
     }, 300);
     return () => clearTimeout(t);
   }, []);

@@ -247,7 +247,14 @@ Return ONLY a valid JSON object:
       
       const updated = { ...user, dream: newDream, currentStageIndex: 0 };
       await dbService.saveUser(updated);
-      await dbService.saveRoadmap(updated, null); // Clear Supabase roadmap cache
+      const existing = await dbService.getRoadmap(updated.id).catch(() => null);
+      const cleanNullRoadmap = existing ? {
+        ...existing,
+        stages: [],
+        summary: '',
+        dream: newDream,
+      } : null;
+      await dbService.saveRoadmap(updated, cleanNullRoadmap); // Reset stages but preserve custom lists
       
       setUser(updated);
       setPivotSuccess(true);
