@@ -67,6 +67,19 @@ const GS = {
 // ─── Daily Reset Key ─────────────────────────────────────────────────────────
 const RESET_KEY = 'ks_last_task_reset';
 
+function normalizeTaskType(raw: string | undefined): string {
+  if (!raw) return 'theory';
+  const t = raw.toLowerCase().trim();
+  if (t === 'theory' || t === 'reading' || t === 'study' || t === 'watch') return 'theory';
+  if (t === 'hands-on' || t === 'hands_on' || t === 'practical' || t === 'practice' || t === 'project' || t === 'build' || t === 'coding' || t === 'exercise') return 'hands-on';
+  if (t === 'review' || t === 'revision' || t === 'revise' || t === 'quiz' || t === 'test' || t === 'assessment') return 'review';
+  if (t === 'current-affairs' || t === 'current_affairs' || t === 'news' || t === 'current affairs') return 'current-affairs';
+  if (t.includes('hands') || t.includes('practic') || t.includes('build') || t.includes('code') || t.includes('implement')) return 'hands-on';
+  if (t.includes('review') || t.includes('revis') || t.includes('quiz') || t.includes('test')) return 'review';
+  if (t.includes('current') || t.includes('news') || t.includes('affair')) return 'current-affairs';
+  return 'theory';
+}
+
 function getLastResetDate(): string {
   return localStorage.getItem(RESET_KEY) || '';
 }
@@ -280,7 +293,10 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
             if (res.ok) {
               const data = await res.json();
               if (Array.isArray(data) && data.length > 0) {
-                pool = data.map((t: any) => ({ title: t.title, type: t.type }));
+                pool = data.map((t: any) => ({
+                  title: (t.title || '').trim(),
+                  type: normalizeTaskType(t.type)
+                })).filter((t: any) => t.title && t.title.length > 5);
               }
             }
           } catch (e) {
@@ -291,7 +307,10 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
             try {
               const data = await generatePlannerTasks(user.dream, topic, subjects, neededTasks);
               if (Array.isArray(data)) {
-                pool = data.map((t: any) => ({ title: t.title, type: t.type }));
+                pool = data.map((t: any) => ({
+                  title: (t.title || '').trim(),
+                  type: normalizeTaskType(t.type)
+                })).filter((t: any) => t.title && t.title.length > 5);
               }
             } catch (err) {
               console.error("Task generation service call failed:", err);
@@ -302,9 +321,19 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
           if (llamaPlugin.isSupported()) {
             console.log('[Planner] Running offline, generating tasks using local model...');
             try {
-              const prompt = `Create exactly ${neededTasks} daily tasks for a student studying to become a ${user.dream}, stage: '${topic}'.
-Return ONLY a JSON array:
-[{"title": "Read about...", "type": "theory"}]`;
+          const prompt = `Create exactly ${neededTasks} diverse, actionable daily tasks for a student studying to become a ${user.dream}, at stage: '${topic}' covering topics: ${subjects.join(', ')}.
+
+Rules:
+- Each task "type" MUST be one of: "theory", "hands-on", "review" (NO other values)
+- "theory" = reading/studying concepts in depth
+- "hands-on" = building, practicing, coding, implementing something concrete  
+- "review" = revising, summarizing, quizzing yourself
+- Mix types: include at least 2 hands-on and 1 review task
+- Titles MUST be specific - name the actual topic, skill, or chapter
+- Bad example: {"title": "Read about something", "type": "theory"}
+- Good example: {"title": "Study music licensing fundamentals and royalty distribution models", "type": "theory"}
+
+Return a JSON array of exactly ${neededTasks} tasks.`;
               const resText = await llamaPlugin.getCompletion(prompt, "You are an expert educator. Return ONLY raw JSON array. No markdown.");
               let clean = resText.trim();
               const startIdx = clean.indexOf('[');
@@ -314,7 +343,10 @@ Return ONLY a JSON array:
               }
               const data = JSON.parse(clean);
               if (Array.isArray(data)) {
-                pool = data.map((t: any) => ({ title: t.title, type: t.type }));
+                pool = data.map((t: any) => ({
+                  title: (t.title || '').trim(),
+                  type: normalizeTaskType(t.type)
+                })).filter((t: any) => t.title && t.title.length > 5);
               }
             } catch (err) {
               console.error("Local model task generation failed:", err);
@@ -374,7 +406,13 @@ Return ONLY a JSON array:
 
           if (existingTitles.has(key)) continue;
           existingTitles.add(key);
-          const task: DailyTask = { id: Math.random().toString(36).substr(2, 9), title: candidate.title, type: (candidate.type as any) || 'theory', completed: false, date: new Date().toISOString() };
+          const task: DailyTask = {
+            id: Math.random().toString(36).substr(2, 9),
+            title: candidate.title,
+            type: (normalizeTaskType(candidate.type) as any),
+            completed: false,
+            date: new Date().toISOString()
+          };
           dbService.saveTask(user.id, task);
           markTaskUsed(candidate.title);
           addedTasks.push(task);
@@ -466,7 +504,18 @@ Return ONLY a JSON array:
     return a.completed ? 1 : -1;
   });
 
-  const getBadge = (type: string) => TASK_BADGES[type] || TASK_BADGES['theory'];
+  const getBadge = (type: string) => {
+    if (!type) return TASK_BADGES['theory'];
+    const t = type.toLowerCase().trim();
+    // Exact match first
+    if (TASK_BADGES[t]) return TASK_BADGES[t];
+    // Fuzzy match common variants
+    if (t.includes('hands') || t.includes('practice') || t.includes('project') || t.includes('build') || t.includes('code') || t.includes('implement') || t.includes('exercise')) return TASK_BADGES['hands-on'];
+    if (t.includes('review') || t.includes('revise') || t.includes('summary') || t.includes('quiz') || t.includes('test') || t.includes('assess')) return TASK_BADGES['review'];
+    if (t.includes('current') || t.includes('affair') || t.includes('news') || t.includes('trend')) return TASK_BADGES['current-affairs'];
+    return TASK_BADGES['theory'];
+  };
+
 
   return (
     <div className="space-y-7 fade-up">
