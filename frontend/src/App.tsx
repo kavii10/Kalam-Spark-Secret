@@ -49,6 +49,7 @@ import { getCurrentLang, type LangCode } from "./i18n";
 import { rewardEvents } from './services/rewardService';
 import { offlineSyncService } from './services/offlineSyncService';
 import { networkService } from './services/networkService';
+import { localDB } from './services/localDB';
 import { Capacitor } from '@capacitor/core';
 import { llamaPlugin } from './services/llamaPlugin';
 import { notificationService } from './services/notificationService';
@@ -1471,7 +1472,14 @@ export default function App() {
 
   // ── Supabase Auth Listener ──
   useEffect(() => {
-    // ── Instant session restore from localStorage cache ──
+    // ── 1. Initialize IndexedDB (KalamSparkDB) first — everything depends on it ──
+    localDB.init().then(() => {
+      localDB.migrateFromLocalStorage();
+    }).catch(err => {
+      console.warn('[App] IndexedDB init failed (will fall back to Supabase only):', err);
+    });
+
+    // ── 2. Instant session restore from localStorage cache ──
     // This prevents the flicker back to the login screen on Android app restarts.
     // If we have a backup profile in localStorage, restore it immediately so
     // the user doesn't see the login page while Supabase is still initializing.
@@ -1509,32 +1517,65 @@ export default function App() {
       // ── ALWAYS handle sign-out (null session) regardless of any guard ──
       // This must run first before any other check, so logout always works.
       if (!session) {
-        // --- Zero-Verification Manual Session Check ---
-        const manualEmail = localStorage.getItem("kalamspark_manual_email");
-        if (manualEmail) {
-          try {
-            const dbUser = await dbService.getUserByEmail(manualEmail);
-            if (dbUser) {
-              profileLoadedRef.current = dbUser.id;
-              setUser({ ...dbUser, isAuthenticated: true });
-              setSessionLoading(false);
-              return;
-            } else {
-              // Email in localstorage but not in DB (deleted?) -> clear it.
-              localStorage.removeItem("kalamspark_manual_email");
+        // ── Priority 1: Explicit logout check ──
+        // Only log the user out if THEY clicked "Log Out".
+        // Token expiry, network failures, and Supabase errors must NEVER force a logout.
+        const wasExplicitlyLoggedOut = localStorage.getItem('kalamspark_explicitly_logged_out') === 'true';
+
+        if (!wasExplicitlyLoggedOut) {
+          // ── Priority 2: Restore from localStorage cache (instant, no network needed) ──
+          const cachedRaw = localStorage.getItem('kalamspark_cached_profile');
+          if (cachedRaw) {
+            try {
+              const cached = JSON.parse(cachedRaw) as UserProfile;
+              if (cached?.isAuthenticated && cached?.id) {
+                console.log('[App] Session null but valid cache found — keeping user logged in:', cached.email || cached.id);
+                if (!profileLoadedRef.current) {
+                  profileLoadedRef.current = cached.id;
+                  setUser({ ...cached, isAuthenticated: true });
+                }
+                setSessionLoading(false);
+                return;
+              }
+            } catch (e) {
+              localStorage.removeItem('kalamspark_cached_profile');
             }
-          } catch (err) {
-            console.error("[App] Manual session fetch failed", err);
+          }
+
+          // ── Priority 3: Manual email fallback — try DB, but don't fail hard ──
+          const manualEmail = localStorage.getItem("kalamspark_manual_email");
+          if (manualEmail) {
+            try {
+              const dbUser = await dbService.getUserByEmail(manualEmail);
+              if (dbUser) {
+                console.log('[App] Restored session from DB for manual email:', manualEmail);
+                profileLoadedRef.current = dbUser.id;
+                setUser({ ...dbUser, isAuthenticated: true });
+                // Re-cache so next launch is instant
+                localStorage.setItem('kalamspark_cached_profile', JSON.stringify({ ...dbUser, isAuthenticated: true }));
+                setSessionLoading(false);
+                return;
+              } else {
+                // Email in DB not found — must have been deleted, safe to remove
+                localStorage.removeItem("kalamspark_manual_email");
+              }
+            } catch (err) {
+              // Network error: keep the user logged in using whatever we have
+              console.warn('[App] DB lookup failed during session restore — staying logged in:', err);
+              if (profileLoadedRef.current) {
+                // Already have a user loaded, just unblock the loading state
+                setSessionLoading(false);
+                return;
+              }
+            }
           }
         }
-        // --- End Check ---
 
+        // ── Priority 4: True logout ── (explicit logout OR no session data anywhere)
+        console.log('[App] No session data found or explicit logout — showing login screen');
+        localStorage.removeItem('kalamspark_explicitly_logged_out'); // consume the flag
         profileLoadedRef.current = null;
         setUser(prev => ({ ...prev, isAuthenticated: false, onboardingComplete: false }));
-        // Clear the cached profile on explicit logout
-        if (!localStorage.getItem('kalamspark_manual_email')) {
-          localStorage.removeItem('kalamspark_cached_profile');
-        }
         setSessionLoading(false);
         return;
       }
@@ -1587,6 +1628,13 @@ export default function App() {
           setUser(finalUser);
           // Save to localStorage cache for instant restore on next app open
           localStorage.setItem('kalamspark_cached_profile', JSON.stringify({ ...finalUser, isAuthenticated: true }));
+          // Populate IndexedDB with all user data from Supabase (background, non-blocking)
+          // This ensures all data is available offline on the next app launch
+          if (isInitial) {
+            dbService.populateLocalDB(finalUser.id).catch(err =>
+              console.warn('[App] populateLocalDB failed (non-fatal):', err)
+            );
+          }
         } else {
           // Truly a NEW user — no row in DB yet. Build a clean initial record.
           const name = session.user.user_metadata?.name || session.user.user_metadata?.full_name || '';
@@ -1633,8 +1681,50 @@ export default function App() {
 
     // isInitial=true: fired by getSession() on app start / page reload
     // isInitial=false: fired by onAuthStateChange (login, logout, token refresh)
+    //
+    // ── Offline Guard: If Supabase hangs (no internet), unblock after 4s ──
+    // On Android without internet, supabase.auth.getSession() never resolves.
+    // This timeout ensures the app always shows content from the localStorage cache.
+    let sessionResolved = false;
+    const offlineUnblockTimer = setTimeout(() => {
+      if (sessionResolved) return; // already handled
+      sessionResolved = true;
+      console.warn('[App] getSession() timed out (offline?) — restoring from cache');
+      const cachedRaw = localStorage.getItem('kalamspark_cached_profile');
+      if (cachedRaw) {
+        try {
+          const cached = JSON.parse(cachedRaw) as UserProfile;
+          if (cached?.isAuthenticated && cached?.id) {
+            profileLoadedRef.current = cached.id;
+            setUser({ ...cached, isAuthenticated: true });
+            setSessionLoading(false);
+            return;
+          }
+        } catch (e) {}
+      }
+      // No cache and still offline → show login screen
+      setSessionLoading(false);
+    }, 4000);
+
     supabase.auth.getSession().then(({ data: { session } }) => {
+      sessionResolved = true;
+      clearTimeout(offlineUnblockTimer);
       handleSession(session, true);
+    }).catch(() => {
+      sessionResolved = true;
+      clearTimeout(offlineUnblockTimer);
+      // getSession threw — treat as offline, restore from cache
+      const cachedRaw = localStorage.getItem('kalamspark_cached_profile');
+      if (cachedRaw) {
+        try {
+          const cached = JSON.parse(cachedRaw) as UserProfile;
+          if (cached?.isAuthenticated && cached?.id) {
+            profileLoadedRef.current = cached.id;
+            setUser({ ...cached, isAuthenticated: true });
+          }
+        } catch (e) {}
+      }
+      setSessionLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -1688,6 +1778,7 @@ export default function App() {
     }
 
     return () => {
+      clearTimeout(offlineUnblockTimer);
       subscription.unsubscribe();
       if (appUrlListener) {
         appUrlListener.then((l: any) => l.remove());
@@ -1813,6 +1904,8 @@ export default function App() {
   // ── Manual Zero-Verification Login ──
   const handleManualLogin = async (email: string, name: string) => {
     setSessionLoading(true);
+    // Clear the explicit logout flag — user is actively logging in
+    localStorage.removeItem('kalamspark_explicitly_logged_out');
     try {
       const cleanEmail = email.trim().toLowerCase();
       const cleanName = name.trim() || cleanEmail.split('@')[0];
@@ -1833,6 +1926,11 @@ export default function App() {
         keysToWipe.forEach(k => localStorage.removeItem(k));
         sessionStorage.removeItem('kalamspark_radar');
         sessionStorage.removeItem('fs_import_url');
+        // Also wipe the old user's IndexedDB data
+        const prevUser = await dbService.getUserByEmail(prevEmail).catch(() => null);
+        if (prevUser?.id) {
+          localDB.clearUserData(prevUser.id).catch(() => {});
+        }
         console.log('[App] Cleared previous user data for account switch');
       }
 
@@ -1845,6 +1943,8 @@ export default function App() {
         localStorage.setItem("kalamspark_manual_email", cleanEmail);
         // Cache for instant restore on next app open
         localStorage.setItem('kalamspark_cached_profile', JSON.stringify({ ...dbUser, isAuthenticated: true }));
+        // Populate IndexedDB with all user data in background
+        dbService.populateLocalDB(dbUser.id).catch(() => {});
       } else {
         // Create new user instantly
         const newId = `manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;

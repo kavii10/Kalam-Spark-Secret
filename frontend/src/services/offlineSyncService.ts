@@ -1,56 +1,50 @@
 /**
  * OfflineSyncService — Kalam Spark
  *
- * Queues all data writes that happen while offline and automatically
- * flushes them to Supabase the moment internet is restored.
+ * Stores the sync queue in IndexedDB (via localDB) for reliability.
+ * Listens for network restoration and auto-flushes all pending operations.
  *
  * Supported operations:
- *   - save_user        : UserProfile upsert
- *   - save_task        : DailyTask upsert
- *   - delete_task      : DailyTask delete by ID
- *   - save_stage       : Completed stage insert
- *   - save_roadmap     : Roadmap data upsert
- *   - save_mentor_msg  : Mentor chat message insert
+ *   save_user             — UserProfile upsert
+ *   save_task             — DailyTask upsert
+ *   delete_task           — DailyTask delete by id
+ *   save_stage            — CompletedStage insert
+ *   clear_stages          — Delete all completed stages for a user
+ *   save_roadmap          — Roadmap upsert
+ *   save_mentor_msg       — Mentor chat message insert
+ *   clear_mentor          — Clear all mentor messages for a user
+ *   delete_mentor_session — Delete all messages in a session
+ *   save_reward           — Update rewards array on user row
  */
 
 import { supabase } from './supabaseClient';
+import { localDB } from './localDB';
 import { Toast } from '@capacitor/toast';
 import { Capacitor } from '@capacitor/core';
 import { Network } from '@capacitor/network';
 
-// ── Types ──────────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 export type SyncOpType =
   | 'save_user'
   | 'save_task'
   | 'delete_task'
   | 'save_stage'
+  | 'clear_stages'
   | 'save_roadmap'
-  | 'save_mentor_msg';
+  | 'save_mentor_msg'
+  | 'clear_mentor'
+  | 'delete_mentor_session'
+  | 'save_reward';
 
 export interface SyncOperation {
-  id: string;               // unique op ID
+  id: string;
   type: SyncOpType;
-  payload: any;             // data to sync
-  createdAt: string;        // ISO timestamp when queued
-  retries: number;          // how many times we tried
+  payload: any;
+  createdAt: string;
+  retries: number;
 }
 
-// ── Storage ───────────────────────────────────────────────────────────────────
-const QUEUE_KEY = 'ks_offline_sync_queue';
 const MAX_RETRIES = 5;
-
-function loadQueue(): SyncOperation[] {
-  try {
-    const raw = localStorage.getItem(QUEUE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveQueue(queue: SyncOperation[]): void {
-  localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
-}
 
 // ── Core Service ──────────────────────────────────────────────────────────────
 class OfflineSyncService {
@@ -59,43 +53,64 @@ class OfflineSyncService {
 
   constructor() {
     this._startNetworkListener();
+    // Migrate legacy localStorage queue to IndexedDB on first run
+    this._migrateLegacyQueue();
   }
 
-  /** Subscribe to queue size changes (for UI badge) */
+  // ── Queue Size Subscription ─────────────────────────────────────────────────
+
   onQueueChange(cb: (count: number) => void): () => void {
     this.listeners.push(cb);
-    cb(this.getPendingCount()); // emit current count immediately
+    // Emit current count immediately (async)
+    localDB.getSyncQueueCount().then(count => cb(count));
     return () => { this.listeners = this.listeners.filter(l => l !== cb); };
   }
 
-  private _emit() {
-    const count = this.getPendingCount();
+  private async _emit(): Promise<void> {
+    const count = await localDB.getSyncQueueCount();
     this.listeners.forEach(cb => cb(count));
   }
 
-  /** Number of operations waiting to be synced */
-  getPendingCount(): number {
-    return loadQueue().length;
+  async getPendingCount(): Promise<number> {
+    return localDB.getSyncQueueCount();
   }
 
-  /**
-   * Enqueue a sync operation.
-   * Call this instead of calling Supabase directly when offline.
-   */
-  enqueue(type: SyncOpType, payload: any): void {
-    const queue = loadQueue();
-    // Deduplicate: for user saves and roadmap saves, replace existing op
-    // so we don't accumulate stale profile snapshots
-    const dedupeTypes: SyncOpType[] = ['save_user', 'save_roadmap'];
-    const dedupeKey = type === 'save_task' ? payload?.id :
-                      type === 'save_stage' ? `${payload?.user_id}__${payload?.stage_id}` :
-                      null;
+  // ── Enqueue ──────────────────────────────────────────────────────────────────
 
-    let newQueue = queue;
-    if (dedupeTypes.includes(type)) {
-      newQueue = queue.filter(op => op.type !== type);
-    } else if (dedupeKey) {
-      newQueue = queue.filter(op => !(op.type === type && this._dedupKey(op) === dedupeKey));
+  /**
+   * Add an operation to the sync queue.
+   * Automatically deduplicates save_user, save_roadmap (last write wins).
+   */
+  async enqueue(type: SyncOpType, payload: any): Promise<void> {
+    const queue = await localDB.getSyncQueue();
+
+    // Deduplication: for these types, remove existing ops of the same type
+    const dedupeByType: SyncOpType[] = ['save_user', 'save_roadmap', 'clear_stages', 'clear_mentor'];
+    if (dedupeByType.includes(type)) {
+      // Remove old ops of same type so only latest survives
+      const old = queue.filter(op => op.type === type);
+      for (const op of old) {
+        await localDB.dequeueSyncOp(op.id);
+      }
+    }
+
+    // Dedup save_task by task id
+    if (type === 'save_task' && payload?.id) {
+      const old = queue.find(op => op.type === 'save_task' && op.payload?.id === payload.id);
+      if (old) await localDB.dequeueSyncOp(old.id);
+    }
+
+    // Dedup delete_task by task id
+    if (type === 'delete_task' && payload?.id) {
+      // If we have a pending save_task for the same id, remove it (delete wins)
+      const oldSave = queue.find(op => op.type === 'save_task' && op.payload?.id === payload.id);
+      if (oldSave) await localDB.dequeueSyncOp(oldSave.id);
+    }
+
+    // Dedup delete_mentor_session by session_id
+    if (type === 'delete_mentor_session' && payload?.session_id) {
+      const old = queue.find(op => op.type === 'delete_mentor_session' && op.payload?.session_id === payload.session_id);
+      if (old) await localDB.dequeueSyncOp(old.id);
     }
 
     const op: SyncOperation = {
@@ -106,22 +121,23 @@ class OfflineSyncService {
       retries: 0,
     };
 
-    newQueue.push(op);
-    saveQueue(newQueue);
-    this._emit();
-    console.log(`[OfflineSync] Queued "${type}" — queue size: ${newQueue.length}`);
+    await localDB.enqueueSync(op);
+    await this._emit();
+    console.log(`[OfflineSync] Queued "${type}" — pending: ${await localDB.getSyncQueueCount()}`);
   }
 
-  private _dedupKey(op: SyncOperation): string | null {
-    if (op.type === 'save_task') return op.payload?.id ?? null;
-    if (op.type === 'save_stage') return `${op.payload?.user_id}__${op.payload?.stage_id}`;
-    return null;
+  // ── Execute One (called by dbService for immediate background sync) ──────────
+
+  /** Execute a single operation against Supabase immediately (no queuing). Throws on failure. */
+  async executeOne(type: SyncOpType, payload: any): Promise<void> {
+    await this._executeOp({ id: 'immediate', type, payload, createdAt: '', retries: 0 });
   }
 
-  /** Flush all queued operations to Supabase */
+  // ── Flush All Queued Ops ─────────────────────────────────────────────────────
+
   async flush(): Promise<void> {
     if (this.isFlushing) return;
-    const queue = loadQueue();
+    const queue = await localDB.getSyncQueue();
     if (queue.length === 0) return;
 
     this.isFlushing = true;
@@ -129,33 +145,36 @@ class OfflineSyncService {
 
     let successCount = 0;
     let failCount = 0;
-    const remaining: SyncOperation[] = [];
 
     for (const op of queue) {
       try {
         await this._executeOp(op);
+        await localDB.dequeueSyncOp(op.id);
         successCount++;
         console.log(`[OfflineSync] ✅ "${op.type}" synced`);
       } catch (err: any) {
-        op.retries++;
+        op.retries = (op.retries || 0) + 1;
         if (op.retries < MAX_RETRIES) {
-          remaining.push(op);
+          // Update retry count in queue
+          await localDB.enqueueSync(op);
           failCount++;
           console.warn(`[OfflineSync] ⚠️ "${op.type}" failed (attempt ${op.retries}):`, err?.message);
         } else {
+          // Exhausted retries — drop it
+          await localDB.dequeueSyncOp(op.id);
           console.error(`[OfflineSync] ❌ "${op.type}" dropped after ${MAX_RETRIES} retries`);
         }
       }
     }
 
-    saveQueue(remaining);
-    this._emit();
+    await this._emit();
     this.isFlushing = false;
 
     if (successCount > 0) {
-      const msg = remaining.length > 0
-        ? `☁️ Synced ${successCount} items. ${remaining.length} pending.`
-        : `☁️ All ${successCount} offline changes synced to cloud!`;
+      const pendingCount = await localDB.getSyncQueueCount();
+      const msg = pendingCount > 0
+        ? `☁️ Synced ${successCount} items. ${pendingCount} pending.`
+        : `☁️ All ${successCount} offline changes synced!`;
       if (Capacitor.isNativePlatform()) {
         await Toast.show({ text: msg, duration: 'short' });
       }
@@ -163,73 +182,119 @@ class OfflineSyncService {
     }
   }
 
-  /** Execute a single operation against Supabase */
+  // ── Execute Single Op Against Supabase ────────────────────────────────────────
+
   private async _executeOp(op: SyncOperation): Promise<void> {
-    switch (op.type) {
+    const { type, payload } = op;
+
+    switch (type) {
       case 'save_user': {
-        const { error } = await supabase
+        // Try full schema first, fall back to minimal
+        const { error: fullErr } = await supabase
           .from('users')
-          .upsert(op.payload, { onConflict: 'id' });
-        if (error) throw error;
+          .upsert(payload, { onConflict: 'id' });
+        if (!fullErr) {
+          // Also update settings separately (separate column)
+          if (payload.settings) {
+            await supabase.from('users').update({ settings: payload.settings }).eq('id', payload.id);
+          }
+          return;
+        }
+        // Fallback minimal save
+        const minPayload = {
+          id: payload.id, name: payload.name, email: payload.email,
+          avatar: payload.avatar, branch: payload.branch, year: payload.year,
+          dream: payload.dream, current_stage_index: payload.current_stage_index,
+          onboarding_complete: payload.onboarding_complete, xp: payload.xp,
+          streak: payload.streak, last_sync: payload.last_sync,
+        };
+        const { error: minErr } = await supabase.from('users').upsert(minPayload, { onConflict: 'id' });
+        if (minErr) throw minErr;
         break;
       }
+
       case 'save_task': {
-        const { error } = await supabase
-          .from('tasks')
-          .upsert(op.payload, { onConflict: 'id' });
+        const { error } = await supabase.from('tasks').upsert(payload, { onConflict: 'id' });
         if (error) throw error;
         break;
       }
+
       case 'delete_task': {
-        const { error } = await supabase
-          .from('tasks')
-          .delete()
-          .eq('id', op.payload.id);
+        const { error } = await supabase.from('tasks').delete().eq('id', payload.id);
         if (error) throw error;
         break;
       }
+
       case 'save_stage': {
-        const { error } = await supabase
-          .from('completed_stages')
-          .insert(op.payload);
-        // Ignore duplicate key errors (stage already saved)
-        if (error && error.code !== '23505') throw error;
+        const { error } = await supabase.from('completed_stages').insert(payload);
+        if (error && error.code !== '23505') throw error; // ignore duplicates
         break;
       }
-      case 'save_roadmap': {
-        const { error } = await supabase
-          .from('roadmaps')
-          .upsert(op.payload, { onConflict: 'user_id' });
+
+      case 'clear_stages': {
+        const { error } = await supabase.from('completed_stages').delete().eq('user_id', payload.user_id);
         if (error) throw error;
         break;
       }
-      case 'save_mentor_msg': {
-        const { error } = await supabase
-          .from('mentor_messages')
-          .insert(op.payload);
-        // Ignore unique constraint violations (message already saved)
-        if (error && error.code !== '23505') throw error;
+
+      case 'save_roadmap': {
+        const { error } = await supabase.from('roadmaps').upsert(payload, { onConflict: 'user_id' });
+        if (error) throw error;
         break;
       }
+
+      case 'save_mentor_msg': {
+        const { error } = await supabase.from('mentor_messages').insert(payload);
+        if (error && error.code !== '23505') throw error; // ignore duplicates
+        break;
+      }
+
+      case 'clear_mentor': {
+        const { error } = await supabase.from('mentor_messages').delete().eq('user_id', payload.user_id);
+        if (error) throw error;
+        break;
+      }
+
+      case 'delete_mentor_session': {
+        const { error } = await supabase.from('mentor_messages')
+          .delete()
+          .eq('user_id', payload.user_id)
+          .eq('session_id', payload.session_id);
+        if (error) throw error;
+        break;
+      }
+
+      case 'save_reward': {
+        const { error } = await supabase.from('users')
+          .update({ rewards: payload.rewards })
+          .eq('id', payload.user_id);
+        if (error) throw error;
+        break;
+      }
+
       default:
         console.warn('[OfflineSync] Unknown operation type:', (op as any).type);
     }
   }
 
-  /** Listen for network restoration and auto-flush */
+  // ── Network Listener ─────────────────────────────────────────────────────────
+
   private _startNetworkListener(): void {
     if (Capacitor.isNativePlatform()) {
       Network.addListener('networkStatusChange', async (status) => {
-        if (status.connected && this.getPendingCount() > 0) {
-          console.log('[OfflineSync] Network restored — auto-flushing queue...');
-          // Small delay to let the connection stabilize
-          await new Promise(r => setTimeout(r, 1500));
-          await this.flush();
+        if (status.connected) {
+          const pending = await localDB.getSyncQueueCount();
+          if (pending > 0) {
+            console.log('[OfflineSync] Network restored — auto-flushing queue...');
+            await new Promise(r => setTimeout(r, 1500)); // let connection stabilize
+            await this.flush();
+          }
         }
       });
     } else {
       window.addEventListener('online', async () => {
-        if (this.getPendingCount() > 0) {
+        const pending = await localDB.getSyncQueueCount();
+        if (pending > 0) {
           console.log('[OfflineSync] Browser online — auto-flushing queue...');
           await new Promise(r => setTimeout(r, 1000));
           await this.flush();
@@ -237,7 +302,24 @@ class OfflineSyncService {
       });
     }
   }
+
+  // ── Legacy Migration ─────────────────────────────────────────────────────────
+
+  private async _migrateLegacyQueue(): Promise<void> {
+    try {
+      const legacyRaw = localStorage.getItem('ks_offline_sync_queue');
+      if (!legacyRaw) return;
+      const legacyOps = JSON.parse(legacyRaw);
+      if (Array.isArray(legacyOps) && legacyOps.length > 0) {
+        await localDB.putMany('sync_queue', legacyOps);
+        localStorage.removeItem('ks_offline_sync_queue');
+        console.log(`[OfflineSync] Migrated ${legacyOps.length} legacy ops from localStorage`);
+      }
+    } catch (e) {
+      // Non-fatal
+    }
+  }
 }
 
-// ── Singleton export ───────────────────────────────────────────────────────────
+// ── Singleton Export ──────────────────────────────────────────────────────────
 export const offlineSyncService = new OfflineSyncService();
