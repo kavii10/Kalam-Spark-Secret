@@ -459,7 +459,7 @@ function ResourceActions({ item, roadmap, onUpdate, inStack = false }: { item: a
         <Plus size={16} />
       </button>
       {open && (
-        <div className="absolute top-full right-0 mt-2 w-48 rounded-xl p-1 bg-[#1a1423] border border-gold-500/20 shadow-2xl flex flex-col gap-1 z-20 popover-menu">
+        <div className="absolute top-full right-0 mt-2 w-52 rounded-xl p-1.5 bg-[#1a1423] border border-gold-500/20 shadow-2xl flex flex-col gap-1 z-20 popover-menu">
           <button 
             onClick={(e) => { e.preventDefault(); toggleWatchLater(); }}
             className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/5 text-sm text-gold-200 text-left"
@@ -481,18 +481,18 @@ function ResourceActions({ item, roadmap, onUpdate, inStack = false }: { item: a
             <div className="p-2 space-y-2">
                <p className="text-xs text-gold-500/50 mb-1">Select Playlist:</p>
                {roadmap.playlists?.map(pl => (
-                 <button key={pl.id} onClick={(e) => { e.preventDefault(); addToPlaylist(pl.id); }} className="block w-full text-left text-xs px-2 py-1.5 hover:bg-white/10 rounded">{pl.name}</button>
+                 <button key={pl.id} onClick={(e) => { e.preventDefault(); addToPlaylist(pl.id); }} className="block w-full text-left text-xs px-2 py-1.5 hover:bg-white/10 rounded truncate" title={pl.name}>{pl.name}</button>
                ))}
-               <div className="flex gap-1 mt-2">
+               <div className="flex items-center gap-1 mt-2 w-full">
                  <input 
                    type="text" 
                    placeholder="New playlist..." 
                    value={newPlName} 
                    onChange={e => setNewPlName(e.target.value)}
                    onClick={e => e.preventDefault()}
-                   className="flex-1 bg-black/20 text-xs text-gold-200 px-2 py-1 rounded border border-white/10 outline-none"
+                   className="flex-1 min-w-0 bg-black/20 text-xs text-gold-200 px-2 py-1 rounded border border-white/10 outline-none"
                  />
-                 <button onClick={(e) => { e.preventDefault(); createPlaylist(); }} className="px-2 py-1 bg-purple-500/20 text-purple-400 rounded hover:bg-purple-500/30">
+                 <button onClick={(e) => { e.preventDefault(); createPlaylist(); }} className="px-2 py-1 bg-purple-500/20 text-purple-400 rounded hover:bg-purple-500/30 shrink-0">
                    <Check size={12} />
                  </button>
                </div>
