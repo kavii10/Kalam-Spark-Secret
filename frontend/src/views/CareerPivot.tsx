@@ -34,6 +34,7 @@ function ConfirmModal({
   onCancel: () => void;
   isLight?: boolean;
 }) {
+  const isLightMode = isLight ?? document.documentElement.classList.contains('light');
   return (
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
@@ -42,13 +43,13 @@ function ConfirmModal({
       <div
         className="w-full max-w-sm rounded-2xl p-7 flex flex-col gap-5 relative confirm-modal-content"
         style={{
-          background: isLight 
+          background: isLightMode 
             ? '#ffffff' 
             : 'linear-gradient(135deg, rgba(15,8,35,0.98) 0%, rgba(25,12,50,0.98) 100%)',
-          border: isLight 
+          border: isLightMode 
             ? '1px solid #e2e8f0' 
             : '1px solid rgba(139,92,246,0.4)',
-          boxShadow: isLight 
+          boxShadow: isLightMode 
             ? '0 10px 40px rgba(0,0,0,0.06), 0 20px 50px rgba(0,0,0,0.08)' 
             : '0 0 60px rgba(139,92,246,0.2), 0 24px 60px rgba(0,0,0,0.6)',
           animation: 'confirmIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both',
@@ -59,11 +60,11 @@ function ConfirmModal({
           <div
             className="w-14 h-14 rounded-2xl flex items-center justify-center"
             style={{ 
-              background: isLight ? 'rgba(245,158,11,0.1)' : 'rgba(245,158,11,0.12)', 
-              border: isLight ? '1px solid rgba(245,158,11,0.2)' : '1px solid rgba(245,158,11,0.35)' 
+              background: isLightMode ? 'rgba(245,158,11,0.1)' : 'rgba(245,158,11,0.12)', 
+              border: isLightMode ? '1px solid rgba(245,158,11,0.2)' : '1px solid rgba(245,158,11,0.35)' 
             }}
           >
-            <AlertTriangle size={26} className={isLight ? "text-amber-600" : "text-amber-400"} />
+            <AlertTriangle size={26} className={isLightMode ? "text-amber-600" : "text-amber-400"} />
           </div>
         </div>
         {/* Text */}
@@ -77,9 +78,9 @@ function ConfirmModal({
             onClick={onCancel}
             className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all"
             style={{ 
-              background: isLight ? '#f1f5f9' : 'rgba(255,255,255,0.05)', 
-              border: isLight ? '1px solid #cbd5e1' : '1px solid rgba(255,255,255,0.1)', 
-              color: isLight ? '#475569' : '#9ca3af' 
+              background: isLightMode ? '#f1f5f9' : 'rgba(255,255,255,0.05)', 
+              border: isLightMode ? '1px solid #cbd5e1' : '1px solid rgba(255,255,255,0.1)', 
+              color: isLightMode ? '#475569' : '#9ca3af' 
             }}
           >
             Cancel

@@ -899,6 +899,10 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
   const [podcastLang, setPodcastLang]   = useState(() => getCurrentLang() || 'en');
   const [langDropdownOpen, setLangDropdownOpen] = useState(false);
   const [langSearchQuery, setLangSearchQuery] = useState('');
+  const [host1VoiceOpen, setHost1VoiceOpen] = useState(false);
+  const [host2VoiceOpen, setHost2VoiceOpen] = useState(false);
+  const [podcastToneOpen, setPodcastToneOpen] = useState(false);
+  const [podcastLengthOpen, setPodcastLengthOpen] = useState(false);
   const [detectingLang, setDetectingLang] = useState(false);
   const [detectedLangInfo, setDetectedLangInfo] = useState<string | null>(null);
   const [generatingPodcast, setGeneratingPodcast] = useState(false);
@@ -2072,39 +2076,202 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
+                      {/* Host 1 Name & Voice */}
+                      <div className="space-y-1.5 relative">
                         <label className={`text-[11px] uppercase tracking-wider block ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>Host 1 Name</label>
                         <input value={host1Name} onChange={e => setHost1Name(e.target.value)}
                           className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-500/40 ${isLight ? 'bg-white border-zinc-300 text-zinc-800' : 'bg-zinc-800 border-zinc-700 text-white'}`} />
-                        <select value={host1Voice} onChange={e => setHost1Voice(e.target.value)} className={SELECT_CLS}>
-                          {VOICES.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
-                        </select>
+                        
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setHost1VoiceOpen(!host1VoiceOpen);
+                              setHost2VoiceOpen(false);
+                              setPodcastToneOpen(false);
+                              setPodcastLengthOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between border rounded-lg px-3 py-2 text-sm transition-all focus:outline-none focus:border-violet-500/40 ${isLight ? 'bg-white border-zinc-300 text-zinc-800' : 'bg-zinc-800 border-zinc-700 text-zinc-200'}`}
+                          >
+                            <span className="truncate">{VOICES.find(v => v.value === host1Voice)?.label || host1Voice}</span>
+                            <span className="text-zinc-500 ml-1 text-xs">▼</span>
+                          </button>
+                          
+                          {host1VoiceOpen && (
+                            <div className={`absolute top-full left-0 right-0 mt-1.5 border rounded-xl shadow-2xl z-50 overflow-hidden ${isLight ? 'bg-white border-zinc-200' : 'bg-zinc-800 border-zinc-700'}`}>
+                              <div className="max-h-56 overflow-y-auto no-scrollbar">
+                                {VOICES.map(v => {
+                                  const selected = host1Voice === v.value;
+                                  return (
+                                    <button
+                                      type="button"
+                                      key={v.value}
+                                      onClick={() => {
+                                        setHost1Voice(v.value);
+                                        setHost1VoiceOpen(false);
+                                      }}
+                                      className={`w-full flex items-center justify-between px-3 py-2 text-xs transition-colors hover:bg-violet-500/10 text-left ${selected ? 'bg-violet-500/20 text-violet-600 dark:text-violet-400 font-semibold' : isLight ? 'text-zinc-700' : 'text-zinc-300'}`}
+                                    >
+                                      <span>{v.label}</span>
+                                      <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ml-2 ${selected ? 'border-violet-500' : 'border-zinc-400'}`}>
+                                        {selected && <div className="w-1.5 h-1.5 rounded-full bg-violet-500" />}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="space-y-1.5">
+
+                      {/* Host 2 Name & Voice */}
+                      <div className="space-y-1.5 relative">
                         <label className={`text-[11px] uppercase tracking-wider block ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>Host 2 Name</label>
                         <input value={host2Name} onChange={e => setHost2Name(e.target.value)}
                           className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-500/40 ${isLight ? 'bg-white border-zinc-300 text-zinc-800' : 'bg-zinc-800 border-zinc-700 text-white'}`} />
-                        <select value={host2Voice} onChange={e => setHost2Voice(e.target.value)} className={SELECT_CLS}>
-                          {VOICES.map(v => <option key={v.value} value={v.value}>{v.label}</option>)}
-                        </select>
+                        
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setHost2VoiceOpen(!host2VoiceOpen);
+                              setHost1VoiceOpen(false);
+                              setPodcastToneOpen(false);
+                              setPodcastLengthOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between border rounded-lg px-3 py-2 text-sm transition-all focus:outline-none focus:border-violet-500/40 ${isLight ? 'bg-white border-zinc-300 text-zinc-800' : 'bg-zinc-800 border-zinc-700 text-zinc-200'}`}
+                          >
+                            <span className="truncate">{VOICES.find(v => v.value === host2Voice)?.label || host2Voice}</span>
+                            <span className="text-zinc-500 ml-1 text-xs">▼</span>
+                          </button>
+                          
+                          {host2VoiceOpen && (
+                            <div className={`absolute top-full left-0 right-0 mt-1.5 border rounded-xl shadow-2xl z-50 overflow-hidden ${isLight ? 'bg-white border-zinc-200' : 'bg-zinc-800 border-zinc-700'}`}>
+                              <div className="max-h-56 overflow-y-auto no-scrollbar">
+                                {VOICES.map(v => {
+                                  const selected = host2Voice === v.value;
+                                  return (
+                                    <button
+                                      type="button"
+                                      key={v.value}
+                                      onClick={() => {
+                                        setHost2Voice(v.value);
+                                        setHost2VoiceOpen(false);
+                                      }}
+                                      className={`w-full flex items-center justify-between px-3 py-2 text-xs transition-colors hover:bg-violet-500/10 text-left ${selected ? 'bg-violet-500/20 text-violet-600 dark:text-violet-400 font-semibold' : isLight ? 'text-zinc-700' : 'text-zinc-300'}`}
+                                    >
+                                      <span>{v.label}</span>
+                                      <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ml-2 ${selected ? 'border-violet-500' : 'border-zinc-400'}`}>
+                                        {selected && <div className="w-1.5 h-1.5 rounded-full bg-violet-500" />}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
+
                     <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className={`text-[11px] uppercase tracking-wider mb-1.5 block ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>Tone</label>
-                        <select value={podcastTone} onChange={e => setPodcastTone(e.target.value)} className={SELECT_CLS}>
-                          {['educational and engaging','casual and conversational','academic and formal','debate style','storytelling'].map(t => (
-                            <option key={t} value={t}>{t}</option>
-                          ))}
-                        </select>
+                      {/* Tone */}
+                      <div className="space-y-1.5 relative">
+                        <label className={`text-[11px] uppercase tracking-wider block ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>Tone</label>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPodcastToneOpen(!podcastToneOpen);
+                              setHost1VoiceOpen(false);
+                              setHost2VoiceOpen(false);
+                              setPodcastLengthOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between border rounded-lg px-3 py-2 text-sm transition-all focus:outline-none focus:border-violet-500/40 ${isLight ? 'bg-white border-zinc-300 text-zinc-800' : 'bg-zinc-800 border-zinc-700 text-zinc-200'}`}
+                          >
+                            <span className="truncate">{podcastTone}</span>
+                            <span className="text-zinc-500 ml-1 text-xs">▼</span>
+                          </button>
+                          
+                          {podcastToneOpen && (
+                            <div className={`absolute top-full left-0 right-0 mt-1.5 border rounded-xl shadow-2xl z-50 overflow-hidden ${isLight ? 'bg-white border-zinc-200' : 'bg-zinc-800 border-zinc-700'}`}>
+                              <div className="max-h-56 overflow-y-auto no-scrollbar">
+                                {['educational and engaging','casual and conversational','academic and formal','debate style','storytelling'].map(t => {
+                                  const selected = podcastTone === t;
+                                  return (
+                                    <button
+                                      type="button"
+                                      key={t}
+                                      onClick={() => {
+                                        setPodcastTone(t);
+                                        setPodcastToneOpen(false);
+                                      }}
+                                      className={`w-full flex items-center justify-between px-3 py-2 text-xs transition-colors hover:bg-violet-500/10 text-left ${selected ? 'bg-violet-500/20 text-violet-600 dark:text-violet-400 font-semibold' : isLight ? 'text-zinc-700' : 'text-zinc-300'}`}
+                                    >
+                                      <span>{t}</span>
+                                      <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ml-2 ${selected ? 'border-violet-500' : 'border-zinc-400'}`}>
+                                        {selected && <div className="w-1.5 h-1.5 rounded-full bg-violet-500" />}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div>
-                        <label className={`text-[11px] uppercase tracking-wider mb-1.5 block ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>Length</label>
-                        <select value={podcastLength} onChange={e => setPodcastLength(e.target.value)} className={SELECT_CLS}>
-                          <option value="short">Short (~3 min)</option>
-                          <option value="medium">Medium (~6 min)</option>
-                          <option value="long">Long (~12 min)</option>
-                        </select>
+
+                      {/* Length */}
+                      <div className="space-y-1.5 relative">
+                        <label className={`text-[11px] uppercase tracking-wider block ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>Length</label>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPodcastLengthOpen(!podcastLengthOpen);
+                              setHost1VoiceOpen(false);
+                              setHost2VoiceOpen(false);
+                              setPodcastToneOpen(false);
+                            }}
+                            className={`w-full flex items-center justify-between border rounded-lg px-3 py-2 text-sm transition-all focus:outline-none focus:border-violet-500/40 ${isLight ? 'bg-white border-zinc-300 text-zinc-800' : 'bg-zinc-800 border-zinc-700 text-zinc-200'}`}
+                          >
+                            <span className="truncate">
+                              {podcastLength === 'short' ? 'Short (~3 min)' : podcastLength === 'medium' ? 'Medium (~6 min)' : 'Long (~12 min)'}
+                            </span>
+                            <span className="text-zinc-500 ml-1 text-xs">▼</span>
+                          </button>
+                          
+                          {podcastLengthOpen && (
+                            <div className={`absolute top-full left-0 right-0 mt-1.5 border rounded-xl shadow-2xl z-50 overflow-hidden ${isLight ? 'bg-white border-zinc-200' : 'bg-zinc-800 border-zinc-700'}`}>
+                              <div className="max-h-56 overflow-y-auto no-scrollbar">
+                                {[
+                                  { value: 'short', label: 'Short (~3 min)' },
+                                  { value: 'medium', label: 'Medium (~6 min)' },
+                                  { value: 'long', label: 'Long (~12 min)' }
+                                ].map(l => {
+                                  const selected = podcastLength === l.value;
+                                  return (
+                                    <button
+                                      type="button"
+                                      key={l.value}
+                                      onClick={() => {
+                                        setPodcastLength(l.value);
+                                        setPodcastLengthOpen(false);
+                                      }}
+                                      className={`w-full flex items-center justify-between px-3 py-2 text-xs transition-colors hover:bg-violet-500/10 text-left ${selected ? 'bg-violet-500/20 text-violet-600 dark:text-violet-400 font-semibold' : isLight ? 'text-zinc-700' : 'text-zinc-300'}`}
+                                    >
+                                      <span>{l.label}</span>
+                                      <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ml-2 ${selected ? 'border-violet-500' : 'border-zinc-400'}`}>
+                                        {selected && <div className="w-1.5 h-1.5 rounded-full bg-violet-500" />}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <button onClick={handleGeneratePodcast} disabled={generatingPodcast || !podcastTopic.trim()}
