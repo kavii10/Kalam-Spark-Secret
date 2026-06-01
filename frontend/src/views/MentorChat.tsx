@@ -199,71 +199,69 @@ async function callLocalMentor(
     }
 
     try {
-      // ── System prompt: directive and question-specific ──
-      // Key: explicitly tell the model WHAT the question is and to answer it DIRECTLY.
-      // This prevents small quantized models from falling into generic template patterns.
-      const systemInstruction = [
-        `You are a helpful AI career mentor named Kalam Spark.`,
-        `Student: ${user.name || 'Student'}`,
-        `Dream: ${user.dream || 'a successful career'}`,
-        `Field: ${user.branch || 'general studies'}, ${user.year || 'student'}`,
-        ``,
-        `RULES:`,
-        `- Answer the student's question DIRECTLY and SPECIFICALLY. Do not give generic advice.`,
-        `- DO NOT start your reply with "Offline Mode", "Local Gemma", "🔋", or any prefix label.`,
-        `- DO NOT use a bullet-point list template. Give a natural conversational reply.`,
-        `- Keep the answer focused on what the student actually asked.`,
-        `- 2-3 short paragraphs maximum. Be concise and helpful.`,
-        `- Use **bold** only for key terms.`,
-      ].join('\n');
+      // ── Gemma IT Chat Template Format ──
+      // Gemma instruction-tuned models REQUIRE the <start_of_turn> tokens to work correctly.
+      // Without these tokens, small Q2_K models ignore RULES and generate self-introductions.
+      // We build the ENTIRE prompt in Gemma IT format and pass empty systemInstruction.
+      //
+      // Format: <start_of_turn>user\n{message}<end_of_turn>\n<start_of_turn>model\n{response}
 
-      // ── Build conversation history ──
-      // Strip "🔋 Offline Mode", "Local Gemma", and similar prefixes from previous AI messages
-      // so the model does NOT mimic those patterns in its next response.
-      const cleanHistory = messages
-        .slice(1) // skip welcome message
-        .slice(-10) // only last 10 messages for context window efficiency
+      // Build clean conversation history in Gemma IT format
+      const historyTurns = messages
+        .slice(1)       // skip the welcome message
+        .slice(-8)      // keep last 8 messages to save context window
         .map(m => {
-          const role = m.role === 'ai' ? 'Assistant' : 'User';
-          // Remove any offline-mode prefix patterns that the model might copy
-          let text = m.text
-            .replace(/^🔋\s*\w[^:]*:\s*/u, '') // removes "🔋 Offline Mode (Local Gemma 4):" etc.
-            .replace(/^(Offline Mode|Local Gemma|Kalam Spark Offline Mentor)[^:]*:\s*/i, '')
+          // Strip any offline-mode prefix patterns from previous AI responses
+          const text = m.text
+            .replace(/^[\p{Emoji}]\s*[\w\s()/]+:\s*/u, '')
+            .replace(/^(Hello!?\s*[\p{Emoji}]?\s*I'm Kalam Spark[^\n]*\n?)/u, '')
             .trim();
-          return `${role}: ${text}`;
+          if (m.role === 'ai') {
+            return `<start_of_turn>model\n${text}<end_of_turn>`;
+          } else {
+            return `<start_of_turn>user\n${text}<end_of_turn>`;
+          }
         })
         .join('\n');
 
-      // ── Final prompt: put the question at the END so it's the last thing the model sees ──
-      const prompt = cleanHistory
-        ? `${cleanHistory}\nUser: ${userText}\nAssistant:`
-        : `User: ${userText}\nAssistant:`;
+      // Context injected as part of the user turn — NOT as a system role
+      // Small models respond better when context is inline with the question
+      const contextLine = [
+        `[Context: You are a career mentor. Student dream: ${user.dream || 'a career'}. Field: ${user.branch || 'general studies'}.]`,
+        `Answer this question directly and specifically. Do not introduce yourself. Do not greet. Just answer:`,
+        `"${userText}"`,
+      ].join('\n');
 
-      const reply = await llamaPlugin.getCompletion(prompt, systemInstruction);
+      // Final prompt in Gemma IT format — the model MUST respond in the model turn slot
+      const gemmaPrompt = historyTurns
+        ? `${historyTurns}\n<start_of_turn>user\n${contextLine}<end_of_turn>\n<start_of_turn>model\n`
+        : `<start_of_turn>user\n${contextLine}<end_of_turn>\n<start_of_turn>model\n`;
+
+      // Pass empty systemInstruction — context is already embedded in the user turn above
+      const reply = await llamaPlugin.getCompletion(gemmaPrompt, '');
 
       if (reply && reply.trim()) {
-        // Strip any prefix the model might still output (safety net)
+        // Strip any leftover intro the model might still generate (safety net)
         const cleaned = reply
-          .replace(/^🔋\s*\w[^:]*:\s*/u, '')
-          .replace(/^(Offline Mode|Local Gemma|Kalam Spark Offline Mentor)[^:]*:\s*/i, '')
+          .replace(/^Hello!?\s*[\p{Emoji}]?\s*I'm Kalam Spark[^\n]*\n?/u, '')
+          .replace(/<end_of_turn>/g, '')
+          .replace(/<start_of_turn>\w+/g, '')
           .trim();
-        return cleaned || reply;
+        return cleaned || reply.trim();
       }
     } catch (e: any) {
       console.error('[MentorChat] Local model inference failed:', e);
-      // Show the REAL error — not a fake answer.
-      // This tells the user what's actually wrong instead of pretending to answer.
       const errMsg = e?.message || String(e) || 'Unknown error';
       const isModelMissing = errMsg.toLowerCase().includes('not found') || errMsg.toLowerCase().includes('load');
       if (isModelMissing) {
-        return `⚠️ **Local AI model not found.** Place the file \`google_gemma-4-E2B-it-Q2_K.gguf\` in your phone's **Downloads** folder, then try again.`;
+        return `⚠️ **Local AI model not found.**\n\nCopy \`google_gemma-4-E2B-it-Q2_K.gguf\` from your PC to your **Android phone's Downloads folder**, then restart the app.`;
       }
-      return `⚠️ **Local AI error:** ${errMsg}\n\nTry restarting the app or re-loading the model file from Settings.`;
+      return `⚠️ **Local AI error:** ${errMsg}\n\nTry restarting the app. If the problem persists, re-copy the model file to your phone's Downloads folder.`;
     }
   }
 
   // No local model available and no internet
-  return `⚠️ **You are offline** and no local AI model is loaded.\n\nTo use the mentor offline:\n1. Download the Gemma model file from Settings\n2. Place it in your Downloads folder\n3. The app will load it automatically next time`;
+  return `⚠️ **You are offline** and no local AI model is loaded.\n\nTo use the mentor offline:\n1. Copy \`google_gemma-4-E2B-it-Q2_K.gguf\` from your PC to your phone's **Downloads** folder\n2. Restart the app — it will load automatically`;
 }
 
 
@@ -991,12 +989,20 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
                 disabled={(!input.trim() && !attachment) || isTyping}
                 className={`w-[48px] h-[48px] shrink-0 rounded-2xl flex items-center justify-center transition-all ${
                   (input.trim() || attachment) && !isTyping 
-                    ? 'bg-violet-600 text-white shadow-lg shadow-violet-900/40 hover:bg-violet-500 hover:scale-[1.02] active:scale-95' 
-                    : 'bg-zinc-800 text-zinc-600'
+                    ? 'bg-violet-600 shadow-lg shadow-violet-900/40 hover:bg-violet-500 hover:scale-[1.02] active:scale-95' 
+                    : 'bg-zinc-800'
                 }`}
                 title="Send message"
               >
-                {isTyping ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} className={(input.trim() || attachment) && !isTyping ? "ml-0.5" : ""} />}
+                {isTyping
+                  ? <Loader2 size={20} className="animate-spin" color="white" />
+                  : <Send
+                      size={20}
+                      color={(input.trim() || attachment) && !isTyping ? '#ffffff' : '#52525b'}
+                      strokeWidth={2.5}
+                      style={{ marginLeft: (input.trim() || attachment) && !isTyping ? '2px' : '0' }}
+                    />
+                }
               </button>
             </div>
           </div>
