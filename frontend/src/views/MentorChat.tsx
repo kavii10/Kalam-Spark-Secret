@@ -567,6 +567,31 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
 
   return (
     <div className={`h-[calc(100vh-8rem)] flex relative mentor-container rounded-2xl overflow-hidden border ${isLight ? 'border-zinc-200 bg-white' : 'border-zinc-800/60 bg-zinc-950/40'}`}>
+      <style>{`
+        .mentor-session-dropdown {
+          background-color: ${isLight ? '#ffffff' : '#18181b'} !important;
+          background: ${isLight ? '#ffffff' : '#18181b'} !important;
+          opacity: 1 !important;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
+          isolation: isolate !important;
+          z-index: 10000 !important;
+        }
+        .mentor-session-dropdown button {
+          opacity: 1 !important;
+          color: ${isLight ? '#374151' : '#e4e4e7'} !important;
+          background: transparent !important;
+        }
+        .mentor-session-dropdown button:hover {
+          background-color: ${isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.08)'} !important;
+        }
+        .mentor-session-dropdown .text-red-400 {
+          color: #f87171 !important;
+        }
+        .mentor-session-dropdown .text-red-400:hover {
+          background-color: rgba(239, 68, 68, 0.1) !important;
+        }
+      `}</style>
       
       {/* Backdrop overlay (Mobile & Desktop) */}
       {showSidebar && (
@@ -657,10 +682,16 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
 
                   {menuOpenSessionId === s.sessionId && (
                     <div 
-                      className={`absolute right-0 top-full mt-1 w-36 py-1 rounded-xl shadow-xl z-[100] border ${
+                      className={`absolute right-0 top-full mt-1 w-36 py-1 rounded-xl shadow-xl z-[100] border mentor-session-dropdown ${
                         isLight ? 'bg-white border-zinc-200 shadow-black/5' : 'bg-zinc-950 border-zinc-800 shadow-black/40'
                       }`}
-                      style={{ backgroundColor: isLight ? '#ffffff' : '#18181b', opacity: 1 }}
+                      style={{
+                        backgroundColor: isLight ? '#ffffff' : '#18181b',
+                        opacity: 1,
+                        backdropFilter: 'none',
+                        WebkitBackdropFilter: 'none',
+                        isolation: 'isolate'
+                      }}
                       onClick={e => e.stopPropagation()}
                     >
                       <button
