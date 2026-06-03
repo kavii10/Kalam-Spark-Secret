@@ -119,9 +119,12 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
     if (!cached || dreamMismatch || stageMismatch || sparseCache) {
       try {
         console.log('[Planner] Fetching fresh resources for task allocation...');
+        const primarySubject = (stage?.subjects && stage.subjects.length > 0)
+          ? stage.subjects[0]
+          : (stage?.title || user.dream);
         const fetched = await fetchDirectResources(
           user.dream,
-          stage?.title || user.dream,
+          primarySubject,
           stage?.subjects || [],
           user.year
         );

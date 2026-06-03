@@ -639,8 +639,11 @@ export default function Resources({ user }: { user: UserProfile }) {
         const isOnline = networkService.isOnline();
         if (isOnline) {
           try {
+            const primaryQueryTerm = (stage.subjects && stage.subjects.length > 0)
+              ? stage.subjects[0]
+              : stage.title;
             const fetched = await fetchDirectResources(
-              currentUser.dream, stage.title, stage.subjects || [], currentUser.year
+              currentUser.dream, primaryQueryTerm, stage.subjects || [], currentUser.year
             );
             // Sort resources so stage-subject matches appear first
             const stageSubjectsLower = (stage.subjects || []).map((s: string) => s.toLowerCase());

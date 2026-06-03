@@ -909,8 +909,10 @@ export async function fetchDirectResources(
   const cleanTopic   = cleanQueryTerm(stageTopic);
   const cleanSubjects = subjects.slice(0, 3).map(cleanQueryTerm).filter(Boolean);
 
-  // Unique query pool: topic first, then each subject, then just the career name
-  const queryPool = [...new Set([cleanTopic, ...cleanSubjects, cleanDream])].filter(Boolean);
+  // Unique query pool: subjects/concepts first, then the career name, and only use stage title (topic) as a fallback
+  const queryPool = cleanSubjects.length > 0 
+    ? [...new Set([...cleanSubjects, cleanDream, cleanTopic])].filter(Boolean)
+    : [...new Set([cleanTopic, cleanDream])].filter(Boolean);
 
   // ── Books: fetch from top 2 queries in parallel to ensure 10+ results ────
   const bookFetches = queryPool.slice(0, 2).map(q => fetchBooks(q, 12, 0));
@@ -928,14 +930,15 @@ export async function fetchDirectResources(
     }
   }
 
-  // ── Videos: use the primary topic query, request 20 so after filtering we have 10 ──
-  const videoQuery = `${cleanTopic} ${cleanDream} tutorial learn`.trim();
+  // ── Videos: use the primary subject query if available, otherwise topic ──
+  const primarySubject = cleanSubjects[0] || cleanTopic;
+  const videoQuery = `${primarySubject} ${cleanDream} tutorial learn`.trim();
 
-  // ── Papers: use the first clean subject, cap at 10 ────────────────────────
-  const paperQuery = `${cleanTopic} ${cleanDream}`.trim();
+  // ── Papers: use primary subject query if available, otherwise topic ──
+  const paperQuery = `${primarySubject} ${cleanDream}`.trim();
 
-  // ── News: use the career name for relevance ───────────────────────────────
-  const newsQuery = `${cleanDream} ${cleanTopic}`.trim();
+  // ── News: use career name + primary subject if available, otherwise topic ──
+  const newsQuery = `${cleanDream} ${primarySubject}`.trim();
 
   const [videos, papers, news] = await Promise.allSettled([
     fetchVideos(videoQuery, 20),
