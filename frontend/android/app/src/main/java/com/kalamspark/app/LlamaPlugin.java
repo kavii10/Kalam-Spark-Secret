@@ -921,4 +921,15 @@ public class LlamaPlugin extends Plugin {
         }
         return false;
     }
+
+    // ── Helper: Check if the target career matches civil service/UPSC prep ──
+    private boolean isUpscCareer(String career) {
+        if (career == null) return false;
+        String cLower = career.toLowerCase();
+        return cLower.contains("upsc") || cLower.contains("ias") || 
+               cLower.contains("ips") || cLower.contains("ifs") || 
+               cLower.contains("civil service") || cLower.contains("public service") ||
+               cLower.contains("irs") || cLower.contains("collector") ||
+               cLower.contains("district magistrate") || cLower.contains("admin");
+    }
 }
