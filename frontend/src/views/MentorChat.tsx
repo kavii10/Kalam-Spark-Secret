@@ -522,10 +522,14 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
             const fallback = new SpeechSynthesisUtterance(text.replace(/[*_#`]/g, ''));
             fallback.lang = utterance.lang;
             fallback.onend = () => setSpeakingIdx(null);
-            fallback.onerror = () => setSpeakingIdx(null);
+            fallback.onerror = () => {
+              setSpeakingIdx(null);
+              alert("Speech Synthesis (Read Aloud) failed. Please check if your system volume is turned up, an audio output device is connected, and Speech/TTS voices are installed in your OS settings.");
+            };
             window.speechSynthesis.speak(fallback);
           } else {
             setSpeakingIdx(null);
+            alert("Speech Synthesis (Read Aloud) failed. Please check if your system volume is turned up, an audio output device is connected, and Speech/TTS voices are installed in your OS settings.");
           }
         };
         window.speechSynthesis.speak(utterance);

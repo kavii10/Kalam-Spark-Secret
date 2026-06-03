@@ -106,6 +106,7 @@ def get_roadmapsh_slug(dream: str) -> Optional[str]:
 def get_crawl_urls(dream: str, branch: str) -> list[str]:
     """Build a prioritized list of URLs to crawl for a given dream career."""
     urls: list[str] = []
+    dream_clean = dream.strip().lower()
 
     # 1. roadmap.sh — best structured career content
     slug = get_roadmapsh_slug(dream)
@@ -113,8 +114,24 @@ def get_crawl_urls(dream: str, branch: str) -> list[str]:
         urls.append(f"https://roadmap.sh/{slug}")
 
     # 2. Wikipedia — reliable career descriptions & skills
-    wiki_title = dream.strip().replace(" ", "_")
-    urls.append(f"https://en.wikipedia.org/wiki/{wiki_title}")
+    # Map ambiguous career names to specific Wikipedia articles
+    wiki_mapping = {
+        "doctor": "Physician",
+        "medical doctor": "Physician",
+        "gp": "General_practitioner",
+        "physician": "Physician",
+        "surgeon": "Surgeon",
+        "dentist": "Dentist",
+        "nurse": "Nursing",
+        "lawyer": "Lawyer",
+        "advocate": "Advocate",
+    }
+    
+    wiki_term = wiki_mapping.get(dream_clean)
+    if not wiki_term:
+        wiki_term = dream.strip().replace(" ", "_")
+        
+    urls.append(f"https://en.wikipedia.org/wiki/{wiki_term}")
 
     # 3. GeeksForGeeks "How to become" article (great for tech)
     gfg_title = dream.strip().lower().replace(" ", "-")

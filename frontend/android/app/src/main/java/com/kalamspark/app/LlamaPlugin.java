@@ -633,12 +633,22 @@ public class LlamaPlugin extends Plugin {
 
         // 1. Greetings — exact word matching only, NOT contains("yo") which hits "you"
         if (isGreeting(qLower)) {
-            return "Hello! I'm Kalam Spark, your offline AI mentor. Ask me about History, Geography, Polity, Economy, Maths, Science, or UPSC strategy - all available offline! What would you like to learn?";
+            boolean isUpsc = isUpscCareer(targetCareer);
+            if (isUpsc) {
+                return "Hello! I'm Kalam Spark, your offline AI mentor. Ask me about History, Geography, Polity, Economy, Maths, Science, or UPSC strategy - all available offline! What would you like to learn?";
+            } else {
+                return "Hello! I'm Kalam Spark, your offline AI mentor. Ask me about core concepts, skills, programming, mathematics, or science related to " + targetCareer + " - all available offline! What would you like to learn?";
+            }
         }
 
         // 2. Who are you
         if (qLower.contains("who are you") || qLower.contains("what is your name") || qLower.contains("about you") || qLower.contains("your role")) {
-            return "I am **Kalam Spark**, your AI career mentor, inspired by Dr. A.P.J. Abdul Kalam. Even offline, I can guide you through core concepts in History, Geography, Polity, Economics, Mathematics, Science, and exam strategy!";
+            boolean isUpsc = isUpscCareer(targetCareer);
+            if (isUpsc) {
+                return "I am **Kalam Spark**, your AI career mentor, inspired by Dr. A.P.J. Abdul Kalam. Even offline, I can guide you through core concepts in History, Geography, Polity, Economics, Mathematics, Science, and exam strategy!";
+            } else {
+                return "I am **Kalam Spark**, your AI career mentor, inspired by Dr. A.P.J. Abdul Kalam. Even offline, I can guide you through core concepts in Programming, Mathematics, Science, and specialized subjects for a " + targetCareer + "!";
+            }
         }
 
         // 3. Calculus
@@ -760,12 +770,22 @@ public class LlamaPlugin extends Plugin {
 
         // 24. Thank you
         if (qLower.contains("thank you") || qLower.contains("thanks") || qLower.contains("thank u")) {
-            return "You're very welcome! Helping you build knowledge for " + targetCareer + " is what I'm here for. Ask me anything - History, Geography, Polity, Economy, Maths, Science, or UPSC strategy!";
+            boolean isUpsc = isUpscCareer(targetCareer);
+            if (isUpsc) {
+                return "You're very welcome! Helping you build knowledge for " + targetCareer + " is what I'm here for. Ask me anything - History, Geography, Polity, Economy, Maths, Science, or UPSC strategy!";
+            } else {
+                return "You're very welcome! Helping you build knowledge for " + targetCareer + " is what I'm here for. Ask me anything about " + targetCareer + " concepts, programming, mathematics, or science!";
+            }
         }
 
         // 25. Career paths
         if (qLower.contains("how to become") || qLower.contains("career path") || qLower.contains("roadmap for") || qLower.contains("become a") || qLower.contains("become an")) {
-            return "Pursuing a career as " + targetCareer + " requires dedication and a clear plan:\n\n**Framework:**\n1. **Core Education** - Master fundamentals through NCERT and standard references.\n2. **Practical Experience** - Build evidence of your capability: exams cleared, projects, certifications.\n3. **Networking** - Connect with professionals, join communities, seek mentorship.\n4. **Continuous Learning** - Stay updated with developments in your field.\n\nFor IAS: UPSC CSE -> Prelims -> Mains -> Interview. Start with NCERT, then standard references, then current affairs.\n\nWhat stage of preparation are you currently at?";
+            boolean isUpsc = isUpscCareer(targetCareer);
+            if (isUpsc) {
+                return "Pursuing a career as " + targetCareer + " requires dedication and a clear plan:\n\n**Framework:**\n1. **Core Education** - Master fundamentals through NCERT and standard references.\n2. **Practical Experience** - Build evidence of your capability: exams cleared, projects, certifications.\n3. **Networking** - Connect with professionals, join communities, seek mentorship.\n4. **Continuous Learning** - Stay updated with developments in your field.\n\nFor IAS: UPSC CSE -> Prelims -> Mains -> Interview. Start with NCERT, then standard references, then current affairs.\n\nWhat stage of preparation are you currently at?";
+            } else {
+                return "Pursuing a career as a " + targetCareer + " requires dedication and a clear plan:\n\n**Framework:**\n1. **Core Foundations** - Learn basic and intermediate principles of your target field (e.g. key subjects, programming language, design tools, or science prerequisites).\n2. **Practical Experience** - Build 2-3 portfolio projects demonstrating real-world applications of your skills.\n3. **Networking** - Connect with professionals on LinkedIn, participate in community meetups, and share your work.\n4. **Interview Prep** - Practice technical concepts, coding, and behavioral scenarios relevant to " + targetCareer + ".\n\nWhat stage of your roadmap are you currently working on?";
+            }
         }
 
         // 26. Smart keyword-based fallback
@@ -775,7 +795,13 @@ public class LlamaPlugin extends Plugin {
             "define", "describe", "please", "could", "would", "should", "there",
             "their", "have", "does", "will", "with", "that", "this", "from",
             "give", "show", "help", "know", "need", "want", "some", "more",
-            "kalam", "spark", "mentor"
+            "kalam", "spark", "mentor", "today", "tomorrow", "yesterday", "reach",
+            "dream", "career", "become", "make", "think", "find", "feel", "hope",
+            "love", "like", "good", "great", "best", "study", "learn", "plan",
+            "time", "hour", "day", "week", "month", "year", "step", "stage",
+            "task", "done", "work", "hard", "easy", "start", "stop", "keep", "going",
+            "must", "than", "then", "them", "they", "your", "mine", "some", "many",
+            "much", "very", "officer", "reach"
         );
         String mainTopic = "";
         for (String w : wordsArr) {
@@ -785,13 +811,33 @@ public class LlamaPlugin extends Plugin {
             }
         }
 
+        boolean isUpsc = isUpscCareer(targetCareer);
+
         if (!mainTopic.isEmpty()) {
             String displayTopic = Character.toUpperCase(mainTopic.charAt(0)) + mainTopic.substring(1);
-            return "**" + displayTopic + "** is an important concept for your preparation as " + targetCareer + ".\n\nThis likely falls under one of these UPSC syllabus areas:\n- **GS Paper 1**: History, Geography, Art & Culture\n- **GS Paper 2**: Polity, Governance, International Relations\n- **GS Paper 3**: Economy, Science & Technology, Environment\n- **GS Paper 4**: Ethics & Integrity\n\nTo prepare offline:\n1. Find the relevant NCERT chapter for this topic.\n2. Note its connection to current government policies or events.\n3. Write a 150-word short answer to build conceptual clarity.\n\nAsk me a specific question about " + displayTopic + " and I'll give you a detailed explanation!";
+            if (isUpsc) {
+                return "**" + displayTopic + "** is an important concept for your preparation as " + targetCareer + ".\n\nThis likely falls under one of these UPSC syllabus areas:\n- **GS Paper 1**: History, Geography, Art & Culture\n- **GS Paper 2**: Polity, Governance, International Relations\n- **GS Paper 3**: Economy, Science & Technology, Environment\n- **GS Paper 4**: Ethics & Integrity\n\nTo prepare offline:\n1. Find the relevant NCERT chapter for this topic.\n2. Note its connection to current government policies or events.\n3. Write a 150-word short answer to build conceptual clarity.\n\nAsk me a specific question about " + displayTopic + " and I'll give you a detailed explanation!";
+            } else {
+                return "**" + displayTopic + "** is a key concept on your path to becoming a " + targetCareer + ".\n\nHere is how to master this topic offline:\n1. **Core Reading**: Find chapters related to **" + displayTopic + "** in your specialized reference textbooks or downloaded guides.\n2. **Practical Mapping**: Think about how **" + displayTopic + "** is applied in real-world professional environments for a " + targetCareer + ".\n3. **Summarization**: Write a 150-word summary of the concept from memory to test your active recall.\n4. **Hands-on Exercise**: Design a simple test project or solve a practical problem applying this concept.\n\nAsk me a specific question about " + displayTopic + " and I'll give you a detailed explanation!";
+            }
         }
 
         // 27. Ultimate fallback
-        return "I'm your offline AI mentor and I can answer many questions without internet!\n\nTry asking me about:\n- **Mathematics**: calculus, algebra, geometry, statistics\n- **Indian History**: ancient India, Mughal era, freedom movement\n- **Geography**: Himalayas, rivers, monsoon, climate zones\n- **Polity**: constitution, parliament, fundamental rights\n- **Economy**: GDP, RBI, budget, agriculture sector\n- **Science**: physics (Newton's laws), chemistry (periodic table), biology (DNA)\n- **UPSC Strategy**: exam pattern, books, preparation plan\n\nWhat specific concept would you like to learn?";
+        if (isUpsc) {
+            return "To reach your goal of becoming an " + targetCareer + ", here is what you should focus on today:\n\n" +
+                   "1. **Roadmap Progress**: Study the syllabus topics of your current roadmap stage.\n" +
+                   "2. **Daily Revision**: Practice answer writing for GS papers to improve analytical thinking.\n" +
+                   "3. **Current Affairs**: Revise government policies and national news.\n" +
+                   "4. **Aptitude**: Solve a few CSAT logical reasoning/quantitative problems.\n\n" +
+                   "Ask me a specific question about a subject (like Polity, History, Geography, Economy, or Maths) for a detailed explanation!";
+        } else {
+            return "To reach your goal of becoming a " + targetCareer + ", here is what you should focus on today:\n\n" +
+                   "1. **Roadmap Progress**: Review the subjects and skills of your current roadmap stage.\n" +
+                   "2. **Active Learning**: Read a textbook chapter or reference guide offline for your focus subjects.\n" +
+                   "3. **Hands-on practice**: Spend 30 minutes practicing writing code, sketching designs, or solving equations.\n" +
+                   "4. **Quiz Review**: Quiz yourself on key terms and definitions to reinforce memory.\n\n" +
+                   "Ask me a specific question about a subject (like Programming, Calculus, Statistics, Physics, or Chemistry) for a detailed explanation!";
+        }
     }
 
     // ── Helper: Extract user question from any prompt format ──────────────────

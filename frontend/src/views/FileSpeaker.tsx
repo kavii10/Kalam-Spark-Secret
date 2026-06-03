@@ -275,6 +275,7 @@ function LibraryTTSPlayer({ lines, podcastLang, host1, host2, durationEst, user 
     window.speechSynthesis.cancel();
     activeRef.current = true;
     setPlaying(true);
+    let consecutiveErrors = 0;
     const langMap: Record<string, string> = {
       en: 'en-US', ta: 'ta-IN', hi: 'hi-IN', te: 'te-IN',
       kn: 'kn-IN', ml: 'ml-IN', bn: 'bn-IN', mr: 'mr-IN',
@@ -297,7 +298,10 @@ function LibraryTTSPlayer({ lines, podcastLang, host1, host2, durationEst, user 
       else if (lv.length === 1) utt.voice = lv[0];
       utt.pitch = isH1 ? 0.9 : 1.15;
       utt.rate = isH1 ? 0.95 : 1.0;
-      utt.onend = () => speak(idx + 1);
+      utt.onend = () => {
+        consecutiveErrors = 0;
+        speak(idx + 1);
+      };
       utt.onerror = (e) => {
         console.warn('[LibraryTTSPlayer] TTS voice error, retrying with default voice:', e);
         if (utt.voice) {
@@ -305,11 +309,28 @@ function LibraryTTSPlayer({ lines, podcastLang, host1, host2, durationEst, user 
           fallback.lang = utt.lang;
           fallback.pitch = utt.pitch;
           fallback.rate = utt.rate;
-          fallback.onend = () => speak(idx + 1);
-          fallback.onerror = () => speak(idx + 1);
+          fallback.onend = () => {
+            consecutiveErrors = 0;
+            speak(idx + 1);
+          };
+          fallback.onerror = () => {
+            consecutiveErrors++;
+            if (consecutiveErrors >= 3) {
+              alert("Speech Synthesis (Read Aloud) failed. Please check if your system volume is turned up, an audio output device is connected, and Speech/TTS voices are installed in your OS settings.");
+              pause();
+            } else {
+              speak(idx + 1);
+            }
+          };
           window.speechSynthesis.speak(fallback);
         } else {
-          speak(idx + 1);
+          consecutiveErrors++;
+          if (consecutiveErrors >= 3) {
+            alert("Speech Synthesis (Read Aloud) failed. Please check if your system volume is turned up, an audio output device is connected, and Speech/TTS voices are installed in your OS settings.");
+            pause();
+          } else {
+            speak(idx + 1);
+          }
         }
       };
       window.speechSynthesis.speak(utt);
@@ -478,6 +499,7 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
     window.speechSynthesis.cancel();
     ttsActiveRef.current = true;
     setPlaying(true);
+    let consecutiveErrors = 0;
 
     const speakLine = (idx: number) => {
       if (!ttsActiveRef.current || idx >= lines.length) {
@@ -508,7 +530,10 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
         else if (langVoices.length === 1) utt.voice = langVoices[0];
         utt.pitch = isHost1 ? 0.9 : 1.15;
         utt.rate = (isHost1 ? 0.95 : 1.0) * speed;
-        utt.onend = () => speakLine(idx + 1);
+        utt.onend = () => {
+          consecutiveErrors = 0;
+          speakLine(idx + 1);
+        };
         utt.onerror = (e) => {
           console.warn('[AudioPlayer TTS] TTS voice error, retrying with default voice:', e);
           if (utt.voice) {
@@ -516,11 +541,28 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
             fallback.lang = utt.lang;
             fallback.pitch = utt.pitch;
             fallback.rate = utt.rate;
-            fallback.onend = () => speakLine(idx + 1);
-            fallback.onerror = () => speakLine(idx + 1);
+            fallback.onend = () => {
+              consecutiveErrors = 0;
+              speakLine(idx + 1);
+            };
+            fallback.onerror = () => {
+              consecutiveErrors++;
+              if (consecutiveErrors >= 3) {
+                alert("Speech Synthesis (Read Aloud) failed. Please check if your system volume is turned up, an audio output device is connected, and Speech/TTS voices are installed in your OS settings.");
+                pauseTTS();
+              } else {
+                speakLine(idx + 1);
+              }
+            };
             window.speechSynthesis.speak(fallback);
           } else {
-            speakLine(idx + 1);
+            consecutiveErrors++;
+            if (consecutiveErrors >= 3) {
+              alert("Speech Synthesis (Read Aloud) failed. Please check if your system volume is turned up, an audio output device is connected, and Speech/TTS voices are installed in your OS settings.");
+              pauseTTS();
+            } else {
+              speakLine(idx + 1);
+            }
           }
         };
         window.speechSynthesis.speak(utt);

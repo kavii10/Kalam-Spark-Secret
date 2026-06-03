@@ -42,7 +42,7 @@ async def _call_ollama(prompt: str, max_tokens: int = 3000, temperature: float =
     Call the local Ollama Gemma4 model as a last-resort fallback.
     Requires: Ollama installed + 'ollama serve' running + gemma4:e4b pulled.
     """
-    print(f"[LLM] ⚠️ All cloud providers failed. Trying local Ollama ({OLLAMA_MODEL})...")
+    print(f"[LLM] [WARNING] All cloud providers failed. Trying local Ollama ({OLLAMA_MODEL})...")
     try:
         body: dict = {
             "model": OLLAMA_MODEL,
@@ -63,7 +63,7 @@ async def _call_ollama(prompt: str, max_tokens: int = 3000, temperature: float =
             resp = await client.post(f"{OLLAMA_BASE_URL}/api/generate", json=body)
             resp.raise_for_status()
             text = resp.json().get("response", "").strip()
-            print(f"[LLM] Ollama (local) ✓ ({len(text)} chars)")
+            print(f"[LLM] Ollama (local) [OK] ({len(text)} chars)")
             return text
     except httpx.ConnectError:
         raise RuntimeError(
@@ -123,7 +123,7 @@ async def _call_llm_chat(messages: list[dict], max_tokens: int = 1500, temperatu
                 resp = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=body)
                 resp.raise_for_status()
                 text = resp.json()["choices"][0]["message"]["content"].strip()
-                print(f"[LLM] OpenRouter chat ✓ ({len(text)} chars)")
+                print(f"[LLM] OpenRouter chat [OK] ({len(text)} chars)")
                 return text
         except Exception as e:
             print(f"[LLM] OpenRouter chat (27B) failed: {e} — trying fallback (9B)...")
@@ -134,7 +134,7 @@ async def _call_llm_chat(messages: list[dict], max_tokens: int = 1500, temperatu
                     resp = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=body)
                     resp.raise_for_status()
                     text = resp.json()["choices"][0]["message"]["content"].strip()
-                    print(f"[LLM] OpenRouter chat fallback ✓ ({len(text)} chars)")
+                    print(f"[LLM] OpenRouter chat fallback [OK] ({len(text)} chars)")
                     return text
             except Exception as fallback_e:
                 print(f"[LLM] OpenRouter chat fallback failed: {fallback_e} — trying Google AI Studio (Gemma 4)...")
@@ -182,7 +182,7 @@ async def _call_llm_chat(messages: list[dict], max_tokens: int = 1500, temperatu
                     resp = await client.post(url, json=body)
                     resp.raise_for_status()
                     text = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-                    print(f"[LLM] Google AI Studio chat (Gemma 4 31B) {attempt_desc} ✓ ({len(text)} chars)")
+                    print(f"[LLM] Google AI Studio chat (Gemma 4 31B) {attempt_desc} [OK] ({len(text)} chars)")
                     
                     # ⚠️ CRITICAL: Check if response is actually JSON, not echoed instructions
                     if text and not text.startswith('{'):
@@ -213,7 +213,7 @@ async def _call_llm_chat(messages: list[dict], max_tokens: int = 1500, temperatu
         for m in messages if 'content' in m
     ) + "\n\nASSISTANT:"
 
-    print(f"[LLM] ⚠️ All cloud chat providers failed. Trying local Ollama ({OLLAMA_MODEL})...")
+    print(f"[LLM] [WARNING] All cloud chat providers failed. Trying local Ollama ({OLLAMA_MODEL})...")
 
 
     try:
@@ -238,7 +238,7 @@ async def _call_llm_chat(messages: list[dict], max_tokens: int = 1500, temperatu
             resp.raise_for_status()
             text = resp.json().get("message", {}).get("content", "").strip()
             if text:
-                print(f"[LLM] Ollama /api/chat ✓ ({len(text)} chars)")
+                print(f"[LLM] Ollama /api/chat [OK] ({len(text)} chars)")
                 return text
             raise ValueError("Empty response from /api/chat")
     except httpx.ConnectError:
@@ -265,7 +265,7 @@ async def _call_llm_chat(messages: list[dict], max_tokens: int = 1500, temperatu
                 resp.raise_for_status()
                 text = resp.json().get("response", "").strip()
                 if text:
-                    print(f"[LLM] Ollama /api/generate ✓ ({len(text)} chars)")
+                    print(f"[LLM] Ollama /api/generate [OK] ({len(text)} chars)")
                     return text
                 raise ValueError("Empty response from /api/generate")
         except httpx.ConnectError:
@@ -344,20 +344,23 @@ def _build_prompt(dream: str, year: str, branch: str, crawled_content: str, lang
         if language != "en" else ""
     )
 
-    return f"""Create a detailed 4-stage career roadmap for a {year} student pursuing {dream} in {branch}.{language_instruction}
+    return f"""Create a detailed 4-stage career roadmap for a student whose dream career is to become a {dream}. The student's current education level is {year} and their current field/branch of study is {branch}.{language_instruction}
 
 STUDENT PROFILE:
 - Dream Career: {dream}
-- Education Level: {year}
-- Current Field: {branch}
+- Current Education Level: {year}
+- Current Field/Branch of Study: {branch}
 
 {context_section}
 
 REQUIREMENTS:
-1. Generate EXACTLY 4 progressive stages from beginner to professional.
-2. Each stage: 8-10 subjects, 6 skills, 3 projects, 100+ word description.
-3. Use real tech names and frameworks specific to {dream}.
-4. Realistic durations for a {year} student.
+1. Generate EXACTLY 4 progressive stages from their current level ({year} in {branch}) to successfully landing a role as a {dream}.
+2. Ensure the roadmap is highly accurate and practical for {dream}.
+   - Note on terminology: If the target career is 'Doctor', 'Physician', or a medical practitioner, this refers EXCLUSIVELY to a medical doctor (e.g., MBBS, MD, DO) practicing medicine. Under no circumstances should you generate an academic PhD or academic doctoral program roadmap (e.g., PhD in Mathematics, PhD in computer science) unless the career is explicitly specified as a PhD/academic doctorate.
+   - Cross-Disciplinary Transition handling: If the student is transitioning from an unrelated current field/branch (e.g. Mathematics, Computer Science, AI, Engineering) to a completely different field (e.g. Medicine/Doctor, Law, Creative Arts), the roadmap MUST focus on the transition/pivot process in the early stages. For example, if transitioning to a Medical Doctor, the roadmap must outline the actual transition path (pre-med science prerequisites, biology/chemistry courses, medical entrance exams like NEET/MCAT, medical school admission, clinical years, residency, licensing) rather than assuming the student remains in their current field or pursues an academic PhD in their current field.
+3. Each stage: 8-10 subjects, 6 skills, 3 projects, 100+ word description.
+4. Use real professional tools, technologies, methodologies, and frameworks specific to {dream} (do not restrict to software frameworks if the career is non-tech).
+5. Realistic durations for a student at the {year} level to transition.
 
 OUTPUT INSTRUCTIONS - CRITICAL:
 - Return ONLY valid JSON object. Start with {{ and end with }}.
@@ -397,12 +400,12 @@ def _parse_roadmap_json(raw: str, dream: str) -> Optional[dict]:
                 repaired = repair_json_string(json_str)
                 parsed = json.loads(repaired)
                 if isinstance(parsed, dict) and "stages" in parsed and len(parsed["stages"]) > 0:
-                    print(f"[JSON] ✓ Successfully extracted and repaired JSON")
+                    print(f"[JSON] [OK] Successfully extracted and repaired JSON")
                     return parsed
         except Exception as e:
             print(f"[JSON] Manual extraction failed: {e}")
     
-    print(f"[JSON] ✗ Failed to parse JSON. Raw (first 400): {raw[:400]}")
+    print(f"[JSON] [ERROR] Failed to parse JSON. Raw (first 400): {raw[:400]}")
     return None
 
 
@@ -426,8 +429,25 @@ def _normalize_stage(stage: dict, index: int) -> dict:
 
 async def generate_roadmap(dream: str, year: str, branch: str, crawled_content: str, language: str = "en") -> dict:
     """Generate a career roadmap using cloud Gemma4 (OpenRouter → Groq → Gemini)."""
-    user_prompt = _build_prompt(dream, year, branch, crawled_content, language)
-    print(f"[Roadmap] Starting generation for: {dream} | {year} | {branch}")
+    # Career disambiguation mapping
+    dream_clean = dream.strip().lower()
+    normalized_dream = dream
+    disambiguation = {
+        "doctor": "Medical Doctor (Physician)",
+        "medical doctor": "Medical Doctor (Physician)",
+        "gp": "General Practitioner (Medical Doctor)",
+        "physician": "Medical Doctor (Physician)",
+        "surgeon": "General Surgeon (Medical Doctor)",
+        "dentist": "Dentist (Dental Surgeon)",
+        "nurse": "Registered Nurse (Healthcare)",
+        "lawyer": "Lawyer (Attorney/Legal Practitioner)",
+        "advocate": "Advocate (Legal Practitioner)",
+    }
+    if dream_clean in disambiguation:
+        normalized_dream = disambiguation[dream_clean]
+
+    user_prompt = _build_prompt(normalized_dream, year, branch, crawled_content, language)
+    print(f"[Roadmap] Starting generation for: {normalized_dream} (original: {dream}) | {year} | {branch}")
     print(f"[Roadmap] Prompt size: {len(user_prompt)} chars | Context: {len(crawled_content)} chars")
     
     # Keep system instruction separate to prevent instruction echo
@@ -443,7 +463,7 @@ async def generate_roadmap(dream: str, year: str, branch: str, crawled_content: 
         raise RuntimeError(f"Failed to call LLM: {e}")
     
     print(f"[Roadmap] Parsing JSON response...")
-    parsed = _parse_roadmap_json(raw_response, dream)
+    parsed = _parse_roadmap_json(raw_response, normalized_dream)
 
     if not parsed:
         print(f"[Roadmap] [-] JSON parsing failed. Response preview: {raw_response[:200]}...")
@@ -453,8 +473,8 @@ async def generate_roadmap(dream: str, year: str, branch: str, crawled_content: 
         )
 
     roadmap = {
-        "dream": parsed.get("dream") or dream,
-        "summary": parsed.get("summary") or f"Your personalized roadmap to become a {dream}.",
+        "dream": parsed.get("dream") or normalized_dream,
+        "summary": parsed.get("summary") or f"Your personalized roadmap to become a {normalized_dream}.",
         "stages": [_normalize_stage(s, i) for i, s in enumerate(parsed.get("stages", []))],
     }
     if not roadmap["stages"]:
