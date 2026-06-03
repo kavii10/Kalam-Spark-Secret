@@ -100,28 +100,55 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
   const [currentQuiz, setCurrentQuiz] = useState<QuizQuestion[] | null>(null);
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [showResults, setShowResults] = useState(false);
+  const [quizNumber, setQuizNumber] = useState(1);
 
   // Ref for the midnight interval
   const midnightRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ── Stage-Aware Cache Helpers ────────────────────────────────────────────
-  const getStageCache = useCallback(async (rm: any, stageIdx: number, topic: string, subjects: string[]) => {
-    if (!rm.stageCaches) rm.stageCaches = {};
-    let cache = rm.stageCaches[stageIdx];
-    if (cache && cache.books && cache.books.length > 0 && cache.cachedForDream === user.dream) {
-      return cache;
+  // ── Unified Study Center Resource Helper ───────────────────────────────────
+  const getUnifiedResources = useCallback(async (rm: any, stageIdx: number, stage: any) => {
+    let cached = rm.cachedResources;
+    const dreamMismatch = cached?.cachedForDream && cached.cachedForDream !== user.dream;
+    const stageMismatch = cached?.cachedForStage !== undefined && cached.cachedForStage !== stageIdx;
+    
+    const sparseCache = cached && (
+      (!Array.isArray(cached.books) || cached.books.length === 0) &&
+      (!Array.isArray(cached.videos) || cached.videos.length === 0)
+    );
+
+    if (!cached || dreamMismatch || stageMismatch || sparseCache) {
+      try {
+        console.log('[Planner] Fetching fresh resources for task allocation...');
+        const fetched = await fetchDirectResources(
+          user.dream,
+          stage?.title || user.dream,
+          stage?.subjects || [],
+          user.year
+        );
+        
+        const stageSubjectsLower = (stage?.subjects || []).map((s: string) => s.toLowerCase());
+        const scoreItem = (title: string) => {
+          const t = title.toLowerCase();
+          return stageSubjectsLower.some(s => t.includes(s)) ? 0 : 1;
+        };
+
+        cached = {
+          books:  (Array.isArray(fetched.books)  ? fetched.books  : []).filter((b: any) => b?.link?.startsWith('http')).sort((a: any, b: any) => scoreItem(a.title) - scoreItem(b.title)).slice(0, 10),
+          videos: (Array.isArray(fetched.videos) ? fetched.videos : []).filter((v: any) => v?.link?.startsWith('http')).sort((a: any, b: any) => scoreItem(a.title) - scoreItem(b.title)).slice(0, 10),
+          papers: (Array.isArray(fetched.papers) ? fetched.papers : []).filter((p: any) => p?.link?.startsWith('http')).sort((a: any, b: any) => scoreItem(a.title) - scoreItem(b.title)).slice(0, 10),
+          news:   (Array.isArray(fetched.news)   ? fetched.news   : []).filter((n: any) => n?.link?.startsWith('http')).slice(0, 10),
+          cachedForDream: user.dream,
+          cachedForStage: stageIdx,
+          resourceOffset: 0
+        };
+        rm.cachedResources = cached;
+        await dbService.saveRoadmap(user, rm);
+      } catch (err) {
+        console.warn('[Planner] Failed to fetch resources online, returning empty cache placeholder:', err);
+        cached = { books: [], videos: [], papers: [], news: [], cachedForDream: user.dream, cachedForStage: stageIdx, resourceOffset: 0 };
+      }
     }
-    try {
-      // Fetch fresh for this specific stage
-      const fresh = await fetchDirectResources(user.dream, topic, subjects, user.year);
-      cache = { ...fresh, cachedForDream: user.dream, resourceOffset: 0 };
-      rm.stageCaches[stageIdx] = cache;
-      await dbService.saveRoadmap(user, rm);
-    } catch (err) {
-      console.warn('[Planner] Failed to fetch resources online, returning empty cache placeholder:', err);
-      cache = { books: [], videos: [], news: [], cachedForDream: user.dream, resourceOffset: 0 };
-    }
-    return cache;
+    return cached;
   }, [user.id, user.dream, user.year]);
 
   // ── Daily Reset Logic ───────────────────────────────────────────────────
@@ -210,8 +237,33 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
         const uiTasks = unique.filter(t => !t.completed || new Date(t.date).toDateString() === todayStr);
         setTasks(uiTasks);
 
-        const target = getTaskTarget();
-        if (uiTasks.filter(x => !x.completed).length < target) syncFromRoadmap(uiTasks);
+        // Helper to check if resources changed
+        const resourcesChanged = (currentTasks: DailyTask[], cache: any) => {
+          if (!cache) return false;
+          const cacheTitles = new Set([
+            ...(cache.books || []).map((b: any) => b.title.trim().toLowerCase()),
+            ...(cache.videos || []).map((v: any) => v.title.trim().toLowerCase()),
+            ...(cache.papers || []).map((p: any) => p.title.trim().toLowerCase()),
+            ...(cache.news || []).map((n: any) => n.title.trim().toLowerCase()),
+          ]);
+          if (cacheTitles.size === 0) return false;
+
+          const taskHasCacheResource = currentTasks.some(t => {
+            const tTitle = t.title.toLowerCase();
+            return [...cacheTitles].some(cTitle => tTitle.includes(cTitle));
+          });
+          return !taskHasCacheResource;
+        };
+
+        const rm = await dbService.getRoadmap(user.id) || {};
+        const cached = rm.cachedResources || {};
+        const activeTasks = uiTasks.filter(x => !x.completed);
+        const allDone = uiTasks.length > 0 && activeTasks.length === 0;
+        const changed = resourcesChanged(uiTasks, cached);
+
+        if (uiTasks.length === 0 || allDone || (changed && uiTasks.length > 0)) {
+          syncFromRoadmap(uiTasks, allDone || changed);
+        }
       } catch (e) {
         console.error('Failed to initialize tasks:', e);
         setTasks([]);
@@ -241,23 +293,31 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
     setNewTask('');
   };
 
-  const syncFromRoadmap = async (currentTasksOverride?: DailyTask[]) => {
+  const syncFromRoadmap = async (currentTasksOverride?: DailyTask[], forceRegenerate = false) => {
     setSyncing(true);
     try {
-      const rm = await dbService.getRoadmap(user.id) || {};
+      let rm = await dbService.getRoadmap(user.id) || {};
       const baseTasks = currentTasksOverride || tasks;
-      const activeTasks = baseTasks.filter(t => !t.completed);
-      const existingTitles = new Set(baseTasks.map(t => t.title.trim().toLowerCase()));
       
+      let activeTasks = forceRegenerate ? [] : baseTasks.filter(t => !t.completed);
+      
+      if (forceRegenerate) {
+        const uncompleted = baseTasks.filter(t => !t.completed);
+        for (const t of uncompleted) {
+          await dbService.deleteTask(t.id).catch(() => {});
+        }
+        setTasks(prev => prev.filter(p => p.completed));
+      }
+      
+      const existingTitles = new Set((forceRegenerate ? [] : baseTasks).map(t => t.title.trim().toLowerCase()));
       const target = getTaskTarget();
       const neededTasks = target - activeTasks.length;
 
       if (neededTasks > 0) {
-        // If all tasks are done, archive completed and reset
-        if (neededTasks === target && baseTasks.filter(t => t.completed).length > 0) {
+        if (neededTasks === target && baseTasks.filter(t => t.completed).length > 0 && !forceRegenerate) {
           for (const t of baseTasks.filter(t => t.completed)) {
             markTaskUsed(t.title);
-            dbService.deleteTask(t.id);
+            dbService.deleteTask(t.id).catch(() => {});
           }
           setTasks(prev => prev.filter(p => !p.completed));
           existingTitles.clear();
@@ -268,61 +328,96 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
         const topic = stage ? stage.title : user.dream;
         const subjects = stage?.subjects || [user.dream];
 
-        // Stage-aware caching
-        const cached = await getStageCache(rm, stageIdx, topic, subjects);
+        const cached = await getUnifiedResources(rm, stageIdx, stage);
 
         let pool: { title: string; type: string }[] = [];
-        const getBackendUrl = () => {
-          const envUrl = import.meta.env.VITE_BACKEND_URL;
-          if (envUrl) return envUrl.replace(/\/$/, '');
-          if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
-            return window.location.origin;
-          }
-          return "http://localhost:8000";
-        };
-        const backendUrl = getBackendUrl();
-        const isOnline = networkService.isOnline();
+        
+        const booksList = cached.books || [];
+        const videosList = cached.videos || [];
+        const papersList = cached.papers || [];
+        const newsList = cached.news || [];
+        
+        const offset = cached.resourceOffset || 0;
+        const maxLen = Math.max(booksList.length, videosList.length, papersList.length, newsList.length);
+        let currentOffset = offset;
+        if (maxLen > 0 && currentOffset >= maxLen) {
+          currentOffset = 0;
+        }
+        
+        const slicedBooks = booksList.slice(currentOffset, currentOffset + 5);
+        const slicedVideos = videosList.slice(currentOffset, currentOffset + 5);
+        const slicedPapers = papersList.slice(currentOffset, currentOffset + 2);
+        const slicedNews = newsList.slice(currentOffset, currentOffset + 2);
 
-        if (isOnline) {
-          try {
-            const res = await fetch(`${backendUrl}/api/tasks`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ dream: user.dream, current_stage: topic, subjects, count: target })
-            });
-            if (res.ok) {
-              const data = await res.json();
-              if (Array.isArray(data) && data.length > 0) {
-                pool = data.map((t: any) => ({
-                  title: (t.title || '').trim(),
-                  type: normalizeTaskType(t.type)
-                })).filter((t: any) => t.title && t.title.length > 5);
+        for (const b of slicedBooks) {
+          pool.push({ title: `Read Book: ${b.title}`, type: 'theory' });
+        }
+        for (const v of slicedVideos) {
+          pool.push({ title: `Watch Lecture: ${v.title}`, type: 'hands-on' });
+        }
+        for (const p of slicedPapers) {
+          pool.push({ title: `Study Research Paper: ${p.title}`, type: 'theory' });
+        }
+        for (const n of slicedNews) {
+          pool.push({ title: `Review News: ${n.title}`, type: 'review' });
+        }
+
+        if (pool.length > 0) {
+          cached.resourceOffset = currentOffset + 5;
+          rm.cachedResources = cached;
+          await dbService.saveRoadmap(user, rm);
+        }
+
+        if (pool.length === 0) {
+          const getBackendUrl = () => {
+            const envUrl = import.meta.env.VITE_BACKEND_URL;
+            if (envUrl) return envUrl.replace(/\/$/, '');
+            if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+              return window.location.origin;
+            }
+            return "http://localhost:8000";
+          };
+          const backendUrl = getBackendUrl();
+          const isOnline = networkService.isOnline();
+
+          if (isOnline) {
+            try {
+              const res = await fetch(`${backendUrl}/api/tasks`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dream: user.dream, current_stage: topic, subjects, count: target })
+              });
+              if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data) && data.length > 0) {
+                  pool = data.map((t: any) => ({
+                    title: (t.title || '').trim(),
+                    type: normalizeTaskType(t.type)
+                  })).filter((t: any) => t.title && t.title.length > 5);
+                }
+              }
+            } catch (e) {
+              console.warn('Backend tasks failed, trying direct Gemini API...', e);
+            }
+
+            if (pool.length === 0) {
+              try {
+                const data = await generatePlannerTasks(user.dream, topic, subjects, neededTasks);
+                if (Array.isArray(data)) {
+                  pool = data.map((t: any) => ({
+                    title: (t.title || '').trim(),
+                    type: normalizeTaskType(t.type)
+                  })).filter((t: any) => t.title && t.title.length > 5);
+                }
+              } catch (err) {
+                console.error("Task generation service call failed:", err);
               }
             }
-          } catch (e) {
-            console.warn('Backend tasks failed, trying direct Gemini API...', e);
-          }
-
-          if (pool.length === 0) {
-            try {
-              const data = await generatePlannerTasks(user.dream, topic, subjects, neededTasks);
-              if (Array.isArray(data)) {
-                pool = data.map((t: any) => ({
-                  title: (t.title || '').trim(),
-                  type: normalizeTaskType(t.type)
-                })).filter((t: any) => t.title && t.title.length > 5);
-              }
-            } catch (err) {
-              console.error("Task generation service call failed:", err);
-            }
-          }
-        } else {
-          // Offline local LLM
-          if (llamaPlugin.isSupported()) {
-            console.log('[Planner] Running offline, generating tasks using local model...');
-            try {
-          const prompt = `Create exactly ${neededTasks} diverse, actionable daily tasks for a student studying to become a ${user.dream}, at stage: '${topic}' covering topics: ${subjects.join(', ')}.
-
+          } else {
+            if (llamaPlugin.isSupported()) {
+              console.log('[Planner] Running offline, generating tasks using local model...');
+              try {
+                const prompt = `Create exactly ${neededTasks} diverse, actionable daily tasks for a student studying to become a ${user.dream}, at stage: '${topic}' covering topics: ${subjects.join(', ')}.
 Rules:
 - Each task "type" MUST be one of: "theory", "hands-on", "review" (NO other values)
 - "theory" = reading/studying concepts in depth
@@ -334,50 +429,27 @@ Rules:
 - Good example: {"title": "Study music licensing fundamentals and royalty distribution models", "type": "theory"}
 
 Return a JSON array of exactly ${neededTasks} tasks.`;
-              const resText = await llamaPlugin.getCompletion(prompt, "You are an expert educator. Return ONLY raw JSON array. No markdown.");
-              let clean = resText.trim();
-              const startIdx = clean.indexOf('[');
-              const endIdx = clean.lastIndexOf(']');
-              if (startIdx !== -1 && endIdx !== -1) {
-                clean = clean.substring(startIdx, endIdx + 1);
+                const resText = await llamaPlugin.getCompletion(prompt, "You are an expert educator. Return ONLY raw JSON array. No markdown.");
+                let clean = resText.trim();
+                const startIdx = clean.indexOf('[');
+                const endIdx = clean.lastIndexOf(']');
+                if (startIdx !== -1 && endIdx !== -1) {
+                  clean = clean.substring(startIdx, endIdx + 1);
+                }
+                const data = JSON.parse(clean);
+                if (Array.isArray(data)) {
+                  pool = data.map((t: any) => ({
+                    title: (t.title || '').trim(),
+                    type: normalizeTaskType(t.type)
+                  })).filter((t: any) => t.title && t.title.length > 5);
+                }
+              } catch (err) {
+                console.error("Local model task generation failed:", err);
               }
-              const data = JSON.parse(clean);
-              if (Array.isArray(data)) {
-                pool = data.map((t: any) => ({
-                  title: (t.title || '').trim(),
-                  type: normalizeTaskType(t.type)
-                })).filter((t: any) => t.title && t.title.length > 5);
-              }
-            } catch (err) {
-              console.error("Local model task generation failed:", err);
             }
           }
         }
 
-        // Add resource book if available from cached
-        if (pool.length > 0) {
-          const offset = cached.resourceOffset || 0;
-          if (cached.books && cached.books[offset]) {
-            pool.unshift({ title: `Read: ${cached.books[offset].title}`, type: 'theory' });
-            cached.resourceOffset = offset + 1;
-            rm.stageCaches[stageIdx] = cached;
-            await dbService.saveRoadmap(user, rm);
-          }
-        }
-
-        if (pool.length === 0) {
-          const offset = cached.resourceOffset || 0;
-          pool = [
-            ...(cached.books || []).slice(offset, offset + 5).map((b: any) => ({ title: 'Read Book: ' + b.title, type: 'theory' })),
-            ...(cached.videos || []).slice(offset, offset + 5).map((v: any) => ({ title: 'Watch Lecture: ' + v.title, type: 'hands-on' })),
-            ...(cached.news || []).slice(offset, offset + 5).map((n: any) => ({ title: 'Review News: ' + n.title, type: 'review' })),
-          ];
-          cached.resourceOffset = offset + 5;
-          rm.stageCaches[stageIdx] = cached;
-          await dbService.saveRoadmap(user, rm);
-        }
-
-        // ── Current Affairs for IAS/UPSC ──
         if (isUpscDream(user.dream)) {
           try {
             const caItems = await fetchCurrentAffairs(2);
@@ -387,7 +459,6 @@ Return a JSON array of exactly ${neededTasks} tasks.`;
           } catch { /* silent */ }
         }
 
-        // ── Add tasks with variety + relevance filter ──
         const addedTasks: DailyTask[] = [];
         const dreamWords = user.dream.toLowerCase().split(/\s+/).filter((w: string) => w.length > 2);
         const subjectWords = subjects.join(' ').toLowerCase().split(/\s+/).filter((w: string) => w.length > 2);
@@ -397,11 +468,16 @@ Return a JSON array of exactly ${neededTasks} tasks.`;
           if (addedTasks.length >= neededTasks) break;
           const key = candidate.title.trim().toLowerCase();
 
-          // Variety check — skip if used in the last 7 days
-          if (wasUsedRecently(candidate.title)) continue;
+          const isDirectResource = candidate.title.startsWith('Read Book:') || 
+                                   candidate.title.startsWith('Watch Lecture:') || 
+                                   candidate.title.startsWith('Study Research Paper:') || 
+                                   candidate.title.startsWith('Review News:');
 
-          // Relevance filter
-          const isRelevant = requiredKeywords.some(kw => key.includes(kw)) || key.split(/\s+/).some(w => requiredKeywords.includes(w));
+          if (!isDirectResource && wasUsedRecently(candidate.title)) continue;
+
+          const isRelevant = isDirectResource || 
+                             requiredKeywords.some(kw => key.includes(kw)) || 
+                             key.split(/\s+/).some(w => requiredKeywords.includes(w));
           if (!isRelevant && pool.length > neededTasks && candidate.type !== 'current-affairs') continue;
 
           if (existingTitles.has(key)) continue;
@@ -414,15 +490,23 @@ Return a JSON array of exactly ${neededTasks} tasks.`;
             date: new Date().toISOString()
           };
           dbService.saveTask(user.id, task);
-          markTaskUsed(candidate.title);
+          if (!isDirectResource) {
+            markTaskUsed(candidate.title);
+          }
           addedTasks.push(task);
         }
         if (addedTasks.length > 0) {
-          setTasks(prev => { const prevIds = new Set(prev.map(t => t.id)); return [...prev, ...addedTasks.filter(t => !prevIds.has(t.id))]; });
+          setTasks(prev => { 
+            const prevIds = new Set(prev.map(t => t.id)); 
+            return [...prev.filter(t => !forceRegenerate || t.completed), ...addedTasks.filter(t => !prevIds.has(t.id))]; 
+          });
         }
       }
-    } catch (e) { console.error('syncFromRoadmap error:', e); }
-    finally { setSyncing(false); }
+    } catch (e) { 
+      console.error('syncFromRoadmap error:', e); 
+    } finally { 
+      setSyncing(false); 
+    }
   };
 
   const toggleTask = (id: string) => {
@@ -456,7 +540,7 @@ Return a JSON array of exactly ${neededTasks} tasks.`;
 
       // Automatically generate new tasks when all are completed
       setTimeout(() => {
-        syncFromRoadmap();
+        syncFromRoadmap(updatedTasks, true);
       }, 1500);
     }
   };
@@ -470,6 +554,11 @@ Return a JSON array of exactly ${neededTasks} tasks.`;
   const efficiency = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   const handleStartQuiz = async () => {
+    const completedTaskTitles = tasks.filter(t => t.completed).map(t => t.title);
+    if (completedTaskTitles.length === 0) {
+      alert("Please complete at least one task today before generating a quiz.");
+      return;
+    }
     setQuizLoading(true); setShowResults(false); setAnswers({});
     try {
       const rm = await dbService.getRoadmap(user.id).catch(() => null);
@@ -478,19 +567,23 @@ Return a JSON array of exactly ${neededTasks} tasks.`;
       }
       const stageIndex = Math.min(user.currentStageIndex, rm.stages.length - 1);
       const currentStage = rm.stages[stageIndex];
-      const taskTitles = tasks.map(t => t.title);
+      const allTaskTitles = tasks.map(t => t.title);
       const quiz = await generateMicroQuiz(
         currentStage?.title || currentStage?.subjects?.[0] || user.dream, 
-        taskTitles,
-        { description: currentStage?.description, concepts: currentStage?.subjects }
+        allTaskTitles,
+        { description: currentStage?.description, concepts: currentStage?.subjects },
+        completedTaskTitles,
+        quizNumber
       );
       if (quiz && Array.isArray(quiz) && quiz.length > 0) {
         setCurrentQuiz(quiz);
+        setQuizNumber(prev => prev + 1);
       } else {
         throw new Error('Invalid quiz data received');
       }
     } catch (e: any) { 
       console.error('Quiz generation failed:', e);
+      alert(e.message || 'Quiz generation failed.');
     } finally { 
       setQuizLoading(false); 
     }
@@ -540,7 +633,7 @@ Return a JSON array of exactly ${neededTasks} tasks.`;
 
           {activeTab === 'tasks' && (
             <button
-              onClick={() => syncFromRoadmap()}
+              onClick={() => syncFromRoadmap(undefined, true)}
               disabled={syncing}
               className="planner-sync-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium transition-all text-gold-400/80 disabled:opacity-40"
               style={{ background: 'rgba(255,140,66,0.08)', border: '1px solid rgba(255,140,66,0.25)' }}
@@ -705,9 +798,21 @@ Return a JSON array of exactly ${neededTasks} tasks.`;
               </div>
               <div>
                 <h3 className={`text-xl font-bold mb-2 font-cinzel ${isLight ? 'text-zinc-800' : 'text-gold-200'}`}>Quiz Time</h3>
-                <p className={`${isLight ? 'text-orange-600' : 'text-gold-400'} font-semibold text-sm`}>Test your knowledge on {user.dream}</p>
+                {completedCount === 0 ? (
+                  <p className="text-red-400 font-semibold text-sm">
+                    Complete at least one task today to unlock today's quiz!
+                  </p>
+                ) : (
+                  <p className={`${isLight ? 'text-orange-600' : 'text-gold-400'} font-semibold text-sm`}>
+                    Test your knowledge on {user.dream}
+                  </p>
+                )}
               </div>
-              <button onClick={handleStartQuiz} disabled={quizLoading} className="btn-primary px-8 py-3 rounded-xl font-semibold text-sm disabled:opacity-30">
+              <button 
+                onClick={handleStartQuiz} 
+                disabled={quizLoading || completedCount === 0} 
+                className="btn-primary px-8 py-3 rounded-xl font-semibold text-sm disabled:opacity-30 disabled:cursor-not-allowed"
+              >
                 {quizLoading ? 'Generating...' : 'Start Quiz'}
               </button>
             </div>
@@ -777,7 +882,7 @@ Return a JSON array of exactly ${neededTasks} tasks.`;
                   </div>
                   <p className={`text-sm ${isLight ? 'text-zinc-600' : 'text-gold-500/50'}`}>{calculateScore() === currentQuiz.length ? '🎉 Perfect score!' : calculateScore() >= currentQuiz.length / 2 ? '👍 Good job! Keep practicing.' : '📚 Keep studying and try again!'}</p>
                   <div className="flex items-center gap-3">
-                    <button onClick={() => { setCurrentQuiz(null); setAnswers({}); setShowResults(false); }}
+                    <button onClick={() => { setCurrentQuiz(null); setAnswers({}); setShowResults(false); setQuizNumber(1); }}
                       className="btn-secondary flex-1 py-3 rounded-xl font-medium text-sm">
                       Try Again
                     </button>

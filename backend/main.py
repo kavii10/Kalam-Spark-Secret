@@ -335,12 +335,21 @@ class QuizRequest(BaseModel):
     tasks: list[str]
     stage_description: Optional[str] = ""
     stage_concepts: Optional[list[str]] = []
+    difficulty: Optional[str] = "beginner/foundational"
+    quiz_number: Optional[int] = 1
 
 @app.post("/api/quiz")
 async def get_quiz(req: QuizRequest):
     from llm_service import generate_quiz
     try:
-        quiz = await generate_quiz(req.subject, req.tasks, req.stage_description, req.stage_concepts)
+        quiz = await generate_quiz(
+            req.subject,
+            req.tasks,
+            req.stage_description,
+            req.stage_concepts,
+            req.difficulty,
+            req.quiz_number
+        )
         return quiz
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

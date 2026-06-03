@@ -1527,7 +1527,7 @@ Be accurate and concise. Never invent facts.`;
       setPodcastLang(data.language);
       setHost1Voice(data.host1_voice);
       setHost2Voice(data.host2_voice);
-      setDetectedLangInfo(`Detected: ${data.language_name} — voices auto-set!`);
+      setDetectedLangInfo(`Detected: ${data.language_name} —  voices auto-set!`);
     } catch (e: any) {
       setDetectedLangInfo('Could not detect language. Defaulting to English.');
     } finally {
@@ -1535,14 +1535,14 @@ Be accurate and concise. Never invent facts.`;
     }
   };
 
-  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Podcast Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+  /* ── Podcast ── */
   const handleGeneratePodcast = async () => {
-    if (!activeSource || !podcastTopic.trim() || generatingPodcast) return;
+    if (!activeSource || generatingPodcast) return;  // topic is now optional
     setGeneratingPodcast(true);
     const sid = activeSource.source_id;
     patchState(sid, { podcast: null });
     try {
-      // Ã¢â€â‚¬Ã¢â€â‚¬ Desktop path: use backend Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+      // ── Desktop path: use backend ──
       if (!IS_NATIVE_MOBILE && BACKEND) {
         const res  = await fetch(`${BACKEND}/api/filespeaker/podcast`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1580,15 +1580,28 @@ Be accurate and concise. Never invent facts.`;
 
       // Ã¢â€â‚¬Ã¢â€â‚¬ Mobile / No-backend path: generate script via LLM + play with Web Speech API Ã¢â€â‚¬Ã¢â€â‚¬
       const lengthInstruction = podcastLength === 'short' ? '6-8 dialogue exchanges' : podcastLength === 'long' ? '18-24 dialogue exchanges' : '12-15 dialogue exchanges';
-      const systemInstruction = `You are a podcast script writer. Generate a natural, engaging podcast conversation script. Return ONLY a JSON array with no markdown wrapping.`;
-      const prompt = `Write a ${lengthInstruction} podcast script between two hosts named "${host1Name}" and "${host2Name}" discussing the topic "${podcastTopic}" based on this content:
+      const systemInstruction = `You are a world-class educational podcast scriptwriter.
+CRITICAL RULE: ALL facts, examples, and explanations MUST come DIRECTLY from the provided source document.
+Do NOT add any external knowledge not found in the document.
+Return ONLY a JSON array with no markdown wrapping.`;
+      const docContent = (activeSource.text || activeSource.preview || '').substring(0, 5000);
+      const hasCustomTopic = podcastTopic.trim().length > 3;
+      const focusInstruction = hasCustomTopic
+        ? `Focus specifically on this aspect of the document: "${podcastTopic}"`
+        : `Cover the most important concepts, facts, and ideas found in the document.`;
+      const prompt = `SOURCE DOCUMENT (ALL podcast content must come from this ONLY):
+---
+${docContent}
+---
 
-${(activeSource.text || activeSource.preview || '').substring(0, 3000)}
+${focusInstruction}
 
+Write a ${lengthInstruction} podcast script between two hosts named "${host1Name}" (expert who explains the document) and "${host2Name}" (curious learner).
 Tone: ${podcastTone}. Language: ${podcastLang === 'en' ? 'English' : podcastLang}.
+Each exchange MUST reference specific details from the SOURCE DOCUMENT. Do NOT discuss anything not in the document.
 
-Return as a JSON array of objects: [{"speaker": "${host1Name}", "text": "..."}, {"speaker": "${host2Name}", "text": "..."}, ...]
-Each line should be 1-3 natural sentences. Make it conversational and educational.`;
+Return as a JSON array: [{"speaker": "${host1Name}", "text": "..."}, {"speaker": "${host2Name}", "text": "..."}, ...]
+Each line: 1-3 natural sentences. Conversational and educational.`;
 
       let scriptText = '';
       try {
@@ -1894,7 +1907,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
           onChange={e => setQuickUrl(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleQuickUrl()}
           placeholder="Paste any YouTube link, article URL or web page to instantly add as source..."
-          className={`flex-1 bg-transparent text-sm focus:outline-none ${isLight ? 'text-zinc-800 placeholder:text-zinc-400' : 'text-white placeholder:text-zinc-600'}`}
+          className={`flex-1 min-w-0 bg-transparent text-sm focus:outline-none ${isLight ? 'text-zinc-800 placeholder:text-zinc-400' : 'text-white placeholder:text-zinc-600'}`}
         />
         <button onClick={handleQuickUrl} disabled={quickLoading || !quickUrl.trim()}
           className="px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold rounded-lg transition-all disabled:opacity-50 flex items-center gap-1.5 shrink-0">
@@ -2141,7 +2154,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
                     <input value={chatInput} onChange={e => setChatInput(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && handleChat()}
                       placeholder={`Ask about ${activeSource.title}...`}
-                      className={`flex-1 border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-violet-500/40 ${isLight ? 'bg-white border-zinc-200 text-zinc-800 placeholder:text-zinc-400' : 'bg-zinc-800/50 border-zinc-700/50 text-white placeholder:text-zinc-600'}`} />
+                      className={`flex-1 min-w-0 border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-violet-500/40 ${isLight ? 'bg-white border-zinc-200 text-zinc-800 placeholder:text-zinc-400' : 'bg-zinc-800/50 border-zinc-700/50 text-white placeholder:text-zinc-600'}`} />
                     <button onClick={handleChat} disabled={!chatInput.trim() || chatLoading}
                       className={`px-4 py-3 rounded-lg transition-all ${chatInput.trim() && !chatLoading ? 'bg-violet-600 text-white hover:bg-violet-500' : isLight ? 'bg-zinc-200 text-zinc-400 cursor-not-allowed' : 'bg-zinc-800 text-zinc-600 cursor-not-allowed'}`}>
                       <Send size={16} />
@@ -2205,10 +2218,11 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
                     <div className="flex flex-col sm:flex-row gap-4">
                       {/* Topic Input */}
                       <div className="flex-1">
-                        <label className={`text-[11px] uppercase tracking-wider mb-1.5 block ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>Topic / Episode Title</label>
+                        <label className={`text-[11px] uppercase tracking-wider mb-1.5 block ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>Focus Angle <span className="normal-case text-[10px] opacity-60">(optional)</span></label>
                         <input value={podcastTopic} onChange={e => setPodcastTopic(e.target.value)}
-                          placeholder={`e.g. Key concepts from ${activeSource.title}`}
+                          placeholder={`Optional: e.g. "Key challenges" — leave blank to cover full doc`}
                           className={`w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-violet-500/40 ${isLight ? 'bg-white border-zinc-300 text-zinc-800 placeholder:text-zinc-400' : 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-600'}`} />
+                        <p className={`text-[10px] mt-1 ${isLight ? 'text-zinc-400' : 'text-zinc-600'}`}>Podcast content is always based on your uploaded document</p>
                       </div>
 
                       {/* Language Selector Dropdown */}
@@ -2484,7 +2498,7 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
                         </div>
                       </div>
                     </div>
-                    <button onClick={handleGeneratePodcast} disabled={generatingPodcast || !podcastTopic.trim()}
+                    <button onClick={handleGeneratePodcast} disabled={generatingPodcast}
                       className="w-full bg-violet-600 hover:bg-violet-500 text-white font-bold py-3 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2.5">
                       {generatingPodcast ? <><Loader2 size={16} className="animate-spin" /> Generating Podcast... (2-5 min)</> : <><Headphones size={16} /> Generate Podcast</>}
                     </button>

@@ -818,13 +818,17 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
           <div className="flex items-center gap-3">
             <button
               onClick={() => setShowSidebar(!showSidebar)}
-              className={`p-2 rounded-lg transition-colors ${isLight ? 'text-zinc-500 hover:bg-zinc-100' : 'text-zinc-400 hover:bg-zinc-800'}`}
+              className={`p-1.5 rounded-lg border transition-all shrink-0
+                ${isLight 
+                  ? 'bg-violet-50 border-violet-200 text-violet-600 hover:bg-violet-100' 
+                  : 'bg-violet-500/10 border-violet-400/20 text-violet-400 hover:bg-violet-500/20'
+                }`}
             >
-              <Menu size={18} />
+              <Menu size={16} />
             </button>
             <div className="min-w-0">
-              <h3 className={`text-sm font-bold truncate ${isLight ? 'text-zinc-800' : 'text-white'}`}>AI Mentor</h3>
-              <p className={`text-[10px] truncate ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>Personal Guide · {user.dream || 'Discovery'}</p>
+              <h3 className="heading-gold font-cinzel text-lg font-bold truncate">AI Mentor</h3>
+              <p className={`text-[10px] truncate mt-0.5 ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>Personal Guide · {user.dream || 'Discovery'}</p>
             </div>
           </div>
         </div>

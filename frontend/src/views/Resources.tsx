@@ -560,6 +560,8 @@ function getLocalResourcesPlaceholder(dream: string, stageTitle: string): Resour
 export default function Resources({ user }: { user: UserProfile }) {
   const [activeTab, setActiveTab] = useState<Tab>('books');
   const [loading, setLoading] = useState(true);
+  // `dataReady` is only true after we have real data (or confirmed empty) — prevents the single-book flash
+  const [dataReady, setDataReady] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [roadmap, setRoadmap] = useState<CareerRoadmap | null>(null);
@@ -614,7 +616,7 @@ export default function Resources({ user }: { user: UserProfile }) {
 
       const stageIdx = Math.min(currentUser.currentStageIndex, rm.stages.length - 1);
       const stage = rm.stages[stageIdx];
-      if (!stage) { setLoading(false); setInitialized(true); return; }
+      if (!stage) { setLoading(false); setInitialized(true); setDataReady(true); return; }
 
       let cached = rm.cachedResources;
 
@@ -640,10 +642,16 @@ export default function Resources({ user }: { user: UserProfile }) {
             const fetched = await fetchDirectResources(
               currentUser.dream, stage.title, stage.subjects || [], currentUser.year
             );
+            // Sort resources so stage-subject matches appear first
+            const stageSubjectsLower = (stage.subjects || []).map((s: string) => s.toLowerCase());
+            const scoreItem = (title: string) => {
+              const t = title.toLowerCase();
+              return stageSubjectsLower.some(s => t.includes(s)) ? 0 : 1;
+            };
             cached = {
-              books:  (Array.isArray(fetched.books)  ? fetched.books  : []).filter((b: any) => b?.link?.startsWith('http')).slice(0, 10),
-              videos: (Array.isArray(fetched.videos) ? fetched.videos : []).filter((v: any) => v?.link?.startsWith('http')).slice(0, 10),
-              papers: (Array.isArray(fetched.papers) ? fetched.papers : []).filter((p: any) => p?.link?.startsWith('http')).slice(0, 10),
+              books:  (Array.isArray(fetched.books)  ? fetched.books  : []).filter((b: any) => b?.link?.startsWith('http')).sort((a: any, b: any) => scoreItem(a.title) - scoreItem(b.title)).slice(0, 10),
+              videos: (Array.isArray(fetched.videos) ? fetched.videos : []).filter((v: any) => v?.link?.startsWith('http')).sort((a: any, b: any) => scoreItem(a.title) - scoreItem(b.title)).slice(0, 10),
+              papers: (Array.isArray(fetched.papers) ? fetched.papers : []).filter((p: any) => p?.link?.startsWith('http')).sort((a: any, b: any) => scoreItem(a.title) - scoreItem(b.title)).slice(0, 10),
               news:   (Array.isArray(fetched.news)   ? fetched.news   : []).filter((n: any) => n?.link?.startsWith('http')).slice(0, 10),
               cachedForDream: currentUser.dream,
               cachedForStage: stageIdx,
@@ -655,7 +663,8 @@ export default function Resources({ user }: { user: UserProfile }) {
           }
         }
 
-        // If we failed to fetch or are offline, try placeholder fallbacks:
+        // If we failed to fetch or are offline, use placeholder fallbacks:
+        // NOTE: We use the local placeholder only as a LAST resort — not when cached data already exists
         if (!cached || !cached.books || cached.books.length === 0) {
           if (rm.cachedResources && rm.cachedResources.books && rm.cachedResources.books.length > 0) {
             cached = rm.cachedResources;
@@ -668,10 +677,13 @@ export default function Resources({ user }: { user: UserProfile }) {
       }
 
       setRoadmap({ ...rm });
+      // Set data and mark as ready in a single batch — prevents partial render with empty data
       setData(cached as ResourceData);
+      setDataReady(true);
     } catch (e) {
       console.error('fetchCurriculum error:', e);
       setLoadError(true);
+      setDataReady(true); // show error state even on failure
     } finally {
       setLoading(false);
       setInitialized(true);
@@ -684,6 +696,7 @@ export default function Resources({ user }: { user: UserProfile }) {
     const timeout = setTimeout(() => {
       if (active && !initialized) {
         setInitialized(true);
+        setDataReady(true);
         setLoading(false);
         console.warn('[Resources] Init timeout hit — showing UI with available data');
       }
@@ -705,23 +718,32 @@ export default function Resources({ user }: { user: UserProfile }) {
       return;
     }
 
-    // Rotate through subjects + skills so each click gets fresh unique content
+    // Use all stage subjects for context; rotate the primary query term for variety
     const subjects = stage.subjects?.length ? stage.subjects : [stage.title];
     const skills   = stage.skills?.length   ? stage.skills   : [];
     const allTerms = [...subjects, ...skills, currentUser.dream].filter(Boolean);
     const loadCount = (roadmap as any)._loadMoreCount || 0;
+    // Rotate primary query term so each "Load More" click targets a different subject
     const rotatedTerm = allTerms[loadCount % allTerms.length];
 
     try {
+      // Fetch with rotated subject as primary query + ALL stage subjects as context for better relevance
       const fetched = await fetchDirectResources(
-        currentUser.dream, rotatedTerm, [rotatedTerm], currentUser.year, 0
+        currentUser.dream, rotatedTerm, subjects, currentUser.year, 0
       );
 
-      // REPLACE (not append) — show fresh unique set of 10 per category
+      // Sort results so stage-subject matches appear first (most relevant first)
+      const stageSubjectsLower = subjects.map((s: string) => s.toLowerCase());
+      const scoreItem = (title: string) => {
+        const t = title.toLowerCase();
+        return stageSubjectsLower.some(s => t.includes(s)) ? 0 : 1;
+      };
+
+      // REPLACE (not append) — show fresh unique set of 10 per category, sorted by relevance
       const freshData = {
-        books:  fetched.books.filter((b: any)  => b.link?.startsWith('http')).slice(0, 10),
-        videos: fetched.videos.filter((v: any) => v.link?.startsWith('http')).slice(0, 10),
-        papers: fetched.papers.filter((p: any) => p.link?.startsWith('http')).slice(0, 10),
+        books:  fetched.books.filter((b: any)  => b.link?.startsWith('http')).sort((a: any, b: any) => scoreItem(a.title) - scoreItem(b.title)).slice(0, 10),
+        videos: fetched.videos.filter((v: any) => v.link?.startsWith('http')).sort((a: any, b: any) => scoreItem(a.title) - scoreItem(b.title)).slice(0, 10),
+        papers: fetched.papers.filter((p: any) => p.link?.startsWith('http')).sort((a: any, b: any) => scoreItem(a.title) - scoreItem(b.title)).slice(0, 10),
         news:   fetched.news.filter((n: any)   => n.link?.startsWith('http')).slice(0, 10),
         cachedForDream: currentUser.dream,
         cachedForStage: stageIdx,
@@ -764,11 +786,13 @@ export default function Resources({ user }: { user: UserProfile }) {
   const displayed = searchMode ? searchResults : data;
 
   // ── Loading state ────────────────────────────────────────────────────────────
-  if (!initialized) {
+  // Show full-screen loader until BOTH initialized AND dataReady — prevents the single-book flash
+  if (!initialized || !dataReady) {
     return (
       <div className="h-[60vh] flex flex-col items-center justify-center text-center fade-up gap-4">
         <Loader2 className="animate-spin text-gold-400" size={28} />
         <p className="text-sm text-gold-500/40">Preparing your study center...</p>
+        <p className="text-xs text-gold-500/25">Fetching resources for your current stage...</p>
       </div>
     );
   }
@@ -814,33 +838,11 @@ export default function Resources({ user }: { user: UserProfile }) {
     playlists: roadmap?.playlists || [],
   };
 
-  // If everything is truly empty, generate a small fallback to avoid "Empty Screen" feel
+  // If everything is truly empty after a successful fetch, show an empty state
   const totalItems = (displayed.books?.length || 0) + (displayed.videos?.length || 0) + (displayed.papers?.length || 0) + (displayed.news?.length || 0);
-  if (totalItems === 0 && !searchMode && !loading) {
-    // Inject some high-quality fallbacks for the dream/stage
-    displayed.books = [
-      {
-        id: 'fb-book-1',
-        title: `Comprehensive Guide to ${user.dream || 'Success'}`,
-        authors: 'Kalam Spark Expert Team',
-        category: 'Foundations',
-        summary: `A foundational overview of key principles and modern practices in ${user.dream || 'your field'}.`,
-        link: `https://books.google.com/books?q=${encodeURIComponent(user.dream || '')}`,
-        source: 'google-books',
-        isOpenAccess: true
-      }
-    ];
-    displayed.videos = [
-      {
-        id: 'fb-vid-1',
-        title: `Introduction to ${currentStage?.title || user.dream}`,
-        channel: 'Top Educational Channels',
-        summary: `Core concepts and career overview for ${user.dream}.`,
-        link: `https://www.youtube.com/results?search_query=${encodeURIComponent(user.dream || '')}+basics`,
-        source: 'youtube'
-      }
-    ];
-  }
+  // NOTE: We intentionally do NOT inject fake single-book fallbacks here.
+  // The full-screen loader (above) prevents the user from seeing an empty state mid-fetch.
+  // When totalItems is 0, we'll show an inline empty state in the tab content instead.
 
   return (
     <div className="space-y-6 fade-up">
@@ -1131,15 +1133,27 @@ export default function Resources({ user }: { user: UserProfile }) {
 
       {/* ── Load Next Batch ── */}
       {!searchMode && (
-        <div className="flex items-center justify-center gap-3 pt-2">
+        <div className="flex flex-col items-center gap-3 pt-2">
+          {/* When no resources are found after loading, show a helpful message */}
+          {totalItems === 0 && !loading && (
+            <div className="text-center space-y-1 mb-2">
+              <p className="text-sm text-gold-400/70">No resources found for this stage.</p>
+              <p className="text-xs text-gold-500/40">Click below to fetch resources for your current roadmap stage subjects.</p>
+            </div>
+          )}
           <button
             onClick={loadNextBatch}
             disabled={loading}
             className="btn-primary flex items-center gap-2 px-7 py-3 rounded-xl text-sm font-semibold disabled:opacity-50"
           >
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
-            {loading ? 'Loading…' : 'Load More Resources'}
+            {loading ? 'Fetching Resources…' : 'Load New Resources'}
           </button>
+          {!loading && currentStage && (
+            <p className="text-[10px] text-gold-500/30 text-center">
+              Fetching from: <span className="text-gold-400/50">{(currentStage.subjects || []).slice(0, 3).join(' · ')}</span>
+            </p>
+          )}
         </div>
       )}
 

@@ -105,11 +105,28 @@ def get_roadmapsh_slug(dream: str) -> Optional[str]:
 
 def get_crawl_urls(dream: str, branch: str) -> list[str]:
     """Build a prioritized list of URLs to crawl for a given dream career."""
+    import re
     urls: list[str] = []
+    
+    # Career disambiguation mapping to ensure we crawl the correct pivoted career pages
     dream_clean = dream.strip().lower()
+    disambiguation = {
+        "doctor": "Medical Doctor (Physician)",
+        "medical doctor": "Medical Doctor (Physician)",
+        "gp": "General Practitioner (Medical Doctor)",
+        "physician": "Medical Doctor (Physician)",
+        "surgeon": "General Surgeon (Medical Doctor)",
+        "dentist": "Dentist (Dental Surgeon)",
+        "nurse": "Registered Nurse (Healthcare)",
+        "lawyer": "Lawyer (Attorney/Legal Practitioner)",
+        "advocate": "Advocate (Legal Practitioner)",
+    }
+    
+    normalized_dream = disambiguation.get(dream_clean, dream)
+    search_term = normalized_dream.strip().lower()
 
     # 1. roadmap.sh — best structured career content
-    slug = get_roadmapsh_slug(dream)
+    slug = get_roadmapsh_slug(normalized_dream)
     if slug:
         urls.append(f"https://roadmap.sh/{slug}")
 
@@ -118,23 +135,31 @@ def get_crawl_urls(dream: str, branch: str) -> list[str]:
     wiki_mapping = {
         "doctor": "Physician",
         "medical doctor": "Physician",
+        "medical doctor (physician)": "Physician",
         "gp": "General_practitioner",
+        "general practitioner (medical doctor)": "General_practitioner",
         "physician": "Physician",
         "surgeon": "Surgeon",
+        "general surgeon (medical doctor)": "Surgeon",
         "dentist": "Dentist",
+        "dentist (dental surgeon)": "Dentist",
         "nurse": "Nursing",
+        "registered nurse (healthcare)": "Nursing",
         "lawyer": "Lawyer",
+        "lawyer (attorney/legal practitioner)": "Lawyer",
         "advocate": "Advocate",
+        "advocate (legal practitioner)": "Advocate",
     }
     
-    wiki_term = wiki_mapping.get(dream_clean)
+    wiki_term = wiki_mapping.get(search_term)
     if not wiki_term:
-        wiki_term = dream.strip().replace(" ", "_")
+        wiki_term = normalized_dream.strip().replace(" ", "_")
         
     urls.append(f"https://en.wikipedia.org/wiki/{wiki_term}")
 
     # 3. GeeksForGeeks "How to become" article (great for tech)
-    gfg_title = dream.strip().lower().replace(" ", "-")
+    gfg_clean = re.sub(r'[^a-zA-Z0-9\s]', '', normalized_dream)
+    gfg_title = "-".join([w for w in gfg_clean.lower().split() if w])
     urls.append(f"https://www.geeksforgeeks.org/how-to-become-a-{gfg_title}/")
 
     # Limit to first 3 best sources (quality > quantity)

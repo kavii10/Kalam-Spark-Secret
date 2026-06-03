@@ -548,10 +548,19 @@ async def generate_podcast_script(
     length: str = "medium",
     language: str = "en",
 ) -> str:
-    """Generate a 2-host conversational podcast script using Gemma4 in the specified language."""
+    """Generate a 2-host conversational podcast script STRICTLY based on the uploaded document."""
     min_exchanges = {"short": 6, "medium": 12, "long": 20}.get(length, 12)
-    truncated_text = source_text[:10000]
+    truncated_text = source_text[:12000]  # Use more text for better accuracy
     lang_name = LANGUAGE_NAMES.get(language, "English")
+
+    # Determine the episode focus
+    # If topic is generic or empty, instruct the LLM to derive it from the document
+    has_custom_topic = topic and topic.strip() and len(topic.strip()) > 3
+    focus_instruction = (
+        f'The episode should focus specifically on this aspect of the document: "{topic}"'
+        if has_custom_topic
+        else "The episode should cover the most important concepts, findings, or ideas found in the document."
+    )
 
     # Enhanced language instruction with explicit direction for all supported languages
     if language != "en":
@@ -567,9 +576,11 @@ Example format:
 
     system_content = (
         f"You are a world-class educational podcast scriptwriter. "
-        f"You write engaging, conversational dialogue between two hosts: {host1_name} (the expert) and {host2_name} (the curious learner). "
+        f"You write engaging, conversational dialogue between two hosts: {host1_name} (the expert who deeply understands the document) and {host2_name} (the curious learner asking questions). "
         f"You write ONLY in {lang_name}. "
-        f"Every fact must come strictly from the source document provided by the user. "
+        f"CRITICAL RULE: Every single fact, claim, example, and explanation in the dialogue MUST come DIRECTLY from the provided source document. "
+        f"Do NOT add any external knowledge, general facts, or information not present in the document. "
+        f"If the document is about Doctor career preparation, discuss doctor career topics. If it is about AI, discuss AI topics from the doc. Follow the document exactly. "
         f"Output ONLY the script in '{host1_name}: ...' / '{host2_name}: ...' dialogue format — "
         f"no titles, no headers, no stage directions, no commentary outside the dialogue."
     )
@@ -577,9 +588,13 @@ Example format:
         system_content += f"\n\n{language_instruction}"
 
     user_content = (
-        f"SOURCE DOCUMENT:\n---\n{truncated_text}\n---\n\n"
-        f"Write a {tone} podcast script about '{topic}' with exactly {min_exchanges} dialogue exchanges. "
-        f"Start immediately with '{host1_name}:' — do not add any intro text."
+        f"SOURCE DOCUMENT (read this carefully — ALL podcast content must come from this document ONLY):\n"
+        f"---\n{truncated_text}\n---\n\n"
+        f"{focus_instruction}\n"
+        f"Write a {tone} podcast script with exactly {min_exchanges} dialogue exchanges. "
+        f"Each exchange must reference specific details, facts, or quotes from the SOURCE DOCUMENT above. "
+        f"Do NOT talk about anything not mentioned in the document. "
+        f"Start immediately with '{host1_name}:' — do not add any intro text, title, or explanation."
     )
 
     messages = [

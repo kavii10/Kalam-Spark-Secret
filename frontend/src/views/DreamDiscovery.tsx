@@ -376,13 +376,18 @@ export default function DreamDiscovery({ onComplete, onSkip, isLight = false }: 
               }
               onClick={() => onComplete(res.dream, res.subjects)}
             >
-              <div>
+              <div className="w-full">
                 <div className="w-10 h-10 rounded-full flex items-center justify-center mb-4 mx-auto transition-colors"
                   style={isLight ? { background: '#fff7ed', color: '#ea580c' } : { background: 'rgba(251,191,36,0.1)', color: '#fbbf24' }}
                 >
                     <Compass size={16} />
                 </div>
-                <h3 className="text-sm font-bold mb-3 font-cinzel leading-tight" style={{ color: isLight ? '#111827' : '#fde68a' }}>{res.dream}</h3>
+                <h3 className="text-sm font-bold mb-2 font-cinzel leading-tight" style={{ color: isLight ? '#111827' : '#fde68a' }}>{res.dream}</h3>
+                {res.description && (
+                  <p className="text-[11px] mb-3 leading-relaxed font-medium" style={{ color: isLight ? '#4b5563' : 'rgba(255,255,255,0.6)' }}>
+                    {res.description}
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-1.5 justify-center mb-6">
                   {(Array.isArray(res.subjects) ? res.subjects : []).slice(0,3).map((s, si) => (
                     <span key={si} className="px-2 py-0.5 rounded-full text-[8px] font-medium"

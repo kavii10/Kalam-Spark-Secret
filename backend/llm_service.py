@@ -511,12 +511,42 @@ async def generate_tasks(dream: str, current_stage: str, subjects: list[str], co
 # ──────────────────────────────────────────────
 # Smart Quiz Generation
 # ──────────────────────────────────────────────
-async def generate_quiz(subject: str, tasks: list[str], stage_desc: str = "", stage_concepts: list[str] = []) -> list[dict]:
-    tasks_str = ", ".join(tasks) if tasks else ""
+async def generate_quiz(subject: str, tasks: list[str], stage_desc: str = "", stage_concepts: list[str] = [],
+                         difficulty: str = "beginner/foundational", quiz_number: int = 1) -> list[dict]:
+    tasks_bullet = "\n".join(f"- {t}" for t in tasks) if tasks else f"- {subject} fundamentals"
     concepts_str = ", ".join(stage_concepts) if stage_concepts else ""
+    
+    advanced_note = (
+        f"This is Quiz #{quiz_number}. IMPORTANT: Do NOT repeat questions from previous quizzes. "
+        f"Make questions significantly more {difficulty} — go deeper and test real-world application."
+        if quiz_number > 1 else ""
+    )
+    
     try:
-        system_prompt = "You are an expert academic examiner and technical lead tasked with creating a professional quiz."
-        user_prompt = f"Create a 10-question MCQ quiz for {subject} at stage: {stage_desc[:500]}.\nConcepts: {concepts_str}\nTasks: {tasks_str}\n\nReturn ONLY a JSON array of 10 objects: [{{'question': '...', 'options': ['...'], 'correctAnswer': 0, 'explanation': '...'}}]"
+        system_prompt = (
+            "You are an expert academic examiner. "
+            "Create quiz questions STRICTLY based on the provided completed tasks list. "
+            "Do NOT add questions about topics not mentioned in those tasks. "
+            "Return ONLY a valid JSON array."
+        )
+        user_prompt = (
+            f"Generate a 10-question MCQ quiz STRICTLY based on these tasks the student completed today:\n"
+            f"{tasks_bullet}\n\n"
+            f"Subject: {subject}\n"
+            f"Stage context: {stage_desc[:500]}\n"
+            f"Key concepts: {concepts_str}\n"
+            f"Difficulty level: {difficulty}\n"
+            f"{advanced_note}\n\n"
+            f"Rules:\n"
+            f"- Every question MUST test knowledge from the completed tasks listed above\n"
+            f"- Do NOT ask about topics not covered in those tasks\n"
+            f"- Each question needs exactly 4 options\n"
+            f"- correctAnswer is the 0-based index of the correct option\n"
+            f"- Include a clear explanation for why the correct answer is right\n"
+            f"- Questions must be practical and test real understanding, NOT trivial recall\n\n"
+            f"Return ONLY a JSON array of 10 objects: "
+            f"[{{\"question\": \"...\", \"options\": [\"...\"], \"correctAnswer\": 0, \"explanation\": \"...\"}}]"
+        )
         messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
         raw = await _call_llm_chat(messages, max_tokens=2500, temperature=0.7, json_mode=True)
         raw = raw.strip()
@@ -529,11 +559,12 @@ async def generate_quiz(subject: str, tasks: list[str], stage_desc: str = "", st
             match = re.search(r'\[[\s\S]*\]', raw)
             parsed = json.loads(match.group(0)) if match else []
         if isinstance(parsed, list) and len(parsed) >= 1:
-            print(f"[LLM] Generated {len(parsed)} quiz questions")
+            print(f"[LLM] Generated {len(parsed)} quiz questions at difficulty: {difficulty}")
             return parsed[:10]
     except Exception as e:
         print(f"[LLM] Failed to generate quiz: {e}")
     raise RuntimeError("Failed to generate quiz.")
+
 
 
 # ──────────────────────────────────────────────
