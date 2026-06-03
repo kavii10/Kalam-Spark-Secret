@@ -722,16 +722,17 @@ async def check_ollama() -> dict:
 async def discover_dream_careers(interests: str, personality: str, language: str = "en") -> list:
     """Uses the AI model to suggest 12 career paths based on user answers."""
     try:
-        system_prompt = "You are an expert career counselor. Return only valid JSON. Use exactly the field names 'dream' and 'subjects'."
+        system_prompt = "You are an expert career counselor. Return only valid JSON. Use exactly the field names 'dream', 'description', and 'subjects'."
         user_prompt = (
             f"Suggest exactly 12 ideal career paths for this student.\n"
             f"Interests: {interests}\n"
             f"Personality: {personality}\n\n"
             f"Return ONLY a JSON array of exactly 12 objects. Each object MUST have:\n"
-            f"  'dream': career title (string)\n"
+            f"  'dream': concise career title (string, e.g. 'Software Engineer', 'Robotics Engineer', 'Intellectual Property Lawyer'). Under NO circumstances should this be a sentence, description, or action phrase.\n"
+            f"  'description': short 1-2 sentence description explaining the career or why it matches the student.\n"
             f"  'subjects': array of exactly 3 key skills/subjects (strings)\n\n"
             f"Example:\n"
-            f'[{{"dream": "Software Engineer", "subjects": ["Python", "Data Structures", "System Design"]}}, ...]\n\n'
+            f'[{{"dream": "Software Engineer", "description": "Design and build software applications and systems using code.", "subjects": ["Python", "Data Structures", "System Design"]}}, ...]\n\n'
             f"No markdown, no explanation — only the raw JSON array."
         )
         messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
@@ -760,13 +761,21 @@ async def discover_dream_careers(interests: str, personality: str, language: str
                 item.get("dream") or item.get("title") or item.get("name") or
                 item.get("career") or item.get("career_title") or ""
             )
+            description_val = (
+                item.get("description") or item.get("summary") or item.get("desc") or
+                f"A rewarding career path in {dream_val}."
+            )
             subjects_val = (
                 item.get("subjects") or item.get("skills") or item.get("tags") or
                 item.get("key_subjects") or []
             )
             if isinstance(subjects_val, str):
                 subjects_val = [s.strip() for s in subjects_val.split(",") if s.strip()]
-            return {"dream": str(dream_val).strip(), "subjects": list(subjects_val)[:3]}
+            return {
+                "dream": str(dream_val).strip(),
+                "description": str(description_val).strip(),
+                "subjects": list(subjects_val)[:3]
+            }
 
         if isinstance(parsed, list) and len(parsed) > 0:
             normalized = [_normalize_career(c) for c in parsed if isinstance(c, dict)]
@@ -781,18 +790,18 @@ async def discover_dream_careers(interests: str, personality: str, language: str
         print(f"[LLM] discover_dream_careers failed: {e}")
         # 12-item fallback so UI always has something to show
         return [
-            {"dream": "Software Engineer",      "subjects": ["Computer Science", "Logic", "Math"]},
-            {"dream": "Data Scientist",          "subjects": ["Statistics", "Programming", "Analysis"]},
-            {"dream": "Product Manager",         "subjects": ["Leadership", "Design", "Business"]},
-            {"dream": "UI/UX Designer",          "subjects": ["Visual Design", "User Research", "Prototyping"]},
-            {"dream": "Digital Marketer",        "subjects": ["SEO", "Content Strategy", "Analytics"]},
-            {"dream": "Cybersecurity Analyst",   "subjects": ["Network Security", "Cryptography", "Risk Assessment"]},
-            {"dream": "Cloud Architect",         "subjects": ["AWS/Azure", "DevOps", "Infrastructure"]},
-            {"dream": "Business Analyst",        "subjects": ["Data Modeling", "Requirements", "Communication"]},
-            {"dream": "Full Stack Developer",    "subjects": ["Frontend", "Backend", "Database"]},
-            {"dream": "AI Engineer",             "subjects": ["Machine Learning", "Neural Networks", "Python"]},
-            {"dream": "Content Creator",         "subjects": ["Storytelling", "Video Editing", "Marketing"]},
-            {"dream": "Financial Analyst",       "subjects": ["Accounting", "Investment", "Reporting"]},
+            {"dream": "Software Engineer",      "description": "Design and build software applications and systems using code.", "subjects": ["Computer Science", "Logic", "Math"]},
+            {"dream": "Data Scientist",          "description": "Analyze complex data sets to discover patterns and drive decision-making.", "subjects": ["Statistics", "Programming", "Analysis"]},
+            {"dream": "Product Manager",         "description": "Lead the product lifecycle from conception to launch, aligning business goals.", "subjects": ["Leadership", "Design", "Business"]},
+            {"dream": "UI/UX Designer",          "description": "Create intuitive and visually appealing user interfaces and experiences.", "subjects": ["Visual Design", "User Research", "Prototyping"]},
+            {"dream": "Digital Marketer",        "description": "Promote products or brands using digital channels and marketing strategies.", "subjects": ["SEO", "Content Strategy", "Analytics"]},
+            {"dream": "Cybersecurity Analyst",   "description": "Protect an organization's systems, networks, and data from digital attacks.", "subjects": ["Network Security", "Cryptography", "Risk Assessment"]},
+            {"dream": "Cloud Architect",         "description": "Design and manage cloud computing architecture and infrastructure.", "subjects": ["AWS/Azure", "DevOps", "Infrastructure"]},
+            {"dream": "Business Analyst",        "description": "Analyze business processes and requirements to improve efficiency.", "subjects": ["Data Modeling", "Requirements", "Communication"]},
+            {"dream": "Full Stack Developer",    "description": "Develop both client-side and server-side software components.", "subjects": ["Frontend", "Backend", "Database"]},
+            {"dream": "AI Engineer",             "description": "Build intelligent systems and models using machine learning algorithms.", "subjects": ["Machine Learning", "Neural Networks", "Python"]},
+            {"dream": "Content Creator",         "description": "Produce engaging digital content across video, audio, and text platforms.", "subjects": ["Storytelling", "Video Editing", "Marketing"]},
+            {"dream": "Financial Analyst",       "description": "Evaluate financial data and trends to guide business investment decisions.", "subjects": ["Accounting", "Investment", "Reporting"]},
         ]
 
 
