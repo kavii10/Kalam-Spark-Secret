@@ -100,16 +100,18 @@ function userToPayload(user: UserProfile): Record<string, any> {
 }
 
 // ─── Background Supabase Sync Helper ─────────────────────────────────────────
-function syncToSupabase(type: SyncOpType, payload: any): void {
+async function syncToSupabase(type: SyncOpType, payload: any): Promise<void> {
   // Attach device ID to every sync operation for traceability
   const enriched = { ...payload, _device_id: DEVICE_ID };
 
   if (networkService.isOnline()) {
-    offlineSyncService.executeOne(type, enriched).catch(() => {
-      offlineSyncService.enqueue(type, enriched);
-    });
+    try {
+      await offlineSyncService.executeOne(type, enriched);
+    } catch (e) {
+      await offlineSyncService.enqueue(type, enriched);
+    }
   } else {
-    offlineSyncService.enqueue(type, enriched);
+    await offlineSyncService.enqueue(type, enriched);
   }
 }
 
@@ -134,7 +136,7 @@ export const dbService = {
     } catch (e) { /* localStorage might be full */ }
 
     // 5. Sync to Supabase in background
-    syncToSupabase('save_user', userToPayload(user));
+    await syncToSupabase('save_user', userToPayload(user));
   },
 
   async getUser(userId: string): Promise<UserProfile | null> {
@@ -197,7 +199,7 @@ export const dbService = {
     localDB.writeEmergencySnapshot(user.id).catch(() => {});
 
     // 3. Sync to Supabase in background
-    syncToSupabase('save_roadmap', payload);
+    await syncToSupabase('save_roadmap', payload);
   },
 
   async getRoadmap(userId: string): Promise<any | null> {
@@ -267,13 +269,13 @@ export const dbService = {
     await localDB.invalidateComputed(userId, 'stage_progress');
 
     // 3. Sync to Supabase
-    syncToSupabase('save_stage', payload);
+    await syncToSupabase('save_stage', payload);
   },
 
   async clearCompletedStages(userId: string): Promise<void> {
     await localDB.deleteByIndex('completed_stages', 'user_id', userId);
     await localDB.invalidateComputed(userId, 'stage_progress');
-    syncToSupabase('clear_stages', { user_id: userId });
+    await syncToSupabase('clear_stages', { user_id: userId });
   },
 
   // ── TASKS ─────────────────────────────────────────────────────────────────────
@@ -330,12 +332,12 @@ export const dbService = {
     localDB.writeEmergencySnapshot(userId).catch(() => {});
 
     // 4. Sync to Supabase
-    syncToSupabase('save_task', payload);
+    await syncToSupabase('save_task', payload);
   },
 
   async deleteTask(taskId: string): Promise<void> {
     await localDB.delete('tasks', taskId);
-    syncToSupabase('delete_task', { id: taskId });
+    await syncToSupabase('delete_task', { id: taskId });
   },
 
   // ── MENTOR CHAT ───────────────────────────────────────────────────────────────
@@ -349,7 +351,7 @@ export const dbService = {
     await localDB.put('mentor_messages', { id: localId, ...supabasePayload, updatedAt: now }, true);
 
     // 2. Sync to Supabase (without local ID)
-    syncToSupabase('save_mentor_msg', supabasePayload);
+    await syncToSupabase('save_mentor_msg', supabasePayload);
   },
 
   /**
@@ -399,12 +401,12 @@ export const dbService = {
 
   async clearMentorHistory(userId: string): Promise<void> {
     await localDB.deleteByIndex('mentor_messages', 'user_id', userId);
-    syncToSupabase('clear_mentor', { user_id: userId });
+    await syncToSupabase('clear_mentor', { user_id: userId });
   },
 
   async deleteMentorSession(userId: string, sessionId: string): Promise<void> {
     await localDB.deleteByIndex('mentor_messages', 'session_id', sessionId);
-    syncToSupabase('delete_mentor_session', { user_id: userId, session_id: sessionId });
+    await syncToSupabase('delete_mentor_session', { user_id: userId, session_id: sessionId });
   },
 
   // ── REWARDS ───────────────────────────────────────────────────────────────────
@@ -415,7 +417,7 @@ export const dbService = {
     if (local) {
       await localDB.put('user_profile', { ...local, rewards: updated, updatedAt: nowISO() }, true);
     }
-    syncToSupabase('save_reward', { user_id: userId, rewards: updated });
+    await syncToSupabase('save_reward', { user_id: userId, rewards: updated });
   },
 
   // ── COMPUTED CACHE (Dashboard acceleration) ────────────────────────────────

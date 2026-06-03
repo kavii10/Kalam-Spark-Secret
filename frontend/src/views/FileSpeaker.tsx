@@ -1753,17 +1753,61 @@ Each line should be 1-3 natural sentences. Make it conversational and educationa
     // small delay so component is ready, then auto-trigger
     const t = setTimeout(async () => {
       try {
-        const res  = await fetch(`${BACKEND}/api/filespeaker/url`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: fsUrl }),
-        });
-        const data = await res.json();
-        if (res.ok) {
-          registerSource({ ...data, text: data.preview, addedAt: Date.now() });
-          setQuickUrl('');
-        } else {
-          throw new Error(data.detail || 'URL extraction failed');
+        // Desktop: try backend first for full crawl4ai extraction
+        if (!IS_NATIVE_MOBILE && BACKEND) {
+          try {
+            const res = await fetch(`${BACKEND}/api/filespeaker/url`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url: fsUrl }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data.source_id) {
+                registerSource({ ...data, text: data.preview, addedAt: Date.now() });
+                setQuickUrl('');
+                setQuickLoading(false);
+                return;
+              }
+            }
+          } catch (e) {
+            console.warn('[FileSpeaker] Auto-import backend URL extraction failed, trying Gemini...', e);
+          }
         }
+
+        // Mobile + desktop fallback: use central summarizeWebpage to summarize/extract from the URL
+        if (networkService.isOnline()) {
+          let urlContent = '';
+          try {
+            // allorigins.win is a reliable CORS proxy for mobile
+            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(fsUrl)}`;
+            const resp = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
+            const proxyData = await resp.json();
+            urlContent = proxyData.contents?.substring(0, 8000) || '';
+          } catch (_) {
+            urlContent = ''; // Proxy failed, use own knowledge
+          }
+
+          const extractedText = await summarizeWebpage(fsUrl, urlContent);
+          if (extractedText.trim()) {
+            const title = fsUrl.replace(/https?:\/\//, '').split('/')[0];
+            const source: Source = {
+              source_id: `url_${Date.now()}`,
+              title,
+              char_count: extractedText.length,
+              chunk_count: Math.ceil(extractedText.length / 1000),
+              preview: extractedText.substring(0, 250) + '...',
+              text: extractedText,
+              addedAt: Date.now(),
+              detectedLang: 'en',
+            };
+            registerSource(source);
+            setQuickUrl('');
+            setQuickLoading(false);
+            return;
+          }
+        }
+
+        throw new Error('Could not extract URL content. Please paste the text manually using the Text tab.');
       } catch (err: any) {
         console.error("Auto-import failed:", err);
         alert(`Auto-import failed: ${err.message || err}`);

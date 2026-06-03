@@ -174,9 +174,9 @@ function BookCard({ item }: { item: BookResource }) {
             Open Book <ExternalLink size={9} />
           </span>
           <button onClick={sendToFileSpeaker}
-            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600/40 transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 min-h-[32px] rounded-md bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600/40 transition-all cursor-pointer"
             title="Send to File Speaker">
-            <Volume2 size={9} /> Speak
+            <Volume2 size={12} /> Speak
           </button>
         </div>
       </div>
@@ -243,9 +243,9 @@ function VideoCard({ item }: { item: VideoResource }) {
             Watch Now <ExternalLink size={9} />
           </span>
           <button onClick={sendToFileSpeaker}
-            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600/40 transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 min-h-[32px] rounded-md bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600/40 transition-all cursor-pointer"
             title="Send to File Speaker">
-            <Volume2 size={9} /> Speak
+            <Volume2 size={12} /> Speak
           </button>
         </div>
       </div>
@@ -299,9 +299,9 @@ function PaperCard({ item }: { item: PaperResource }) {
             Read Paper <ExternalLink size={9} />
           </span>
           <button onClick={sendToFileSpeaker}
-            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600/40 transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 min-h-[32px] rounded-md bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600/40 transition-all cursor-pointer"
             title="Send to File Speaker">
-            <Volume2 size={9} /> Speak
+            <Volume2 size={12} /> Speak
           </button>
         </div>
       </div>
@@ -358,9 +358,9 @@ function NewsCard({ item }: { item: NewsResource }) {
             Read Article <ExternalLink size={9} />
           </span>
           <button onClick={sendToFileSpeaker}
-            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600/40 transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 min-h-[32px] rounded-md bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600/40 transition-all cursor-pointer"
             title="Send to File Speaker">
-            <Volume2 size={9} /> Speak
+            <Volume2 size={12} /> Speak
           </button>
         </div>
       </div>
@@ -626,9 +626,11 @@ export default function Resources({ user }: { user: UserProfile }) {
       const dreamMismatch = cached?.cachedForDream && cached.cachedForDream !== currentUser.dream;
       const stageMismatch = cached?.cachedForStage !== undefined && cached.cachedForStage !== stageIdx;
       // Also invalidate if cached data is sparse (< 3 books means it was a bad/incomplete cache)
-      const sparseCache = cached && (
-        (Array.isArray(cached.books) && cached.books.length < 3) ||
-        (Array.isArray(cached.videos) && cached.videos.length < 3)
+      // Also invalidate if cached data is completely empty and no search load-mores have been performed
+      const loadCount = (rm as any)._loadMoreCount || 0;
+      const sparseCache = cached && loadCount === 0 && (
+        (!Array.isArray(cached.books) || cached.books.length === 0) &&
+        (!Array.isArray(cached.videos) || cached.videos.length === 0)
       );
 
       if (!cached || dreamMismatch || stageMismatch || sparseCache) {
