@@ -87,23 +87,29 @@ def _dream_to_search_term(dream: str) -> str:
 
 
 def _skills_for_dream(dream: str) -> list[str]:
-    """Return 3–4 relevant skills tags for a given dream career."""
-    d = dream.lower()
-    if any(k in d for k in ["ias", "upsc", "civil", "ips", "collector"]):
-        return ["Polity & Governance", "Current Affairs", "Essay Writing", "UPSC Syllabus"]
-    if any(k in d for k in ["doctor", "mbbs", "physician", "surgeon"]):
-        return ["Clinical Skills", "Anatomy", "Patient Care", "NEET"]  
-    if any(k in d for k in ["lawyer", "advocate"]):
-        return ["Legal Research", "Constitutional Law", "Argumentation", "Case Analysis"]
-    if any(k in d for k in ["teacher", "professor"]):
-        return ["Subject Expertise", "Pedagogy", "Curriculum Design", "Communication"]
-    if any(k in d for k in ["data", "machine learning", "ai ", "ml "]):
-        return ["Python", "Machine Learning", "Data Analysis", "Statistics"]
-    if any(k in d for k in ["software", "developer", "engineer"]):
-        return ["Programming", "Problem Solving", "System Design", "Git"]
-    # Generic fallback
-    words = [w.capitalize() for w in dream.split()[:2]]
-    return words + ["Communication", "Teamwork"]
+    """
+    Generates relevant skill tags dynamically from the dream career title
+    without using any predefined career lists or templates.
+    """
+    import re
+    words = [w.strip() for w in re.split(r"[^a-zA-Z0-9]+", dream) if w.strip()]
+    stop_words = {"a", "an", "the", "to", "of", "for", "in", "and", "or", "with", "specialist", "expert", "officer", "practitioner", "professional", "career", "dream", "job"}
+    keywords = [w.capitalize() for w in words if w.lower() not in stop_words and len(w) > 2]
+    
+    if not keywords:
+        return ["Core Skills", "Communication", "Practical Application", "Problem Solving"]
+    
+    tags = []
+    if len(keywords) >= 1:
+        tags.append(keywords[0] + " Fundamentals")
+    if len(keywords) >= 2:
+        tags.append(keywords[1] + " Methodologies")
+    elif len(keywords) == 1:
+        tags.append(keywords[0] + " Practice")
+    
+    tags.append("Domain Knowledge")
+    tags.append("Analytical Thinking")
+    return tags
 
 
 async def fetch_adzuna_jobs(dream: str, max_results: int = 5) -> list[dict]:
