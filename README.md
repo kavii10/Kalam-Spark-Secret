@@ -129,7 +129,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 ---
 
-### 💻 Option B: Running with Local LLM (Offline Mode via Ollama)
+### 💻 Option B: Running with Local LLM (Offline Mode via Ollama on Laptop/PC)
 
 Kalam Spark can run entirely offline using Ollama as a fallback when API keys are absent or requests fail.
 
@@ -152,6 +152,28 @@ Kalam Spark can run entirely offline using Ollama as a fallback when API keys ar
    uvicorn main:app --host 0.0.0.0 --port 8000 --reload
    ```
    _Note: If no cloud API keys are provided in `.env`, the backend will automatically route all AI requests to your local Ollama instance._
+
+---
+
+### 📱 Option C: Running on Mobile Offline (Native On-Device Inference)
+
+The application supports native, offline LLM execution directly on your mobile device (Android & iOS) with zero dependency on external servers or network connections.
+
+1. **Download the Quantized Model**:
+   - Download the quantized Gemma 4 model file in `.gguf` format: `google_gemma-4-E2B-it-Q2_K.gguf` (or similar).
+2. **Move to Device Storage**:
+   - **Android**: Place the downloaded `.gguf` file inside your phone's main **Downloads** folder (i.e. `/Download/google_gemma-4-E2B-it-Q2_K.gguf`).
+   - **iOS**: Import the `.gguf` file via the Files app into the app's **Documents** folder.
+3. **Select or Initialize the Model in the App**:
+   - Open the app's sidebar settings.
+   - Click **Select Model File** (on native mobile devices) and pick the `.gguf` file from the storage.
+   - The app will copy and load the model locally. You are now ready to run offline chats, tasks, and quizzes on your mobile device!
+
+---
+
+## 🏛️ System Architecture
+
+For a comprehensive layout of the app's design patterns, agent swarm workflows, data synchronization pipelines, and FSRS spacing metrics, please refer to the detailed [ARCHITECTURE.md](ARCHITECTURE.md) document.
 
 ---
 

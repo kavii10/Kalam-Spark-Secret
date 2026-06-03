@@ -569,15 +569,7 @@ async def fs_add_url(req: FSUrlRequest):
     return {"source_id": sid, "title": title, "char_count": len(text), "chunk_count": chunk_count, "preview": text[:500]}
 
 
-@app.post("/api/filespeaker/detect-language")
-async def fs_detect_language(req: FSDetectLangRequest):
-    """Detect language of the text using Gemma4."""
-    from file_speaker import detect_language
-    try:
-        res = await detect_language(req.source_text)
-        return res
-    except Exception as e:
-        raise HTTPException(400, f"Language detection failed: {e}")
+
 
 @app.post("/api/filespeaker/text")
 async def fs_add_text(payload: dict):
