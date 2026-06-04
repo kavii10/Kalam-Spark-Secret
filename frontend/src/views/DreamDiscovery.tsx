@@ -382,8 +382,10 @@ export default function DreamDiscovery({ onComplete, onSkip, isLight = false }: 
                 >
                     <Compass size={16} />
                 </div>
-                <h3 className="text-sm font-bold mb-2 font-cinzel leading-tight" style={{ color: isLight ? '#111827' : '#fde68a' }}>{res.dream}</h3>
-                {res.description && (
+                <h3 className="text-sm font-bold mb-2 font-cinzel leading-tight" style={{ color: isLight ? '#111827' : '#fbbf24' }}>
+                  {res.dream && res.dream.trim() ? res.dream : `Career Path ${i + 1}`}
+                </h3>
+                {res.description && res.description.trim() && (
                   <p className="text-[11px] mb-3 leading-relaxed font-medium" style={{ color: isLight ? '#4b5563' : 'rgba(255,255,255,0.6)' }}>
                     {res.description}
                   </p>
