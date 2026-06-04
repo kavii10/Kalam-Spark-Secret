@@ -1160,10 +1160,10 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
             if (pageText.trim()) pages.push(`[Page ${i}]\n${pageText}`);
           }
           text = pages.join('\n\n');
-          if (!text.trim()) text = `[PDF: ${file.name} — could not extract text. Try pasting text directly.]`;
+          if (!text.trim()) text = `[PDF: ${file.name} —  could not extract text. Try pasting text directly.]`;
         } catch (pdfErr) {
           console.warn('[FileSpeaker] PDF.js extraction failed:', pdfErr);
-          text = `[PDF: ${file.name} — ${file.size} bytes. Text extraction failed. Paste the text manually.]`;
+          text = `[PDF: ${file.name} —  ${file.size} bytes. Text extraction failed. Paste the text manually.]`;
         }
       } else if (
         fileNameLower.endsWith('.txt') ||
@@ -1173,18 +1173,18 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
         fileNameLower.endsWith('.html') ||
         fileNameLower.endsWith('.xml')
       ) {
-        // Plain text files — read directly
+        // Plain text files —  read directly
         text = await file.text();
       } else if (fileNameLower.endsWith('.docx')) {
-        // Basic DOCX — read as text (imperfect but better than nothing)
+        // Basic DOCX —  read as text (imperfect but better than nothing)
         text = await file.text().catch(() => `[DOCX: ${file.name}. For best results, copy-paste the text using the Text tab.]`);
       } else {
-        // Other files — try reading as text
+        // Other files —  try reading as text
         text = await file.text().catch(() => `[Binary file: ${file.name}. For best results, paste the text manually.]`);
       }
 
       if (!text.trim()) {
-        text = `[File: ${file.name} — no readable text found. Use the Text tab to paste content directly.]`;
+        text = `[File: ${file.name} —  no readable text found. Use the Text tab to paste content directly.]`;
       }
 
       // Limit text length to avoid memory issues on mobile
@@ -1210,13 +1210,16 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
     }
   }, []);
 
-  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Add URL (mobile: Gemini-powered extraction, desktop: backend first) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+  /* ─── Add URL (mobile: Gemini-powered extraction, desktop: backend first) ─── */
   const handleAddUrl = async () => {
     if (!urlInput.trim()) return;
     setUploading(true);
     try {
+      await networkService.ready();
+      const isOnline = networkService.isOnline();
+
       // Desktop: try backend first for full crawl4ai extraction
-      if (!IS_NATIVE_MOBILE && BACKEND) {
+      if (!IS_NATIVE_MOBILE && BACKEND && isOnline) {
         try {
           const res = await fetch(`${BACKEND}/api/filespeaker/url`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1237,8 +1240,8 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
       }
 
       // Mobile + desktop fallback: use central summarizeWebpage to summarize/extract from the URL
-      if (networkService.isOnline()) {
-        let urlContent = '';
+      let urlContent = '';
+      if (isOnline) {
         try {
           // allorigins.win is a reliable CORS proxy for mobile
           const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(urlInput.trim())}`;
@@ -1248,25 +1251,25 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
         } catch (_) {
           urlContent = ''; // Proxy failed, use own knowledge
         }
+      }
 
-        const extractedText = await summarizeWebpage(urlInput.trim(), urlContent);
-        if (extractedText.trim()) {
-          const title = urlInput.trim().replace(/https?:\/\//, '').split('/')[0];
-          const source: Source = {
-            source_id: `url_${Date.now()}`,
-            title,
-            char_count: extractedText.length,
-            chunk_count: Math.ceil(extractedText.length / 1000),
-            preview: extractedText.substring(0, 250) + '...',
-            text: extractedText,
-            addedAt: Date.now(),
-            detectedLang: 'en',
-          };
-          registerSource(source);
-          setUrlInput('');
-          setUploading(false);
-          return;
-        }
+      const extractedText = await summarizeWebpage(urlInput.trim(), urlContent);
+      if (extractedText.trim()) {
+        const title = urlInput.trim().replace(/https?:\/\//, '').split('/')[0];
+        const source: Source = {
+          source_id: `url_${Date.now()}`,
+          title,
+          char_count: extractedText.length,
+          chunk_count: Math.ceil(extractedText.length / 1000),
+          preview: extractedText.substring(0, 250) + '...',
+          text: extractedText,
+          addedAt: Date.now(),
+          detectedLang: 'en',
+        };
+        registerSource(source);
+        setUrlInput('');
+        setUploading(false);
+        return;
       }
 
       throw new Error('Could not extract URL content. Please paste the text manually using the Text tab.');
@@ -1277,7 +1280,7 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
     }
   };
 
-  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Add Text Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+  /* ─── Add Text ─── */
   const handleAddText = async () => {
     if (!textInput.trim()) return;
     setUploading(true);
@@ -1322,7 +1325,7 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
     finally { setUploading(false); }
   };
 
-  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Chat Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+  /* ─── Chat ─── */
   const handleChat = async () => {
     if (!chatInput.trim() || !activeSource || chatLoading) return;
     const q = chatInput.trim();
@@ -1398,7 +1401,7 @@ Be accurate and concise. Never invent facts.`;
         } catch (localErr) {
           console.error('[FileSpeaker] Local model fallback failed:', localErr);
           // If offline model fails, return a friendly local message rather than crashing
-          reply = `📝 Kalam Spark offline document reader: I see you're asking about these documents. While offline or with rate limits exceeded, and since the local model is not loaded, I recommend checking your internet connection or downloading the GGUF model in Settings. Your documents remain loaded locally in the browser/app.`;
+          reply = `📝  Kalam Spark offline document reader: I see you're asking about these documents. While offline or with rate limits exceeded, and since the local model is not loaded, I recommend checking your internet connection or downloading the GGUF model in Settings. Your documents remain loaded locally in the browser/app.`;
         }
       }
 
@@ -1413,7 +1416,7 @@ Be accurate and concise. Never invent facts.`;
     } catch (e: any) {
       setSourceStates(cur => {
         const s = cur[sid] ?? { chat: [], transforms: [], podcast: null };
-        return { ...cur, [sid]: { ...s, chat: [...s.chat, { role: 'ai', text: `⚠️ Chat failed: ${e.message || e}` }] } };
+        return { ...cur, [sid]: { ...s, chat: [...s.chat, { role: 'ai', text: `⚠️  Chat failed: ${e.message || e}` }] } };
       });
     } finally {
       setChatLoading(false);
@@ -1421,7 +1424,7 @@ Be accurate and concise. Never invent facts.`;
     }
   };
 
-  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Transformations Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+  /* ─── Transformations ─── */
   const handleTransform = async (key: string, label: string) => {
     if (!activeSource || transforming) return;
     setTransforming(key);
@@ -1476,7 +1479,7 @@ Be accurate and concise. Never invent facts.`;
     finally { setTransforming(null); }
   };
 
-  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Auto Language Detection Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+  /* ─── Auto Language Detection ─── */
   const handleDetectLanguage = async () => {
     if (!activeSource || detectingLang) return;
     setDetectingLang(true);
@@ -1578,7 +1581,7 @@ Be accurate and concise. Never invent facts.`;
         return;
       }
 
-      // Ã¢â€â‚¬Ã¢â€â‚¬ Mobile / No-backend path: generate script via LLM + play with Web Speech API Ã¢â€â‚¬Ã¢â€â‚¬
+      // ── Mobile / No-backend path: generate script via LLM + play with Web Speech API ──
       const lengthInstruction = podcastLength === 'short' ? '6-8 dialogue exchanges' : podcastLength === 'long' ? '18-24 dialogue exchanges' : '12-15 dialogue exchanges';
       const systemInstruction = `You are a world-class educational podcast scriptwriter.
 CRITICAL RULE: ALL facts, examples, and explanations MUST come DIRECTLY from the provided source document.
@@ -1647,7 +1650,7 @@ Each line: 1-3 natural sentences. Conversational and educational.`;
         language: podcastLang,
         language_name: PODCAST_LANGUAGES.find(l => l.code === podcastLang)?.label || 'English',
         duration_estimate: `~${Math.ceil(lines.length * 6 / 60)} min`,
-        audio_url: null,   // no server audio on mobile — we'll use Web Speech
+        audio_url: null,   // no server audio on mobile —  we'll use Web Speech
         is_local: true,    // flag to indicate client-side TTS
       };
 
@@ -1700,7 +1703,7 @@ Each line: 1-3 natural sentences. Conversational and educational.`;
   };
 
 
-  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Podcast Interactive Q&A Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+  /* ── Podcast Interactive Q&A ── */
   const [interactQ, setInteractQ] = useState('');
   const [interactLoading, setInteractLoading] = useState(false);
   const handlePodcastInteract = async () => {
@@ -1771,7 +1774,7 @@ Each line: 1-3 natural sentences. Conversational and educational.`;
     rec.start();
   };
 
-  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Rename source Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+  /* ─── Rename source ─── */
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameVal, setRenameVal]   = useState('');
   const commitRename = (id: string) => {
@@ -1779,7 +1782,7 @@ Each line: 1-3 natural sentences. Conversational and educational.`;
     setRenamingId(null);
   };
 
-  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Quick URL import (from Study Center or external) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+  /* ─── Quick URL import (from Study Center or external) ─── */
   const [quickUrl, setQuickUrl]     = useState('');
   const [quickLoading, setQuickLoading] = useState(false);
   const handleQuickUrl = async () => {
@@ -1798,18 +1801,26 @@ Each line: 1-3 natural sentences. Conversational and educational.`;
     finally { setQuickLoading(false); }
   };
 
-  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Auto-import URL from Study Center (sessionStorage) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+  /* ─── Auto-import URL from Study Center (sessionStorage) ─── */
   useEffect(() => {
     const fsUrl = sessionStorage.getItem('fs_import_url');
     if (!fsUrl) return;
+    const fsTitle = sessionStorage.getItem('fs_import_title') || '';
+    const fsDesc = sessionStorage.getItem('fs_import_desc') || '';
     sessionStorage.removeItem('fs_import_url');
+    sessionStorage.removeItem('fs_import_title');
+    sessionStorage.removeItem('fs_import_desc');
     setQuickUrl(fsUrl);
     setQuickLoading(true);
     // small delay so component is ready, then auto-trigger
     const t = setTimeout(async () => {
       try {
+        // Wait for network service to be fully ready
+        await networkService.ready();
+        const isOnline = networkService.isOnline();
+
         // Desktop: try backend first for full crawl4ai extraction
-        if (!IS_NATIVE_MOBILE && BACKEND) {
+        if (!IS_NATIVE_MOBILE && BACKEND && isOnline) {
           try {
             const res = await fetch(`${BACKEND}/api/filespeaker/url`, {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1830,7 +1841,7 @@ Each line: 1-3 natural sentences. Conversational and educational.`;
         }
 
         // Mobile + desktop fallback: use central summarizeWebpage to summarize/extract from the URL
-        if (networkService.isOnline()) {
+        if (isOnline) {
           let urlContent = '';
           try {
             // allorigins.win is a reliable CORS proxy for mobile
@@ -1842,9 +1853,19 @@ Each line: 1-3 natural sentences. Conversational and educational.`;
             urlContent = ''; // Proxy failed, use own knowledge
           }
 
+          // Clean urlContent: if it is just a script or HTML wrapper, make it empty
+          if (urlContent && (urlContent.includes('<script>') || urlContent.length < 200 || !urlContent.includes(' '))) {
+            urlContent = '';
+          }
+
           const extractedText = await summarizeWebpage(fsUrl, urlContent);
-          if (extractedText.trim()) {
-            const title = fsUrl.replace(/https?:\/\//, '').split('/')[0];
+          const isValidText = extractedText && extractedText.trim().length > 150 && 
+            !extractedText.includes("enable JavaScript") && 
+            !extractedText.includes("allorigins") && 
+            !extractedText.includes("Error");
+
+          if (isValidText) {
+            const title = fsTitle || fsUrl.replace(/https?:\/\//, '').split('/')[0];
             const source: Source = {
               source_id: `url_${Date.now()}`,
               title,
@@ -1852,6 +1873,36 @@ Each line: 1-3 natural sentences. Conversational and educational.`;
               chunk_count: Math.ceil(extractedText.length / 1000),
               preview: extractedText.substring(0, 250) + '...',
               text: extractedText,
+              addedAt: Date.now(),
+              detectedLang: 'en',
+            };
+            registerSource(source);
+            setQuickUrl('');
+            setQuickLoading(false);
+            return;
+          }
+        }
+
+        // Fallback: Generate a comprehensive study guide / notes using LLM knowledge based on Title & Description
+        if (fsTitle) {
+          const systemInstruction = "You are an elite academic educator. Return only the detailed study guide text.";
+          const prompt = `You are a content generator for File Speaker. The user wants to study a resource but the direct URL scrape failed.
+Generate a comprehensive, highly detailed study guide, lecture transcript, or textbook chapter summary for:
+Title: ${fsTitle}
+Description/Author/Publisher: ${fsDesc}
+Source URL: ${fsUrl}
+
+The generated content must be extremely detailed, educational, and structured, so the student can chat with it, study it, and convert it to a podcast. Generate at least 1500 words of core concepts, detailed explanations, and key takeaways.`;
+
+          const generatedText = await generateText({ prompt, systemInstruction, temperature: 0.3 });
+          if (generatedText && generatedText.trim().length > 100) {
+            const source: Source = {
+              source_id: `url_${Date.now()}`,
+              title: fsTitle,
+              char_count: generatedText.length,
+              chunk_count: Math.ceil(generatedText.length / 1000),
+              preview: generatedText.substring(0, 250) + '...',
+              text: generatedText,
               addedAt: Date.now(),
               detectedLang: 'en',
             };
@@ -1873,7 +1924,7 @@ Each line: 1-3 natural sentences. Conversational and educational.`;
     return () => clearTimeout(t);
   }, []);
 
-  /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Remove Source Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+  /* ─── Remove Source ─── */
   const removeSource = (id: string) => {
     setSources(prev => prev.filter(s => s.source_id !== id));
     setCheckedSources(prev => prev.filter(x => x !== id));
@@ -1899,18 +1950,23 @@ Each line: 1-3 natural sentences. Conversational and educational.`;
       </div>
 
       {/* Ã¢â€â‚¬Ã¢â€â‚¬ Quick URL Import Bar (Study Center / YouTube / Article links) Ã¢â€â‚¬Ã¢â€â‚¬ */}
-      <div className={`flex items-center gap-2 p-3 rounded-xl border border-violet-500/20 ${isLight ? 'bg-violet-50' : 'bg-violet-500/5'}`}>
+      <div className={`flex items-center gap-2 p-1.5 pl-3 rounded-xl border transition-all duration-300 ${
+        isLight 
+          ? 'bg-violet-50 border-violet-200 focus-within:border-violet-400 focus-within:ring-2 focus-within:ring-violet-200' 
+          : 'bg-violet-500/5 border-violet-500/20 focus-within:border-violet-500/50 focus-within:shadow-[0_0_15px_rgba(124,58,237,0.15)]'
+      }`}>
         <Link size={14} className="text-violet-400 shrink-0" />
-        <span className={`text-xs shrink-0 hidden sm:inline ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>Quick import:</span>
+        <span className={`text-xs shrink-0 hidden sm:inline ${isLight ? 'text-zinc-500' : 'text-zinc-400'}`}>Quick import:</span>
         <input
           value={quickUrl}
           onChange={e => setQuickUrl(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleQuickUrl()}
-          placeholder="Paste any YouTube link, article URL or web page to instantly add as source..."
+          placeholder="Paste any YouTube link, article URL or web page..."
           className={`flex-1 min-w-0 bg-transparent text-sm focus:outline-none ${isLight ? 'text-zinc-800 placeholder:text-zinc-400' : 'text-white placeholder:text-zinc-600'}`}
+          style={{ border: 'none', boxShadow: 'none', outline: 'none' }}
         />
         <button onClick={handleQuickUrl} disabled={quickLoading || !quickUrl.trim()}
-          className="px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold rounded-lg transition-all disabled:opacity-50 flex items-center gap-1.5 shrink-0">
+          className="px-3.5 py-2 bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold rounded-lg transition-all disabled:opacity-50 flex items-center gap-1.5 shrink-0">
           {quickLoading ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
           {quickLoading ? 'Fetching...' : 'Add'}
         </button>

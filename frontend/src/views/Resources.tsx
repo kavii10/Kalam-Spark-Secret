@@ -120,6 +120,8 @@ function BookCard({ item }: { item: BookResource }) {
   const sendToFileSpeaker = (e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
     sessionStorage.setItem('fs_import_url', item.link);
+    sessionStorage.setItem('fs_import_title', item.title);
+    sessionStorage.setItem('fs_import_desc', `${item.authors || ''} · ${item.description || ''}`);
     navigate('/filespeaker');
   };
 
@@ -197,6 +199,8 @@ function VideoCard({ item }: { item: VideoResource }) {
   const sendToFileSpeaker = (e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
     sessionStorage.setItem('fs_import_url', item.link);
+    sessionStorage.setItem('fs_import_title', item.title);
+    sessionStorage.setItem('fs_import_desc', `${item.publisher || ''} · ${item.description || ''}`);
     navigate('/filespeaker');
   };
 
@@ -259,6 +263,8 @@ function PaperCard({ item }: { item: PaperResource }) {
   const sendToFileSpeaker = (e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
     sessionStorage.setItem('fs_import_url', item.link);
+    sessionStorage.setItem('fs_import_title', item.title);
+    sessionStorage.setItem('fs_import_desc', `${item.authors || ''} · ${item.publishedYear || ''}`);
     navigate('/filespeaker');
   };
 
@@ -315,6 +321,8 @@ function NewsCard({ item }: { item: NewsResource }) {
   const sendToFileSpeaker = (e: React.MouseEvent) => {
     e.preventDefault(); e.stopPropagation();
     sessionStorage.setItem('fs_import_url', item.link);
+    sessionStorage.setItem('fs_import_title', item.title);
+    sessionStorage.setItem('fs_import_desc', `${item.source || ''} · ${item.description || ''}`);
     navigate('/filespeaker');
   };
 
