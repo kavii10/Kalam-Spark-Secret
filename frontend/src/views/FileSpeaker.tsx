@@ -1968,7 +1968,7 @@ The generated content must be extremely detailed, educational, and structured, s
         <button onClick={handleQuickUrl} disabled={quickLoading || !quickUrl.trim()}
           className="px-3.5 py-2 bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold rounded-lg transition-all disabled:opacity-50 flex items-center gap-1.5 shrink-0">
           {quickLoading ? <Loader2 size={12} className="animate-spin" /> : <Plus size={12} />}
-          {quickLoading ? 'Fetching...' : 'Add'}
+          {quickLoading ? 'Fetching' : 'Add'}
         </button>
       </div>
 
@@ -2004,7 +2004,7 @@ The generated content must be extremely detailed, educational, and structured, s
                     {uploading ? <Loader2 size={20} className="animate-spin text-violet-400 mx-auto mb-1" />
                       : <Upload size={20} className={`mx-auto mb-1 transition-colors group-hover:text-violet-400 ${isLight ? 'text-zinc-400' : 'text-zinc-600'}`} />}
                     <p className={`text-xs transition-colors ${isLight ? 'text-zinc-500 group-hover:text-zinc-700' : 'text-zinc-500 group-hover:text-zinc-300'}`}>
-                      {uploading ? 'Uploading...' : 'Click to upload PDF, DOCX, TXT, MD'}
+                      {uploading ? 'Uploading' : 'Click to upload PDF, DOCX, TXT, MD'}
                     </p>
                   </button>
                 </div>
@@ -2023,7 +2023,7 @@ The generated content must be extremely detailed, educational, and structured, s
                   <button onClick={handleAddUrl} disabled={uploading || !urlInput.trim()}
                     className="w-full bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold py-2 rounded-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2">
                     {uploading ? <Loader2 size={14} className="animate-spin" /> : <Link size={14} />}
-                    {uploading ? 'Fetching...' : 'Add URL'}
+                    {uploading ? 'Fetching' : 'Add URL'}
                   </button>
                 </div>
               )}
@@ -2038,7 +2038,7 @@ The generated content must be extremely detailed, educational, and structured, s
                   <button onClick={handleAddText} disabled={uploading || !textInput.trim()}
                     className="w-full bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold py-2 rounded-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2">
                     {uploading ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
-                    {uploading ? 'Adding...' : 'Add Text'}
+                    {uploading ? 'Adding' : 'Add Text'}
                   </button>
                 </div>
               )}
