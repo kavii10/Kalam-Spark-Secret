@@ -634,12 +634,11 @@ export default function Resources({ user }: { user: UserProfile }) {
       //   2. The user has pivoted careers (dream mismatch)
       //   3. The user has moved to a new stage in the roadmap
       //   4. The stage subjects changed (e.g. old cache was built from stage title)
-      // Use concepts (specific learnable items) first, then subjects as fallback
-      // This ensures resources are loaded for specific items like "Linear Algebra", "Calculus", "Python"
-      // instead of generic stage titles like "Foundations of Math"
-      const stageSubjects: string[] = (stage?.concepts && stage.concepts.length > 0) 
-        ? stage.concepts 
-        : (stage?.subjects || []);
+      // Use stage.subjects (like "Linear Algebra", "Calculus", "Python") first, then stage.concepts as fallback.
+      // This ensures resources are loaded for specific subjects/topics instead of checklist items or generic stage titles.
+      const stageSubjects: string[] = (stage?.subjects && stage.subjects.length > 0) 
+        ? stage.subjects 
+        : (stage?.concepts || []);
       const dreamMismatch = cached?.cachedForDream && cached.cachedForDream !== currentUser.dream;
       const stageMismatch = cached?.cachedForStage !== undefined && cached.cachedForStage !== stageIdx;
       // Concepts/Subjects mismatch: old cache was built from generic stage title instead of specific concepts
@@ -751,7 +750,7 @@ export default function Resources({ user }: { user: UserProfile }) {
     }
 
     // Use all stage subjects for context; rotate through subjects for variety on each Load More click
-    const subjects = stage.subjects?.length ? stage.subjects : [];
+    const subjects = stage.subjects?.length ? stage.subjects : (stage.concepts?.length ? stage.concepts : []);
     const loadCount = (roadmap as any)._loadMoreCount || 0;
     // Rotate which subject is in position 0 so each Load More click surfaces different subjects first
     const rotatedSubjects = subjects.length > 1

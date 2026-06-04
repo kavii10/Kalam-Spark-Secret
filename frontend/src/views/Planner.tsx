@@ -108,12 +108,11 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
   // ── Unified Study Center Resource Helper ───────────────────────────────────
   const getUnifiedResources = useCallback(async (rm: any, stageIdx: number, stage: any) => {
     let cached = rm.cachedResources;
-    // Use concepts (specific learnable items) first, then subjects as fallback
-    // This ensures resources are loaded for specific items like "Linear Algebra", "Calculus", "Python"
-    // instead of generic stage titles like "Foundations of Math"
-    const stageSubjects: string[] = (stage?.concepts && stage.concepts.length > 0)
-      ? stage.concepts
-      : (stage?.subjects || []);
+    // Use stage.subjects (like "Linear Algebra", "Calculus", "Python") first, then stage.concepts as fallback.
+    // This ensures resources are loaded for specific subjects/topics instead of checklist items or generic stage titles.
+    const stageSubjects: string[] = (stage?.subjects && stage.subjects.length > 0)
+      ? stage.subjects
+      : (stage?.concepts || []);
     const dreamMismatch = cached?.cachedForDream && cached.cachedForDream !== user.dream;
     const stageMismatch = cached?.cachedForStage !== undefined && cached.cachedForStage !== stageIdx;
     // Concepts/Subjects mismatch: old cache was built from generic stage title instead of specific concepts
@@ -339,12 +338,11 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
 
         const stageIdx = user.currentStageIndex || 0;
         const stage = rm.stages ? (rm.stages[stageIdx] || rm.stages[0]) : null;
-        // Use concepts (specific learnable items) first, then subjects as fallback
-        // This ensures resources are loaded for specific items like "Linear Algebra", "Calculus", "Python"
-        // instead of generic stage titles like "Foundations of Math"
-        const stageSubjects: string[] = (stage?.concepts && stage.concepts.length > 0)
-          ? stage.concepts
-          : (stage?.subjects?.length ? stage.subjects : [user.dream]);
+        // Use stage.subjects (like "Linear Algebra", "Calculus", "Python") first, then stage.concepts as fallback.
+        // This ensures resources are loaded for specific subjects/topics instead of checklist items or generic stage titles.
+        const stageSubjects: string[] = (stage?.subjects && stage.subjects.length > 0)
+          ? stage.subjects
+          : (stage?.concepts?.length ? stage.concepts : [user.dream]);
         // Use first subject/concept as topic for task generation (not the generic stage title)
         const topic = stageSubjects[0] || (stage ? stage.title : user.dream);
 
