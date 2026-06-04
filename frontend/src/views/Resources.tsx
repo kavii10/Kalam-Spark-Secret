@@ -504,25 +504,30 @@ function ResourceActions({ item, roadmap, onUpdate, inStack = false }: { item: a
   );
 }
 
-function getLocalResourcesPlaceholder(dream: string, stageTitle: string): ResourceData {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getLocalResourcesPlaceholder(dream: string, stageTitle: string): any {
   const dLower = dream.toLowerCase();
   
-  let books: BookResource[] = [
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let books: any[] = [
     { title: `Foundations of ${dream}`, author: 'Academic Press', description: 'A comprehensive textbook covering core principles, methodologies, and industry standards.', link: 'https://books.google.com', source: 'local' },
     { title: `Professional Guide to ${dream}`, author: 'Kalam Press', description: 'Practical handbook filled with case studies, project templates, and expert insights.', link: 'https://books.google.com', source: 'local' }
   ];
   
-  let videos: VideoResource[] = [
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let videos: any[] = [
     { title: `Introduction to ${dream} Course`, publisher: 'EduSpark Online', description: 'Step-by-step video lecture series detailing essential concepts and applications.', link: 'https://www.youtube.com', source: 'local' },
     { title: `Advanced Topics in ${dream}`, publisher: 'TechAcademy', description: 'Deep dive tutorials into industry-standard tools and advanced system workflows.', link: 'https://www.youtube.com', source: 'local' }
   ];
 
-  let papers: PaperResource[] = [
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let papers: any[] = [
     { title: `Recent Trends and Future Directions in ${dream}`, author: 'Global Research Journal', description: 'Scholarly overview of major breakthroughs, research papers, and technical developments.', link: 'https://arxiv.org', source: 'local' }
   ];
 
-  let news: NewsResource[] = [
-    { title: `How technology is reshaping ${dream} careers`, date: 'Today', description: 'Industry news report on the skills, roles, and hiring patterns in demand right now.', link: 'https://news.google.com', source: 'local' }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let news: any[] = [
+    { title: `How technology is reshaping ${dream} careers`, publishedAt: 'Today', description: 'Industry news report on the skills, roles, and hiring patterns in demand right now.', link: 'https://news.google.com', source: 'local' }
   ];
 
   if (dLower.includes("software") || dLower.includes("computer") || dLower.includes("developer") || dLower.includes("code") || dLower.includes("ai") || dLower.includes("machine learning")) {
@@ -553,7 +558,8 @@ function getLocalResourcesPlaceholder(dream: string, stageTitle: string): Resour
     ];
   }
 
-  return { books, videos, papers, news, cachedForDream: dream, cachedForStage: 0 };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return { books, videos, papers, news } as any;
 }
 
 // ─── Main Component ─────────────────────────────────────────────────────────────
@@ -567,6 +573,8 @@ export default function Resources({ user }: { user: UserProfile }) {
   const [roadmap, setRoadmap] = useState<CareerRoadmap | null>(null);
   const [data, setData] = useState<ResourceData>({ books: [], videos: [], papers: [], news: [] });
   const isLight = user.settings?.theme === 'light';
+  const [isOfflineAndNoCache, setIsOfflineAndNoCache] = useState(false);
+  const navigate = useNavigate();
 
   // Keep a stable ref to the latest user to avoid stale closures in callbacks
   const userRef = useRef(user);
@@ -589,6 +597,7 @@ export default function Resources({ user }: { user: UserProfile }) {
   const fetchCurriculum = useCallback(async () => {
     setLoading(true);
     setLoadError(false);
+    setIsOfflineAndNoCache(false);
     setSearchMode(false);
     setSearchQuery('');
 
@@ -596,21 +605,12 @@ export default function Resources({ user }: { user: UserProfile }) {
 
     try {
       let rm = await dbService.getRoadmap(currentUser.id);
-      if (!rm) {
-        rm = {
-          dream: currentUser.dream || 'Professional',
-          summary: 'Your personalized roadmap',
-          stages: [{
-            id: 'fallback-stage-1',
-            title: currentUser.dream ? `Foundations of ${currentUser.dream}` : 'Getting Started',
-            description: 'Build a strong foundation',
-            duration: '2-3 weeks',
-            subjects: [currentUser.branch || currentUser.dream || 'Fundamentals'],
-            skills: ['Core concepts'],
-            projects: ['Starter project'],
-            resources: [],
-          }],
-        };
+      if (!rm || !rm.stages || rm.stages.length === 0 || rm.stages[0].id === 'fallback-stage-1') {
+        setRoadmap(null);
+        setLoading(false);
+        setInitialized(true);
+        setDataReady(true);
+        return;
       }
       setRoadmap(rm);
 
@@ -621,32 +621,36 @@ export default function Resources({ user }: { user: UserProfile }) {
       let cached = rm.cachedResources;
 
       // ── Cache Logic ──────────────────────────────────────────────────────────
-      // Re-fetch ONLY if:
+      // Re-fetch if:
       //   1. No cache exists
       //   2. The user has pivoted careers (dream mismatch)
       //   3. The user has moved to a new stage in the roadmap
+      //   4. The stage subjects changed (e.g. old cache was built from stage title)
+      const stageSubjects: string[] = stage.subjects || [];
       const dreamMismatch = cached?.cachedForDream && cached.cachedForDream !== currentUser.dream;
       const stageMismatch = cached?.cachedForStage !== undefined && cached.cachedForStage !== stageIdx;
-      // Also invalidate if cached data is sparse (< 3 books means it was a bad/incomplete cache)
-      // Also invalidate if cached data is completely empty and no search load-mores have been performed
+      // Subjects mismatch: old cache was built from the stage title, not the specific subjects
+      const cachedSubs: string[] = (cached as any)?.cachedSubjects || [];
+      const subjectsMismatch = stageSubjects.length > 0 && (
+        cachedSubs.length === 0 ||
+        !stageSubjects.every((s, i) => s === cachedSubs[i])
+      );
       const loadCount = (rm as any)._loadMoreCount || 0;
       const sparseCache = cached && loadCount === 0 && (
         (!Array.isArray(cached.books) || cached.books.length === 0) &&
         (!Array.isArray(cached.videos) || cached.videos.length === 0)
       );
 
-      if (!cached || dreamMismatch || stageMismatch || sparseCache) {
+      if (!cached || dreamMismatch || stageMismatch || sparseCache || subjectsMismatch) {
         const isOnline = networkService.isOnline();
         if (isOnline) {
           try {
-            const primaryQueryTerm = (stage.subjects && stage.subjects.length > 0)
-              ? stage.subjects[0]
-              : stage.title;
+            // Pass '' as stageTopic so fetchDirectResources uses subjects only (not the stage title)
             const fetched = await fetchDirectResources(
-              currentUser.dream, primaryQueryTerm, stage.subjects || [], currentUser.year
+              currentUser.dream, '', stageSubjects, currentUser.year
             );
             // Sort resources so stage-subject matches appear first
-            const stageSubjectsLower = (stage.subjects || []).map((s: string) => s.toLowerCase());
+            const stageSubjectsLower = stageSubjects.map((s: string) => s.toLowerCase());
             const scoreItem = (title: string) => {
               const t = title.toLowerCase();
               return stageSubjectsLower.some(s => t.includes(s)) ? 0 : 1;
@@ -658,6 +662,7 @@ export default function Resources({ user }: { user: UserProfile }) {
               news:   (Array.isArray(fetched.news)   ? fetched.news   : []).filter((n: any) => n?.link?.startsWith('http')).slice(0, 10),
               cachedForDream: currentUser.dream,
               cachedForStage: stageIdx,
+              cachedSubjects: stageSubjects,
             } as any;
             rm = { ...rm, cachedResources: cached, _loadMoreCount: 0 };
             await dbService.saveRoadmap(currentUser, rm);
@@ -672,9 +677,19 @@ export default function Resources({ user }: { user: UserProfile }) {
           if (rm.cachedResources && rm.cachedResources.books && rm.cachedResources.books.length > 0) {
             cached = rm.cachedResources;
           } else {
-            cached = getLocalResourcesPlaceholder(currentUser.dream || 'Professional', stage.title || 'Foundations');
-            rm = { ...rm, cachedResources: cached };
-            await dbService.saveRoadmap(currentUser, rm);
+            if (!networkService.isOnline()) {
+              setIsOfflineAndNoCache(true);
+              setLoading(false);
+              setInitialized(true);
+              setDataReady(true);
+              return;
+            } else {
+              // Use first subject as placeholder label; fall back to stage title
+              const placeholderLabel = stageSubjects[0] || stage.title || 'Foundations';
+              cached = getLocalResourcesPlaceholder(currentUser.dream || 'Professional', placeholderLabel);
+              rm = { ...rm, cachedResources: cached };
+              await dbService.saveRoadmap(currentUser, rm);
+            }
           }
         }
       }
@@ -721,18 +736,18 @@ export default function Resources({ user }: { user: UserProfile }) {
       return;
     }
 
-    // Use all stage subjects for context; rotate the primary query term for variety
-    const subjects = stage.subjects?.length ? stage.subjects : [stage.title];
-    const skills   = stage.skills?.length   ? stage.skills   : [];
-    const allTerms = [...subjects, ...skills, currentUser.dream].filter(Boolean);
+    // Use all stage subjects for context; rotate through subjects for variety on each Load More click
+    const subjects = stage.subjects?.length ? stage.subjects : [];
     const loadCount = (roadmap as any)._loadMoreCount || 0;
-    // Rotate primary query term so each "Load More" click targets a different subject
-    const rotatedTerm = allTerms[loadCount % allTerms.length];
+    // Rotate which subject is in position 0 so each Load More click surfaces different subjects first
+    const rotatedSubjects = subjects.length > 1
+      ? [...subjects.slice(loadCount % subjects.length), ...subjects.slice(0, loadCount % subjects.length)]
+      : subjects;
 
     try {
-      // Fetch with rotated subject as primary query + ALL stage subjects as context for better relevance
+      // Pass '' as stageTopic so only subjects drive the query — no stage title pollution
       const fetched = await fetchDirectResources(
-        currentUser.dream, rotatedTerm, subjects, currentUser.year, 0
+        currentUser.dream, '', rotatedSubjects, currentUser.year, 0
       );
 
       // Sort results so stage-subject matches appear first (most relevant first)
@@ -750,6 +765,7 @@ export default function Resources({ user }: { user: UserProfile }) {
         news:   fetched.news.filter((n: any)   => n.link?.startsWith('http')).slice(0, 10),
         cachedForDream: currentUser.dream,
         cachedForStage: stageIdx,
+        cachedSubjects: subjects,
       };
 
       const updatedRm = { ...roadmap, cachedResources: freshData as any, _loadMoreCount: loadCount + 1 };
@@ -817,14 +833,45 @@ export default function Resources({ user }: { user: UserProfile }) {
     );
   }
 
-  // ── No roadmap (use fallback) ─────────────────────────────────────────────────
-  if (!roadmap) {
+  // ── Offline and no cache ──────────────────────────────────────────────────
+  if (isOfflineAndNoCache) {
+    const currentStageIndex = Math.min(user.currentStageIndex, (roadmap?.stages.length || 1) - 1);
+    const currentStage = roadmap?.stages[currentStageIndex];
     return (
       <div className="h-[60vh] flex flex-col items-center justify-center text-center fade-up gap-4">
-        <AlertCircle size={32} className="text-gold-500/30" />
-        <p className="text-sm text-gold-300">Create your roadmap first</p>
-        <p className="text-xs text-gold-500/35">Go to Roadmap → generate your plan → come back to Study Center</p>
-        <button onClick={fetchCurriculum} className="btn-primary px-6 py-2 rounded-xl">Retry</button>
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center animate-pulse"
+          style={{ background: 'rgba(255,140,66,0.08)', border: '1px solid rgba(255,140,66,0.22)' }}>
+          <AlertCircle size={24} className="text-orange-400" />
+        </div>
+        <p className="text-sm text-gold-300 font-medium">No Internet Connection</p>
+        <p className="text-xs text-gold-500/50 max-w-xs">
+          Connect to the internet to load resources for <span className="text-purple-400 font-semibold">{currentStage?.title || 'this stage'}</span>.
+        </p>
+        <button onClick={fetchCurriculum} className="btn-primary flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium">
+          <RefreshCw size={14} /> Retry
+        </button>
+      </div>
+    );
+  }
+
+  // ── No roadmap (use fallback) ─────────────────────────────────────────────────
+  if (!roadmap || !roadmap.stages || roadmap.stages.length === 0) {
+    return (
+      <div className="h-[60vh] flex flex-col items-center justify-center text-center fade-up gap-4">
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center"
+          style={{ background: 'rgba(255,140,66,0.08)', border: '1px solid rgba(255,140,66,0.22)' }}>
+          <BookOpen size={24} className="text-gold-400" />
+        </div>
+        <p className="text-sm text-gold-300 font-medium">No Roadmap Yet</p>
+        <p className="text-xs text-gold-500/50 max-w-xs">
+          Generate your personalized career roadmap first to unlock structured study resources.
+        </p>
+        <button 
+          onClick={() => navigate('/roadmap')} 
+          className="btn-primary flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-medium bg-gradient-to-r from-gold-600 to-orange-600 hover:from-gold-500 hover:to-orange-500 transition-all shadow-[0_0_20px_rgba(249,115,22,0.3)]"
+        >
+          Generate Roadmap
+        </button>
       </div>
     );
   }
@@ -862,7 +909,16 @@ export default function Resources({ user }: { user: UserProfile }) {
           <p className="text-xs text-gold-500/45 mt-1">
             {searchMode
               ? `Showing results for "${searchQuery}"`
-              : <>Resources for <span className="text-gold-400">{currentStage?.subjects?.[0] || user.dream}</span></>
+              : (
+                <>
+                  Resources for{' '}
+                  <span className="text-gold-400">
+                    {currentStage?.subjects?.length
+                      ? currentStage.subjects.slice(0, 3).join(', ')
+                      : user.dream}
+                  </span>
+                </>
+              )
             }
           </p>
         </div>

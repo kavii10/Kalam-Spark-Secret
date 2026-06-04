@@ -312,19 +312,21 @@ async def get_tasks(req: TasksRequest):
                     "type": str(t["type"]).lower() if t["type"] in ["theory", "hands-on", "review"] else "theory"
                 })
         
-        # Ensure we have at least the requested count
+        # Ensure we have at least the requested count, cycling through all subjects for variety
         target_count = req.count or 5
         while len(valid_tasks) < target_count:
-            # Fallback tasks if generation failed or returned too few
-            fallback_titles = [
-                f"Review core concepts in {req.subjects[0] if req.subjects else req.dream}",
-                f"Practice foundational skills for {req.dream}",
-                f"Watch a tutorial on {req.subjects[0] if req.subjects else 'your field'}",
-                "Create a summary of what you've learned so far",
-                "Apply your knowledge to a small practical scenario"
+            idx = len(valid_tasks)
+            # Cycle through subjects so each fallback task targets a different subject
+            sub = req.subjects[idx % len(req.subjects)] if req.subjects else req.dream
+            fallback_templates = [
+                (f"Review core concepts of {sub}", "review"),
+                (f"Practice foundational exercises in {sub}", "hands-on"),
+                (f"Watch a tutorial lecture on {sub}", "theory"),
+                (f"Create a summary of key {sub} principles", "review"),
+                (f"Apply {sub} knowledge to a small hands-on scenario", "hands-on"),
             ]
-            idx = len(valid_tasks) % len(fallback_titles)
-            valid_tasks.append({"title": fallback_titles[idx], "type": ["review", "hands-on", "theory"][idx % 3]})
+            title, ttype = fallback_templates[idx % len(fallback_templates)]
+            valid_tasks.append({"title": title, "type": ttype})
         
         return valid_tasks[:target_count]
     except Exception as e:

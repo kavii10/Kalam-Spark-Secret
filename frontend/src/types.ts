@@ -5,6 +5,7 @@ export interface RoadmapStage {
   description: string;
   duration: string;
   subjects: string[];
+  concepts?: string[];
   skills: string[];
   projects: string[];
   resources: {
@@ -27,6 +28,7 @@ export interface StageCache {
   news: any[];
   cachedForDream?: string;
   cachedForStage?: number;
+  cachedSubjects?: string[];   // subjects used when this cache was built
   resourceOffset?: number;
 }
 

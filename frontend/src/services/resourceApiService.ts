@@ -894,8 +894,16 @@ function cleanQueryTerm(term: string): string {
 
 /**
  * Fetch all resource categories for a given career/stage context.
- * Guarantees at least 10 results per category by running multiple
- * parallel subject queries and merging + deduplicating results.
+ *
+ * Strategy:
+ *  1. Build one clean query per subject (up to 5).  When subjects are
+ *     available the generic stage title is intentionally excluded so that
+ *     books for "Foundations of Mathematics" never appear in a query meant
+ *     for "Linear Algebra" or "Python Programming".
+ *  2. Fire all subject queries in parallel for books AND videos.
+ *  3. Merge results round-robin (one result from each subject per round) so
+ *     every subject gets fair representation in the final list.
+ *  4. Fall back to the stage title / dream only when no subjects are given.
  */
 export async function fetchDirectResources(
   dream: string,
@@ -904,53 +912,89 @@ export async function fetchDirectResources(
   level: string,
   page: number = 0
 ): Promise<ResourceData> {
-  // Build clean, short query terms for each subject to maximise API hit rate
-  const cleanDream   = cleanQueryTerm(dream);
-  const cleanTopic   = cleanQueryTerm(stageTopic);
-  const cleanSubjects = subjects.slice(0, 3).map(cleanQueryTerm).filter(Boolean);
+  const cleanDream = cleanQueryTerm(dream);
 
-  // Unique query pool: subjects/concepts first, then the career name, and only use stage title (topic) as a fallback
-  const queryPool = cleanSubjects.length > 0 
-    ? [...new Set([...cleanSubjects, cleanDream, cleanTopic])].filter(Boolean)
-    : [...new Set([cleanTopic, cleanDream])].filter(Boolean);
+  // ── Build per-subject query terms ────────────────────────────────────────
+  // Use up to 5 subjects.  Only fall back to stageTopic when subjects is empty.
+  const subjectQueries: string[] = subjects.length > 0
+    ? [...new Set(subjects.slice(0, 5).map(cleanQueryTerm).filter(Boolean))]
+    : [cleanQueryTerm(stageTopic) || cleanDream];
 
-  // ── Books: fetch from top 2 queries in parallel to ensure 10+ results ────
-  const bookFetches = queryPool.slice(0, 2).map(q => fetchBooks(q, 12, 0));
+  // ── BOOKS: fan-out one fetch per subject, then round-robin merge ──────────
+  const bookFetches = subjectQueries.map(q => fetchBooks(`${q}`, 10, page * 10));
   const bookResults = await Promise.allSettled(bookFetches);
+  const perSubjectBooks: BookResource[][] = bookResults.map(r =>
+    r.status === 'fulfilled' ? r.value : []
+  );
+
+  // Round-robin interleave: pick one from each subject list per round
   const seenBookLinks = new Set<string>();
   const mergedBooks: BookResource[] = [];
-  for (const r of bookResults) {
-    if (r.status === 'fulfilled') {
-      for (const b of r.value) {
-        if (!seenBookLinks.has(b.link) && mergedBooks.length < 10) {
+  const maxRounds = Math.max(...perSubjectBooks.map(arr => arr.length), 0);
+  outerB: for (let round = 0; round < maxRounds; round++) {
+    for (const arr of perSubjectBooks) {
+      if (arr[round]) {
+        const b = arr[round];
+        if (!seenBookLinks.has(b.link)) {
           seenBookLinks.add(b.link);
           mergedBooks.push(b);
+          if (mergedBooks.length >= 10) break outerB;
         }
       }
     }
   }
 
-  // ── Videos: use the primary subject query if available, otherwise topic ──
-  const primarySubject = cleanSubjects[0] || cleanTopic;
-  const videoQuery = `${primarySubject} ${cleanDream} tutorial learn`.trim();
+  // ── VIDEOS: fan-out one query per subject, round-robin merge ─────────────
+  const videoFetches = subjectQueries.slice(0, 3).map(q =>
+    fetchVideos(`${q} ${cleanDream} tutorial learn`, 10)
+  );
+  const videoResults = await Promise.allSettled(videoFetches);
+  const perSubjectVideos: VideoResource[][] = videoResults.map(r =>
+    r.status === 'fulfilled' ? r.value : []
+  );
+  const seenVideoLinks = new Set<string>();
+  const mergedVideos: VideoResource[] = [];
+  const maxVidRounds = Math.max(...perSubjectVideos.map(arr => arr.length), 0);
+  outerV: for (let round = 0; round < maxVidRounds; round++) {
+    for (const arr of perSubjectVideos) {
+      if (arr[round]) {
+        const v = arr[round];
+        if (!seenVideoLinks.has(v.link)) {
+          seenVideoLinks.add(v.link);
+          mergedVideos.push(v);
+          if (mergedVideos.length >= 10) break outerV;
+        }
+      }
+    }
+  }
 
-  // ── Papers: use primary subject query if available, otherwise topic ──
-  const paperQuery = `${primarySubject} ${cleanDream}`.trim();
+  // ── PAPERS & NEWS: use primary subject + dream ────────────────────────────
+  const primarySubject = subjectQueries[0] || cleanDream;
+  const secondSubject  = subjectQueries[1] || primarySubject;
 
-  // ── News: use career name + primary subject if available, otherwise topic ──
-  const newsQuery = `${cleanDream} ${primarySubject}`.trim();
-
-  const [videos, papers, news] = await Promise.allSettled([
-    fetchVideos(videoQuery, 20),
-    fetchPapers(paperQuery, 12, 0),
-    fetchNews(newsQuery, 12),
+  const [papers, news] = await Promise.allSettled([
+    fetchPapers(`${primarySubject} ${cleanDream}`, 12, 0),
+    fetchNews(`${cleanDream} ${primarySubject}`, 12),
   ]);
+
+  // If first subject papers yield < 5, supplement with a second subject
+  let mergedPapers: PaperResource[] = papers.status === 'fulfilled' ? papers.value : [];
+  if (mergedPapers.length < 5 && subjectQueries.length > 1) {
+    try {
+      const extra = await fetchPapers(`${secondSubject} ${cleanDream}`, 8, 0);
+      const seenPaperLinks = new Set(mergedPapers.map((p: PaperResource) => p.link));
+      for (const p of extra) {
+        if (!seenPaperLinks.has(p.link)) mergedPapers.push(p);
+        if (mergedPapers.length >= 10) break;
+      }
+    } catch { /* non-critical */ }
+  }
 
   return {
     books:  mergedBooks,
-    videos: (videos.status === 'fulfilled' ? videos.value : []).slice(0, 10),
-    papers: (papers.status === 'fulfilled' ? papers.value : []).slice(0, 10),
-    news:   (news.status   === 'fulfilled' ? news.value   : []).slice(0, 10),
+    videos: mergedVideos.slice(0, 10),
+    papers: mergedPapers.slice(0, 10),
+    news:   (news.status === 'fulfilled' ? news.value : []).slice(0, 10),
   };
 }
 

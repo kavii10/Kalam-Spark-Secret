@@ -290,8 +290,9 @@ ROADMAP_SCHEMA = """
       "id": "stage-1",
       "title": "Stage 1 Title (specific to career)",
       "description": "Comprehensive explanation of what to learn and why in this stage.",
-      "duration": "X-Y weeks",
-      "subjects": ["Topic 1", "Tool 2", "Concept 3", "Topic 4", "Topic 5", "Tool 6", "Topic 7", "Concept 8"],
+      "duration": "8-12 weeks",
+      "subjects": ["Specific Topic 1", "Specific Topic 2", "Specific Topic 3", "Specific Topic 4", "Specific Topic 5", "Specific Topic 6", "Specific Topic 7", "Specific Topic 8", "Specific Topic 9", "Specific Topic 10"],
+      "concepts": ["Concept Check 1", "Concept Check 2", "Concept Check 3", "Concept Check 4"],
       "skills": ["Specific Skill 1", "Skill 2", "Skill 3", "Skill 4", "Skill 5", "Skill 6"],
       "projects": ["Detailed project idea 1", "Detailed project idea 2", "Project 3"],
       "resources": []
@@ -302,6 +303,7 @@ ROADMAP_SCHEMA = """
       "description": "...",
       "duration": "...",
       "subjects": [],
+      "concepts": [],
       "skills": [],
       "projects": [],
       "resources": []
@@ -312,6 +314,7 @@ ROADMAP_SCHEMA = """
       "description": "...",
       "duration": "...",
       "subjects": [],
+      "concepts": [],
       "skills": [],
       "projects": [],
       "resources": []
@@ -322,6 +325,29 @@ ROADMAP_SCHEMA = """
       "description": "...",
       "duration": "...",
       "subjects": [],
+      "concepts": [],
+      "skills": [],
+      "projects": [],
+      "resources": []
+    },
+    {
+      "id": "stage-5",
+      "title": "Stage 5 Title",
+      "description": "...",
+      "duration": "...",
+      "subjects": [],
+      "concepts": [],
+      "skills": [],
+      "projects": [],
+      "resources": []
+    },
+    {
+      "id": "stage-6",
+      "title": "Stage 6 Title",
+      "description": "...",
+      "duration": "...",
+      "subjects": [],
+      "concepts": [],
       "skills": [],
       "projects": [],
       "resources": []
@@ -344,7 +370,7 @@ def _build_prompt(dream: str, year: str, branch: str, crawled_content: str, lang
         if language != "en" else ""
     )
 
-    return f"""Create a detailed 4-stage career roadmap for a student whose dream career is to become a {dream}. The student's current education level is {year} and their current field/branch of study is {branch}.{language_instruction}
+    return f"""Create a detailed 6-stage career roadmap for a student whose dream career is to become a {dream}. The student's current education level is {year} and their current field/branch of study is {branch}.{language_instruction}
 
 STUDENT PROFILE:
 - Dream Career: {dream}
@@ -354,12 +380,16 @@ STUDENT PROFILE:
 {context_section}
 
 REQUIREMENTS:
-1. Generate EXACTLY 4 progressive stages from their current level ({year} in {branch}) to successfully landing a role as a {dream}.
+1. Generate EXACTLY 6 progressive stages from their current level ({year} in {branch}) to successfully landing a role as a {dream}.
 2. Ensure the roadmap is highly accurate and practical for {dream}.
-   - Note on terminology: If the target career is 'Doctor', 'Physician', or a medical practitioner, this refers EXCLUSIVELY to a medical doctor (e.g., MBBS, MD, DO) practicing medicine. Under no circumstances should you generate an academic PhD or academic doctoral program roadmap (e.g., PhD in Mathematics, PhD in computer science) unless the career is explicitly specified as a PhD/academic doctorate.
-   - Cross-Disciplinary Transition handling: If the student is transitioning from an unrelated current field/branch (e.g. Mathematics, Computer Science, AI, Engineering) to a completely different field (e.g. Medicine/Doctor, Law, Creative Arts), the roadmap MUST focus on the transition/pivot process in the early stages. For example, if transitioning to a Medical Doctor, the roadmap must outline the actual transition path (pre-med science prerequisites, biology/chemistry courses, medical entrance exams like NEET/MCAT, medical school admission, clinical years, residency, licensing) rather than assuming the student remains in their current field or pursues an academic PhD in their current field.
-3. Each stage: 8-10 subjects, 6 skills, 3 projects, 100+ word description.
-4. Use real professional tools, technologies, methodologies, and frameworks specific to {dream} (do not restrict to software frameworks if the career is non-tech).
+   - Focus on Target Career: Base the roadmap stages, subjects, concepts, and skills strictly on the target dream career ({dream}). If the target career is unrelated to their current branch of study ({branch}), do NOT include subjects, tools, or concepts from {branch}. Focus exclusively on the requirements of the target career {dream}.
+   - Note on terminology: If the target career is 'Doctor', 'Physician', or a medical practitioner, this refers EXCLUSIVELY to a medical doctor (e.g., MBBS, MD, DO) practicing medicine. Under no circumstances should you generate an academic PhD or academic doctoral program roadmap unless the career is explicitly specified as a PhD/academic doctorate.
+   - Cross-Disciplinary Transition handling: If the student is transitioning from an unrelated current field/branch (e.g. Mathematics, Computer Science, AI, Engineering) to a completely different field (e.g. Medicine/Doctor, Law, Creative Arts), the roadmap MUST focus on the transition/pivot process in the early stages.
+3. Each stage MUST have:
+   - Minimum 10 highly specific subjects/topics (e.g., "Organic Chemistry", "Linear Algebra", "Pediatric Medicine" — do NOT use generic titles like "Chemistry" or "Core Concepts").
+   - 4-6 specific learnable items/concepts in the 'concepts' array that map directly to checkboxes for student progress (e.g., "Learn vector spaces", "Identify anatomic structures").
+   - 6 skills, 3 projects, 100+ word description.
+4. Use real professional tools, technologies, methodologies, and frameworks specific to {dream}.
 5. Realistic durations for a student at the {year} level to transition.
 
 OUTPUT INSTRUCTIONS - CRITICAL:
@@ -415,12 +445,17 @@ def _normalize_stage(stage: dict, index: int) -> dict:
         if isinstance(val, list): return [str(v).strip() for v in val if v]
         if isinstance(val, str): return [v.strip() for v in re.split(r'[,;|\n]', val) if v.strip()]
         return []
+    subjects = to_list(stage.get("subjects"))
+    concepts = to_list(stage.get("concepts"))
+    if not concepts:
+        concepts = subjects
     return {
         "id": stage.get("id") or f"stage-{index + 1}",
         "title": stage.get("title") or f"Stage {index + 1}",
         "description": stage.get("description") or "",
         "duration": stage.get("duration") or "8-12 weeks",
-        "subjects": to_list(stage.get("subjects")),
+        "subjects": subjects,
+        "concepts": concepts,
         "skills": to_list(stage.get("skills")),
         "projects": to_list(stage.get("projects")),
         "resources": stage.get("resources") if isinstance(stage.get("resources"), list) else [],

@@ -7,6 +7,7 @@ import {
 import { UserProfile, CareerRoadmap } from '../types';
 import { generateRoadmap } from '../services/geminiService';
 import { dbService } from '../services/dbService';
+import { networkService } from '../services/networkService';
 import CareerPivot from './CareerPivot';
 import { grantReward, makeStageCompleteReward } from '../services/rewardService';
 
@@ -541,6 +542,12 @@ export default function RoadmapView({
         }
 
         // WebSockets generation - Reset progress for new dream
+        if (!networkService.isOnline()) {
+          setError("📡 No Internet Connection — Connect to the internet to generate your personalized roadmap.");
+          setLoading(false);
+          return null;
+        }
+
         setLoadingMsg('Connecting to AI Career Architect...');
         setCompletedStages([]);
         setConceptProgress({});
@@ -593,7 +600,11 @@ export default function RoadmapView({
                 await dbService.saveRoadmap(user, clean);
                 setLoading(false);
              } catch (fallbackErr: any) {
-                setError("Error generating roadmap: " + (res.data || 'Unexpected response from server.'));
+                if (!networkService.isOnline()) {
+                  setError("📡 No Internet Connection — Connect to the internet to generate your personalized roadmap.");
+                } else {
+                  setError("Error generating roadmap: " + (res.data || 'Unexpected response from server.'));
+                }
                 setLoading(false);
              }
              if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close();
@@ -613,7 +624,11 @@ export default function RoadmapView({
               await dbService.saveRoadmap(user, clean);
               setLoading(false);
            } catch (fallbackErr: any) {
-              setError("Connection error. Please check your internet or if the backend is running.");
+              if (!networkService.isOnline()) {
+                setError("📡 No Internet Connection — Connect to the internet to generate your personalized roadmap.");
+              } else {
+                setError("Connection error. Please check your internet or if the backend is running.");
+              }
               setLoading(false);
            }
            if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close();
@@ -904,9 +919,9 @@ export default function RoadmapView({
                             <BookOpen size={12} className="text-gold-500/50" /> Learn Concepts
                           </p>
                           <div className="space-y-1.5">
-                            {stage.subjects?.map((sub: string, si: number) => {
+                            {(stage.concepts || stage.subjects || []).map((sub: string, si: number) => {
                               const isConceptDone = (conceptProgress[stage.id] || []).includes(sub);
-                              const totalConcepts = stage.subjects.length;
+                              const totalConcepts = (stage.concepts || stage.subjects || []).length;
                               const canCheck = idx <= completedStages.length;
 
                               return (

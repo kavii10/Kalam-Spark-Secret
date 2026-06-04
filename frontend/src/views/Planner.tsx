@@ -108,28 +108,33 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
   // ── Unified Study Center Resource Helper ───────────────────────────────────
   const getUnifiedResources = useCallback(async (rm: any, stageIdx: number, stage: any) => {
     let cached = rm.cachedResources;
+    const stageSubjects: string[] = stage?.subjects || [];
     const dreamMismatch = cached?.cachedForDream && cached.cachedForDream !== user.dream;
     const stageMismatch = cached?.cachedForStage !== undefined && cached.cachedForStage !== stageIdx;
-    
+    // Subjects mismatch: old cache was built from stage title instead of subjects
+    const cachedSubs: string[] = (cached as any)?.cachedSubjects || [];
+    const subjectsMismatch = stageSubjects.length > 0 && (
+      cachedSubs.length === 0 ||
+      !stageSubjects.every((s: string, i: number) => s === cachedSubs[i])
+    );
+
     const sparseCache = cached && (
       (!Array.isArray(cached.books) || cached.books.length === 0) &&
       (!Array.isArray(cached.videos) || cached.videos.length === 0)
     );
 
-    if (!cached || dreamMismatch || stageMismatch || sparseCache) {
+    if (!cached || dreamMismatch || stageMismatch || sparseCache || subjectsMismatch) {
       try {
-        console.log('[Planner] Fetching fresh resources for task allocation...');
-        const primarySubject = (stage?.subjects && stage.subjects.length > 0)
-          ? stage.subjects[0]
-          : (stage?.title || user.dream);
+        console.log('[Planner] Fetching fresh resources for task allocation (subjects:', stageSubjects, ')');
+        // Pass '' as stageTopic so fetchDirectResources uses subjects only, not stage title
         const fetched = await fetchDirectResources(
           user.dream,
-          primarySubject,
-          stage?.subjects || [],
+          '',
+          stageSubjects,
           user.year
         );
-        
-        const stageSubjectsLower = (stage?.subjects || []).map((s: string) => s.toLowerCase());
+
+        const stageSubjectsLower = stageSubjects.map((s: string) => s.toLowerCase());
         const scoreItem = (title: string) => {
           const t = title.toLowerCase();
           return stageSubjectsLower.some(s => t.includes(s)) ? 0 : 1;
@@ -142,13 +147,14 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
           news:   (Array.isArray(fetched.news)   ? fetched.news   : []).filter((n: any) => n?.link?.startsWith('http')).slice(0, 10),
           cachedForDream: user.dream,
           cachedForStage: stageIdx,
+          cachedSubjects: stageSubjects,
           resourceOffset: 0
         };
         rm.cachedResources = cached;
         await dbService.saveRoadmap(user, rm);
       } catch (err) {
         console.warn('[Planner] Failed to fetch resources online, returning empty cache placeholder:', err);
-        cached = { books: [], videos: [], papers: [], news: [], cachedForDream: user.dream, cachedForStage: stageIdx, resourceOffset: 0 };
+        cached = { books: [], videos: [], papers: [], news: [], cachedForDream: user.dream, cachedForStage: stageIdx, cachedSubjects: stageSubjects, resourceOffset: 0 };
       }
     }
     return cached;
@@ -328,8 +334,9 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
 
         const stageIdx = user.currentStageIndex || 0;
         const stage = rm.stages ? (rm.stages[stageIdx] || rm.stages[0]) : null;
-        const topic = stage ? stage.title : user.dream;
-        const subjects = stage?.subjects || [user.dream];
+        const subjects = stage?.subjects?.length ? stage.subjects : [user.dream];
+        // Use first subject as topic for task generation (not the generic stage title)
+        const topic = subjects[0] || (stage ? stage.title : user.dream);
 
         const cached = await getUnifiedResources(rm, stageIdx, stage);
 
@@ -420,16 +427,18 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
             if (llamaPlugin.isSupported()) {
               console.log('[Planner] Running offline, generating tasks using local model...');
               try {
-                const prompt = `Create exactly ${neededTasks} diverse, actionable daily tasks for a student studying to become a ${user.dream}, at stage: '${topic}' covering topics: ${subjects.join(', ')}.
+                const subjectsStr = subjects.join(', ');
+                const prompt = `Create exactly ${neededTasks} diverse, actionable daily tasks for a student studying to become a ${user.dream}, focusing on these specific subjects: ${subjectsStr}.
 Rules:
 - Each task "type" MUST be one of: "theory", "hands-on", "review" (NO other values)
-- "theory" = reading/studying concepts in depth
-- "hands-on" = building, practicing, coding, implementing something concrete  
-- "review" = revising, summarizing, quizzing yourself
+- "theory" = reading/studying a specific concept or chapter in one of the listed subjects
+- "hands-on" = building, practicing, coding, or implementing something from one of the listed subjects
+- "review" = revising, summarizing, or quizzing yourself on one of the listed subjects
 - Mix types: include at least 2 hands-on and 1 review task
-- Titles MUST be specific - name the actual topic, skill, or chapter
+- Titles MUST be subject-specific — use the actual subject name in the task title
 - Bad example: {"title": "Read about something", "type": "theory"}
-- Good example: {"title": "Study music licensing fundamentals and royalty distribution models", "type": "theory"}
+- Good example: {"title": "Study linear transformations in Linear Algebra", "type": "theory"}
+- Another good example: {"title": "Implement gradient descent in Python", "type": "hands-on"}
 
 Return a JSON array of exactly ${neededTasks} tasks.`;
                 const resText = await llamaPlugin.getCompletion(prompt, "You are an expert educator. Return ONLY raw JSON array. No markdown.");

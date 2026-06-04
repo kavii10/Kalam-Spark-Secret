@@ -217,18 +217,7 @@ Return ONLY a valid JSON object:
 
       // Final fallback if all failed
       if (!data || data.transferPercentage === undefined || !Array.isArray(data.bridgePlan)) {
-        data = {
-          transferPercentage: 45,
-          transferableSkills: ["Problem Solving", "Research Skills", "Self-Learning"],
-          biggestGap: `Transitioning from ${user.dream} to ${newDream} requires specialized domain knowledge.`,
-          marketDemand: `${newDream} roles are growing with increasing demand.`,
-          timeToTransition: "6-12 months with consistent effort",
-          bridgePlan: [
-            { title: "Foundation Learning", action: `Start with free courses covering core concepts of ${newDream}.` },
-            { title: "Build Projects", action: `Create 2-3 portfolio projects demonstrating ${newDream} skills.` },
-            { title: "Network & Apply", action: `Join communities on LinkedIn, attend meetups, and apply for internships.` }
-          ]
-        };
+        throw new Error("Could not analyze career pivot. Please check your internet connection or backend status and try again.");
       }
 
       setResult(data);
@@ -268,19 +257,38 @@ Return ONLY a valid JSON object:
   };
 
   if (pivotSuccess) {
+    const isOnline = networkService.isOnline();
     return (
       <div className="min-h-[70vh] flex flex-col items-center justify-center text-center p-8 fade-up">
         <CheckCircle2 size={64} className="text-emerald-400 mb-6 animate-pulse" />
         <h2 className="text-3xl font-cinzel font-bold text-gold-200 mb-3">Pivot Committed!</h2>
         <p className="text-gold-400/60 text-sm">
-          Generating your new roadmap for <span className="text-purple-400 font-bold">{newDream}</span>...
+          {isOnline ? (
+            <>Generating your new roadmap for <span className="text-purple-400 font-bold">{newDream}</span>...</>
+          ) : (
+            <>Your career goal is saved. Connect to internet to generate your new roadmap.</>
+          )}
         </p>
       </div>
     );
   }
 
+  const isOnline = networkService.isOnline();
+  const hasLocalModel = llamaPlugin.isSupported();
+  const showOfflineBanner = !isOnline && !hasLocalModel;
+
   return (
     <div className="max-w-4xl mx-auto w-full space-y-8 animate-in fade-in duration-500 pb-20">
+      {/* Offline Banner */}
+      {showOfflineBanner && (
+        <div className="glass-card p-5 flex items-start gap-3 border-orange-500/30" style={{ background: 'rgba(251,146,60,0.05)' }}>
+          <AlertTriangle size={20} className="text-orange-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-orange-300 text-sm leading-relaxed font-semibold">⚡ Internet Required</p>
+            <p className="text-orange-400/85 text-xs mt-1">Career pivot analysis needs AI. Please connect to generate an accurate personalized plan.</p>
+          </div>
+        </div>
+      )}
       {/* In-App Confirm Modal */}
       {showConfirm && (
         <ConfirmModal
@@ -328,8 +336,9 @@ Return ONLY a valid JSON object:
                 placeholder="e.g. AI Product Manager"
                 value={newDream}
                 onChange={(e) => setNewDream(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAnalyze()}
-                className="w-full bg-black/60 border border-purple-500/40 rounded-xl px-11 py-3 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-400 focus:shadow-[0_0_20px_rgba(147,51,234,0.3)] transition-all font-medium"
+                onKeyDown={(e) => e.key === 'Enter' && !showOfflineBanner && handleAnalyze()}
+                disabled={showOfflineBanner}
+                className="w-full bg-black/60 border border-purple-500/40 rounded-xl px-11 py-3 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-400 focus:shadow-[0_0_20px_rgba(147,51,234,0.3)] transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               />
               <Target size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-purple-400" />
             </div>
@@ -338,7 +347,7 @@ Return ONLY a valid JSON object:
 
         <button
           onClick={handleAnalyze}
-          disabled={!newDream.trim() || loading || newDream.toLowerCase() === (user.dream || "").toLowerCase()}
+          disabled={!newDream.trim() || loading || newDream.toLowerCase() === (user.dream || "").toLowerCase() || showOfflineBanner}
           className="mt-8 btn-primary px-10 py-4 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3"
           style={{ background: loading ? "rgba(124,58,237,0.5)" : "linear-gradient(135deg, #7c3aed 0%, #9333ea 100%)" }}
         >
