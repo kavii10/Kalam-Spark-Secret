@@ -617,3 +617,136 @@ async def get_real_news(topic: str) -> list[dict]:
 
     _cache_set(_news_cache, cache_key, unique)
     return unique
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 8. DETAILED CAREER DESCRIPTIONS — Career-specific information
+# ══════════════════════════════════════════════════════════════════════════════
+
+def get_detailed_career_description(dream: str) -> dict:
+    """
+    Return detailed, career-specific description with roles, skills, market outlook, and opportunities.
+    
+    Returns:
+        dict with keys: overview, roles, required_skills, market_outlook, salary_range, growth, tips
+    """
+    d = dream.lower().strip()
+    
+    # Curated career descriptions for popular dreams
+    career_database = {
+        # Tech careers
+        "software engineer|software developer|full stack developer|backend engineer|frontend engineer|web developer": {
+            "overview": "Software engineers design, develop, and maintain applications and systems that power modern technology. You'll write clean, efficient code; solve complex technical problems; and collaborate with teams using version control systems like Git. Software engineers work across all industries—from startups to tech giants—building everything from mobile apps to cloud infrastructure.",
+            "roles": ["Write and maintain production-quality code", "Design system architecture and APIs", "Debug and optimize performance", "Collaborate with designers and product managers", "Participate in code reviews and testing", "Deploy and monitor applications"],
+            "required_skills": ["Programming languages (Python, Java, JavaScript, C++, Go)", "Version control (Git/GitHub)", "Data structures and algorithms", "Database design (SQL/NoSQL)", "REST APIs and microservices", "Problem-solving and debugging", "Communication and teamwork"],
+            "market_outlook": "Extremely high demand across all sectors. Tech companies compete aggressively for talent. Remote work is common, offering flexibility and global opportunities.",
+            "salary_range": "₹6,00,000 - ₹50,00,000+ per year (depending on experience and company). Entry-level: ₹6-12 LPA, Mid-level: ₹15-30 LPA, Senior: ₹30+ LPA",
+            "growth": "Clear career progression to Senior Engineer, Architect, Tech Lead, or Engineering Manager. Opportunities to specialize in AI/ML, DevOps, Security, or Blockchain.",
+            "tips": "Build a strong GitHub portfolio with real projects. Contribute to open-source. Practice coding interviews. Learn modern frameworks and tools relevant to your focus area."
+        },
+        
+        # Data careers
+        "data scientist|machine learning engineer|ai engineer|artificial intelligence engineer": {
+            "overview": "Data scientists and ML engineers extract insights from data and build intelligent systems. You'll analyze datasets, develop predictive models, create machine learning pipelines, and deploy AI solutions. This role sits at the intersection of statistics, programming, and business, requiring both technical depth and communication skills.",
+            "roles": ["Analyze large datasets and identify patterns", "Build and train machine learning models", "Evaluate model performance and optimize accuracy", "Deploy ML models to production", "Create data visualizations and dashboards", "Collaborate with engineers and business stakeholders", "Research and implement new algorithms"],
+            "required_skills": ["Python, R, or Julia programming", "Mathematics (Linear Algebra, Calculus, Statistics)", "Machine Learning frameworks (TensorFlow, PyTorch, Scikit-learn)", "Data manipulation (Pandas, NumPy)", "SQL for database queries", "Statistics and experimental design", "Data visualization (Matplotlib, Tableau)", "Deep Learning basics"],
+            "market_outlook": "Rapidly growing field with massive demand from startups to Fortune 500 companies. Every industry now needs data scientists. Competitive salaries and equity opportunities.",
+            "salary_range": "₹8,00,000 - ₹60,00,000+ per year. Entry-level: ₹8-15 LPA, Mid-level: ₹20-40 LPA, Senior: ₹40+ LPA",
+            "growth": "Specialize in Deep Learning, NLP, Computer Vision, or Research. Progress to ML Architect, Research Scientist, or Lead. Start your own ML company.",
+            "tips": "Build projects on Kaggle and GitHub. Understand the math behind algorithms. Learn big data tools (Spark, Hadoop). Stay updated with latest papers and techniques."
+        },
+        
+        # Medical careers
+        "doctor|physician|medical doctor|mbbs|surgeon": {
+            "overview": "Doctors diagnose and treat patients, conduct medical research, and serve as healthcare leaders. You'll combine scientific knowledge with empathy to improve patient outcomes. The medical profession offers diverse specializations—from surgery to psychiatry—across hospitals, clinics, research institutions, and private practice.",
+            "roles": ["Diagnose and treat patient conditions", "Conduct medical examinations and tests", "Prescribe medications and treatments", "Perform surgeries (for surgeons)", "Keep detailed medical records", "Educate patients about health and prevention", "Collaborate with other healthcare professionals", "Conduct research and publish findings"],
+            "required_skills": ["Deep medical knowledge (anatomy, physiology, pharmacology)", "Clinical diagnosis and decision-making", "Technical skills (surgery, procedures)", "Empathy and communication", "Attention to detail", "Continuous learning and adaptability", "Leadership and teamwork"],
+            "market_outlook": "Consistent high demand globally. Healthcare is recession-proof. Opportunities in emerging fields like telemedicine and rural healthcare.",
+            "salary_range": "₹8,00,000 - ₹1,00,00,000+ per year (highly variable by specialization and practice setting). Government: ₹8-25 LPA, Private: ₹15-100+ LPA",
+            "growth": "Choose specializations (Cardiology, Neurosurgery, Pediatrics, etc.). Establish own clinic or hospital. Pursue research and publication. Leadership in medical institutions.",
+            "tips": "Excel in biology and chemistry. Prepare rigorously for medical entrance exams (NEET, etc.). Develop strong ethics and bedside manner. Join clinical rotations early."
+        },
+        
+        # Engineering careers
+        "civil engineer|mechanical engineer|electrical engineer|chemical engineer|structural engineer": {
+            "overview": "Engineers solve real-world problems by designing, building, and improving infrastructure, machines, systems, and processes. You'll apply mathematics and physics to create solutions—from buildings and bridges to manufacturing systems and power grids. Engineers drive innovation and development across every industry.",
+            "roles": ["Design systems and components using CAD software", "Conduct feasibility studies and risk analysis", "Oversee construction and implementation", "Test prototypes and troubleshoot issues", "Ensure safety and regulatory compliance", "Manage projects and budgets", "Collaborate with cross-functional teams"],
+            "required_skills": ["Strong mathematics and physics foundation", "CAD/CAM software (AutoCAD, CATIA, Solidworks)", "Project management", "Problem-solving and creativity", "Technical communication", "Knowledge of relevant standards and codes", "Leadership and teamwork"],
+            "market_outlook": "Steady demand in infrastructure, manufacturing, energy, and aerospace sectors. Infrastructure investment globally creates abundant opportunities.",
+            "salary_range": "₹6,00,000 - ₹40,00,000+ per year. Entry-level: ₹6-12 LPA, Mid-level: ₹15-30 LPA, Senior/Manager: ₹30+ LPA",
+            "growth": "Specialize in advanced areas (AI-powered design, sustainable engineering, smart systems). Become Project Manager or Engineering Manager. Start consulting firm.",
+            "tips": "Excel in math and physics. Gain hands-on experience with tools and simulations. Pursue internships at engineering companies. Consider specialization in emerging areas."
+        },
+        
+        # Business careers
+        "management consultant|business analyst|product manager|entrepreneur": {
+            "overview": "Business professionals improve organizational performance through strategic planning, data analysis, and process optimization. You'll identify problems, develop solutions, and drive business growth. Roles range from internal company positions to consulting firms, offering exposure to diverse industries and business models.",
+            "roles": ["Analyze business challenges and opportunities", "Develop strategic recommendations", "Track KPIs and business metrics", "Implement process improvements", "Manage projects and timelines", "Present findings to leadership", "Drive company growth and profitability"],
+            "required_skills": ["Business acumen and financial literacy", "Data analysis and Excel/Power BI", "Strategic thinking", "Communication and presentation skills", "Project management", "Problem-solving and creativity", "Leadership and influence"],
+            "market_outlook": "Strong demand across all industries. Every company needs business professionals to drive growth. Consulting firms compete for top talent.",
+            "salary_range": "₹7,00,000 - ₹50,00,000+ per year. Entry-level: ₹7-15 LPA, Mid-level: ₹20-40 LPA, Senior/Partner: ₹40+ LPA",
+            "growth": "Progress to Senior Consultant, Manager, Director, or Partner. Start your own consulting firm. Transition to corporate strategy roles.",
+            "tips": "Develop strong analytical and communication skills. Learn financial modeling. Get comfortable with data and tools. Consider MBA for advancement. Build a strong network."
+        },
+        
+        # Law careers
+        "lawyer|advocate|attorney|legal professional": {
+            "overview": "Lawyers advise clients, represent them in legal proceedings, and ensure compliance with laws. You'll research statutes and regulations, draft documents, negotiate agreements, and argue cases. The legal profession spans corporate law, criminal defense, litigation, intellectual property, environmental law, and more.",
+            "roles": ["Research legal issues and precedents", "Draft legal documents and contracts", "Advise clients on legal implications", "Represent clients in court", "Negotiate settlements", "Ensure regulatory compliance", "Build client relationships"],
+            "required_skills": ["Deep legal knowledge in chosen specialization", "Research and writing", "Oral advocacy and persuasion", "Attention to detail", "Analytical thinking", "Negotiation skills", "Ethics and integrity"],
+            "market_outlook": "Steady demand across sectors—corporate law, government, NGOs, startups. Legal tech is creating new opportunities.",
+            "salary_range": "₹5,00,000 - ₹50,00,000+ per year. Entry-level: ₹5-12 LPA, Mid-level: ₹15-40 LPA, Senior/Partner: ₹40+ LPA",
+            "growth": "Specialize in areas like IP, M&A, International Law. Become Partner in law firm. Move to corporate legal roles. Join judiciary or policy.",
+            "tips": "Excel in law school. Clear bar exams with high scores. Join prestigious law firms for experience. Build specialization expertise. Network in legal circles."
+        },
+        
+        # Design careers
+        "ux designer|ui designer|graphic designer|product designer|design thinking": {
+            "overview": "Designers create beautiful, intuitive interfaces and experiences that solve user problems. You'll research user needs, sketch ideas, design prototypes, and test solutions. Design spans digital (apps, websites) and physical (products, environments), with roles in startups, tech companies, agencies, and enterprises.",
+            "roles": ["Conduct user research and testing", "Create wireframes and prototypes", "Design interfaces and visual systems", "Collaborate with developers and product managers", "Iterate based on feedback", "Maintain design consistency", "Present and defend design decisions"],
+            "required_skills": ["Design tools (Figma, Adobe Suite, Sketch)", "UX/UI principles and best practices", "User research and testing", "Visual design and typography", "Prototyping and interaction design", "Communication and presentation", "Problem-solving and creativity"],
+            "market_outlook": "Growing demand as companies prioritize user experience. Tech startups compete for talented designers. Remote work opportunities abundant.",
+            "salary_range": "₹6,00,000 - ₹40,00,000+ per year. Entry-level: ₹6-12 LPA, Mid-level: ₹15-30 LPA, Senior: ₹30+ LPA",
+            "growth": "Specialize in UX Research, Interaction Design, or Design Strategy. Become Design Lead or Head of Design. Start design agency or consultancy.",
+            "tips": "Build a strong portfolio on Behance or Dribbble. Practice design thinking methodology. Learn user research techniques. Understand psychology and human behavior."
+        },
+        
+        # Education careers
+        "teacher|educator|professor|academic|education specialist": {
+            "overview": "Educators shape future generations by teaching, mentoring, and developing curricula. You'll inspire students, create engaging learning experiences, and assess progress. Teaching roles span K-12, higher education, corporate training, and online platforms, each with unique challenges and rewards.",
+            "roles": ["Develop and deliver lessons", "Create assessments and grade student work", "Mentor and support student growth", "Develop curriculum and learning materials", "Collaborate with colleagues on initiatives", "Communicate with parents/guardians", "Stay updated with subject expertise"],
+            "required_skills": ["Deep subject matter expertise", "Communication and public speaking", "Empathy and patience", "Creativity in teaching methods", "Assessment and feedback skills", "Classroom management", "Adaptability and continuous learning"],
+            "market_outlook": "Steady demand, especially in specialized fields. EdTech is creating new teaching opportunities. Remote teaching expanding globally.",
+            "salary_range": "₹3,00,000 - ₹20,00,000+ per year. K-12 Government: ₹3-10 LPA, Higher Ed: ₹8-20+ LPA, Private/International: ₹10-30+ LPA",
+            "growth": "Become Department Head or Principal. Develop specialized curriculum. Pursue EdTech. Author educational content. Leadership in institutions.",
+            "tips": "Develop genuine passion for your subject and teaching. Engage with modern pedagogies. Use technology in teaching effectively. Build rapport with students."
+        },
+    }
+    
+    # Find matching career description
+    for keywords, description in career_database.items():
+        if any(keyword in d for keyword in keywords.split('|')):
+            return {
+                "career": dream,
+                "overview": description["overview"],
+                "roles": description["roles"],
+                "required_skills": description["required_skills"],
+                "market_outlook": description["market_outlook"],
+                "salary_range": description["salary_range"],
+                "growth": description["growth"],
+                "tips": description["tips"],
+                "is_curated": True
+            }
+    
+    # Fallback: Generate generic but detailed description for unknown careers
+    return {
+        "career": dream,
+        "overview": f"A {dream} is a professional who specializes in their field, applying expertise to solve problems and drive value. You'll develop deep knowledge in this domain, collaborate with others, and continuously adapt to evolving technologies and methodologies.",
+        "roles": ["Apply specialized expertise to real-world challenges", "Collaborate with cross-functional teams", "Stay updated with industry developments", "Mentor junior professionals", "Contribute to innovation and improvement"],
+        "required_skills": ["Domain expertise", "Technical and soft skills", "Problem-solving", "Communication", "Continuous learning", "Teamwork and leadership"],
+        "market_outlook": "Growing opportunities as businesses invest in specialization and expertise.",
+        "salary_range": "Variable by region, experience, and specialization. Early career: ₹6-15 LPA, Mid-career: ₹20-50 LPA, Senior: ₹50+ LPA",
+        "growth": "Progress to senior roles, leadership positions, or specialized expertise. Start your own venture or consultancy.",
+        "tips": "Build deep expertise in your chosen field. Network actively. Stay updated with industry trends. Develop both technical and leadership skills.",
+        "is_curated": False
+    }

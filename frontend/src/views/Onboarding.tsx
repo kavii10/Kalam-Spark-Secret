@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import DreamDiscovery from './DreamDiscovery';
-import { generateDreamSummary } from '../services/geminiService';
+import { generateDreamSummary, fetchDetailedCareerDescription } from '../services/geminiService';
 
 // ─── Career Taxonomy for Validation ──────────────────────────────────────────
 const CAREER_TAXONOMY: string[] = [
@@ -207,7 +207,7 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
   const [step, setStep] = useState(1);
   const [showDiscovery, setShowDiscovery] = useState(false);
   const [cameFromDiscovery, setCameFromDiscovery] = useState(false);
-  const [dreamSummary, setDreamSummary] = useState('');
+  const [dreamSummary, setDreamSummary] = useState<any>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [form, setForm] = useState({
     name: '',
@@ -298,15 +298,21 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
     setStep(4);
     try {
       const d = newDream || form.dream;
-      const b = newBranch || form.branch;
-      const y = newYear || form.year;
-      const summary = await generateDreamSummary(d, b, y);
-      setDreamSummary(summary);
-    } catch {
-      const d = newDream || form.dream;
-      setDreamSummary(
-        `A ${d} is a skilled professional who drives innovation and solves real-world problems. Day-to-day, you'll design, build, and improve products or services that impact people's lives. Your core responsibilities will include planning projects, collaborating with teams, and delivering high-quality results.`
-      );
+      const description = await fetchDetailedCareerDescription(d);
+      setDreamSummary(description);
+    } catch (e) {
+      console.error('Failed to fetch career description:', e);
+      setDreamSummary({
+        career: newDream || form.dream,
+        overview: `A ${newDream || form.dream} is a skilled professional who drives innovation and solves real-world problems.`,
+        roles: ["Design and build solutions", "Collaborate with teams", "Improve processes", "Solve problems"],
+        required_skills: ["Domain knowledge", "Technical skills", "Communication", "Problem-solving"],
+        market_outlook: "Growing opportunities in the field.",
+        salary_range: "₹6,00,000 - ₹25,00,000+",
+        growth: "Progress to senior roles and leadership positions.",
+        tips: "Build expertise, network, and stay updated with industry trends.",
+        is_curated: false
+      });
     } finally {
       setSummaryLoading(false);
     }
@@ -338,7 +344,7 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
       } else {
         setStep(3); 
       }
-      setDreamSummary(''); 
+      setDreamSummary(null); 
       return; 
     }
     if (step === 5) { setStep(4); return; }
@@ -750,28 +756,82 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
                       <Loader2 size={18} className="animate-spin text-purple-400" />
                       <p className="text-xs text-gold-400/40">AI is analysing this career for you...</p>
                     </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {dreamSummary.split(/(?<=[.!?])\s+/).filter(Boolean).map((sentence, i) => {
-                        const icons = [<Target size={12} className="text-purple-400 shrink-0 mt-0.5" />, <Zap size={12} className="text-gold-400 shrink-0 mt-0.5" />, <BookOpen size={12} className="text-emerald-400 shrink-0 mt-0.5" />];
-                        const labels = ['What this career is', 'Day-to-day work', 'Your responsibilities'];
-                        const colors = ['text-purple-400', 'text-gold-400', 'text-emerald-400'];
-                        return (
-                          <div key={i} className="flex gap-2.5 p-3 rounded-xl"
-                            style={isLight
-                              ? { background: '#ffffff', border: '1px solid #e5e7eb' }
-                              : { background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
-                          >
-                            {icons[i] || icons[2]}
-                            <div>
-                              <p className={`text-[10px] font-semibold mb-0.5 ${colors[i] || colors[2]}`}>{labels[i] || ''}</p>
-                              <p className="text-xs leading-relaxed" style={{ color: isLight ? '#374151' : 'rgba(211,156,59,0.6)' }}>{sentence}</p>
-                            </div>
+                  ) : dreamSummary ? (
+                    <div className="space-y-4">
+                      {/* Overview Section */}
+                      <div className="p-3.5 rounded-xl" style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.15)' }}>
+                        <p className="text-xs leading-relaxed text-gold-300/70">{dreamSummary.overview}</p>
+                        {dreamSummary.is_curated && (
+                          <p className="text-[10px] text-purple-400 mt-2 font-medium">✨ Curated for {dreamSummary.career}</p>
+                        )}
+                      </div>
+
+                      {/* Roles & Responsibilities */}
+                      {dreamSummary.roles && dreamSummary.roles.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs font-bold text-purple-400 flex items-center gap-2">
+                            <Briefcase size={12} /> Key Responsibilities
+                          </p>
+                          <div className="space-y-1.5 pl-5">
+                            {dreamSummary.roles.map((role, idx) => (
+                              <div key={idx} className="flex items-start gap-2">
+                                <span className="text-purple-400 text-xs font-bold mt-0.5">•</span>
+                                <p className="text-xs text-gold-300/70 leading-relaxed">{role}</p>
+                              </div>
+                            ))}
                           </div>
-                        );
-                      })}
+                        </div>
+                      )}
+
+                      {/* Required Skills */}
+                      {dreamSummary.required_skills && dreamSummary.required_skills.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs font-bold text-emerald-400 flex items-center gap-2">
+                            <Zap size={12} /> Essential Skills
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {dreamSummary.required_skills.map((skill, idx) => (
+                              <span key={idx} className="px-2.5 py-1 rounded-md text-[10px] font-medium" style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.2)', color: '#6ee7b7' }}>
+                                {skill}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Salary & Market */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 rounded-xl" style={{ background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.15)' }}>
+                          <p className="text-[10px] font-bold text-orange-400">Salary Range</p>
+                          <p className="text-xs text-gold-300/70 mt-1">{dreamSummary.salary_range}</p>
+                        </div>
+                        <div className="p-3 rounded-xl" style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.15)' }}>
+                          <p className="text-[10px] font-bold text-blue-400">Market Outlook</p>
+                          <p className="text-xs text-gold-300/70 mt-1">{dreamSummary.market_outlook}</p>
+                        </div>
+                      </div>
+
+                      {/* Growth Path */}
+                      {dreamSummary.growth && (
+                        <div className="p-3.5 rounded-xl" style={{ background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.15)' }}>
+                          <p className="text-xs font-bold text-fuchsia-400 flex items-center gap-2 mb-2">
+                            <Target size={12} /> Career Growth
+                          </p>
+                          <p className="text-xs text-gold-300/70 leading-relaxed">{dreamSummary.growth}</p>
+                        </div>
+                      )}
+
+                      {/* Tips */}
+                      {dreamSummary.tips && (
+                        <div className="p-3.5 rounded-xl" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.15)' }}>
+                          <p className="text-xs font-bold text-emerald-400 flex items-center gap-2 mb-2">
+                            <BookOpen size={12} /> Pro Tips
+                          </p>
+                          <p className="text-xs text-gold-300/70 leading-relaxed">{dreamSummary.tips}</p>
+                        </div>
+                      )}
                     </div>
-                  )}
+                  ) : null}
                 </div>
 
                 <div className="p-3.5 rounded-xl" style={{ background: 'rgba(52,211,153,0.05)', border: '1px solid rgba(52,211,153,0.15)' }}>
@@ -788,7 +848,7 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
                       } else {
                         setStep(3);
                       }
-                      setDreamSummary(''); 
+                      setDreamSummary(null); 
                     }}
                     className="flex items-center gap-1.5 text-xs text-gold-500/40 hover:text-gold-300 transition-colors mx-auto"
                   >

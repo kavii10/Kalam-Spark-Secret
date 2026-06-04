@@ -634,10 +634,15 @@ export default function Resources({ user }: { user: UserProfile }) {
       //   2. The user has pivoted careers (dream mismatch)
       //   3. The user has moved to a new stage in the roadmap
       //   4. The stage subjects changed (e.g. old cache was built from stage title)
-      const stageSubjects: string[] = stage.subjects || [];
+      // Use concepts (specific learnable items) first, then subjects as fallback
+      // This ensures resources are loaded for specific items like "Linear Algebra", "Calculus", "Python"
+      // instead of generic stage titles like "Foundations of Math"
+      const stageSubjects: string[] = (stage?.concepts && stage.concepts.length > 0) 
+        ? stage.concepts 
+        : (stage?.subjects || []);
       const dreamMismatch = cached?.cachedForDream && cached.cachedForDream !== currentUser.dream;
       const stageMismatch = cached?.cachedForStage !== undefined && cached.cachedForStage !== stageIdx;
-      // Subjects mismatch: old cache was built from the stage title, not the specific subjects
+      // Concepts/Subjects mismatch: old cache was built from generic stage title instead of specific concepts
       const cachedSubs: string[] = (cached as any)?.cachedSubjects || [];
       const subjectsMismatch = stageSubjects.length > 0 && (
         cachedSubs.length === 0 ||
@@ -653,7 +658,8 @@ export default function Resources({ user }: { user: UserProfile }) {
         const isOnline = networkService.isOnline();
         if (isOnline) {
           try {
-            // Pass '' as stageTopic so fetchDirectResources uses subjects only (not the stage title)
+            // Pass '' as stageTopic so fetchDirectResources uses concepts/subjects only (not the generic stage title)
+            // stageSubjects contains either stage.concepts (preferred) or stage.subjects as fallback
             const fetched = await fetchDirectResources(
               currentUser.dream, '', stageSubjects, currentUser.year
             );

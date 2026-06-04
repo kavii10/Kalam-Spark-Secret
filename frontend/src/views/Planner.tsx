@@ -108,10 +108,15 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
   // ── Unified Study Center Resource Helper ───────────────────────────────────
   const getUnifiedResources = useCallback(async (rm: any, stageIdx: number, stage: any) => {
     let cached = rm.cachedResources;
-    const stageSubjects: string[] = stage?.subjects || [];
+    // Use concepts (specific learnable items) first, then subjects as fallback
+    // This ensures resources are loaded for specific items like "Linear Algebra", "Calculus", "Python"
+    // instead of generic stage titles like "Foundations of Math"
+    const stageSubjects: string[] = (stage?.concepts && stage.concepts.length > 0)
+      ? stage.concepts
+      : (stage?.subjects || []);
     const dreamMismatch = cached?.cachedForDream && cached.cachedForDream !== user.dream;
     const stageMismatch = cached?.cachedForStage !== undefined && cached.cachedForStage !== stageIdx;
-    // Subjects mismatch: old cache was built from stage title instead of subjects
+    // Concepts/Subjects mismatch: old cache was built from generic stage title instead of specific concepts
     const cachedSubs: string[] = (cached as any)?.cachedSubjects || [];
     const subjectsMismatch = stageSubjects.length > 0 && (
       cachedSubs.length === 0 ||
@@ -334,9 +339,14 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
 
         const stageIdx = user.currentStageIndex || 0;
         const stage = rm.stages ? (rm.stages[stageIdx] || rm.stages[0]) : null;
-        const subjects = stage?.subjects?.length ? stage.subjects : [user.dream];
-        // Use first subject as topic for task generation (not the generic stage title)
-        const topic = subjects[0] || (stage ? stage.title : user.dream);
+        // Use concepts (specific learnable items) first, then subjects as fallback
+        // This ensures resources are loaded for specific items like "Linear Algebra", "Calculus", "Python"
+        // instead of generic stage titles like "Foundations of Math"
+        const stageSubjects: string[] = (stage?.concepts && stage.concepts.length > 0)
+          ? stage.concepts
+          : (stage?.subjects?.length ? stage.subjects : [user.dream]);
+        // Use first subject/concept as topic for task generation (not the generic stage title)
+        const topic = stageSubjects[0] || (stage ? stage.title : user.dream);
 
         const cached = await getUnifiedResources(rm, stageIdx, stage);
 
@@ -395,7 +405,7 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
               const res = await fetch(`${backendUrl}/api/tasks`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ dream: user.dream, current_stage: topic, subjects, count: target })
+                body: JSON.stringify({ dream: user.dream, current_stage: topic, subjects: stageSubjects, count: target })
               });
               if (res.ok) {
                 const data = await res.json();
@@ -412,7 +422,7 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
 
             if (pool.length === 0) {
               try {
-                const data = await generatePlannerTasks(user.dream, topic, subjects, neededTasks);
+                const data = await generatePlannerTasks(user.dream, topic, stageSubjects, neededTasks);
                 if (Array.isArray(data)) {
                   pool = data.map((t: any) => ({
                     title: (t.title || '').trim(),
@@ -427,7 +437,7 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
             if (llamaPlugin.isSupported()) {
               console.log('[Planner] Running offline, generating tasks using local model...');
               try {
-                const subjectsStr = subjects.join(', ');
+                const subjectsStr = stageSubjects.join(', ');
                 const prompt = `Create exactly ${neededTasks} diverse, actionable daily tasks for a student studying to become a ${user.dream}, focusing on these specific subjects: ${subjectsStr}.
 Rules:
 - Each task "type" MUST be one of: "theory", "hands-on", "review" (NO other values)
@@ -473,7 +483,7 @@ Return a JSON array of exactly ${neededTasks} tasks.`;
 
         const addedTasks: DailyTask[] = [];
         const dreamWords = user.dream.toLowerCase().split(/\s+/).filter((w: string) => w.length > 2);
-        const subjectWords = subjects.join(' ').toLowerCase().split(/\s+/).filter((w: string) => w.length > 2);
+        const subjectWords = stageSubjects.join(' ').toLowerCase().split(/\s+/).filter((w: string) => w.length > 2);
         const requiredKeywords = [...dreamWords, ...subjectWords];
 
         for (const candidate of pool) {

@@ -149,6 +149,17 @@ async def get_career_summary(dream: str, branch: str, year: str, language: str =
         print(f"Error in get_career_summary: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/career_description")
+async def get_career_description(dream: str):
+    """Get detailed, career-specific description with roles, skills, market outlook, and opportunities."""
+    try:
+        from real_data import get_detailed_career_description
+        description = get_detailed_career_description(dream)
+        return description
+    except Exception as e:
+        print(f"Error in get_career_description: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/roadmap")
 async def get_roadmap(
     dream: str = Query(..., min_length=2, max_length=200, description="The dream career (e.g. 'Machine Learning Engineer')"),
