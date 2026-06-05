@@ -13,6 +13,10 @@ import { getMentorChatReply } from '../services/geminiService';
 import { networkService } from '../services/networkService';
 import { llamaPlugin } from '../services/llamaPlugin';
 
+const BACKEND_URL = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:8000'
+  : '';
+
 /* ─── Types ─── */
 interface ChatMessage {
   role: 'user' | 'ai';
