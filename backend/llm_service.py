@@ -29,6 +29,11 @@ LANGUAGE_NAMES = {
     "en": "English", "ta": "Tamil", "hi": "Hindi",
     "te": "Telugu", "kn": "Kannada", "ml": "Malayalam",
     "bn": "Bengali", "mr": "Marathi",
+    "es": "Spanish", "fr": "French", "de": "German",
+    "zh": "Chinese", "ar": "Arabic", "ru": "Russian",
+    "pt": "Portuguese", "ja": "Japanese", "ko": "Korean",
+    "it": "Italian", "id": "Indonesian", "tr": "Turkish",
+    "vi": "Vietnamese",
 }
 
 

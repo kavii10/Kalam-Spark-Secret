@@ -366,7 +366,31 @@ function CelebrationOverlay({ onClose, isLight }: { onClose: () => void; isLight
 }
 
 /* ────────── Stage Detail Panel ────────── */
-function StageDetailPanel({ stage, onClose, theme }: { stage: any; onClose: () => void; theme?: string }) {
+function StageDetailPanel({ 
+  stage, 
+  onClose, 
+  theme,
+  conceptProgress,
+  toggleConcept,
+  completedStages,
+  stageIndex,
+  isCompleted,
+  showToast,
+  projectProgress,
+  toggleProject
+}: { 
+  stage: any; 
+  onClose: () => void; 
+  theme?: string;
+  conceptProgress: Record<string, string[]>;
+  toggleConcept: (stageId: string, stageIndex: number, concept: string, totalConcepts: number) => void;
+  completedStages: string[];
+  stageIndex: number;
+  isCompleted: boolean;
+  showToast: (msg: string) => void;
+  projectProgress: Record<string, string[]>;
+  toggleProject: (stageId: string, stageIndex: number, project: string) => void;
+}) {
   const isLight = theme === 'light';
   
   // Auto-scroll to top of modal when opened
@@ -406,13 +430,44 @@ function StageDetailPanel({ stage, onClose, theme }: { stage: any; onClose: () =
               <BookOpen size={12} className="text-gold-500/50" /> Topics to Master
             </h4>
             <div className="grid grid-cols-1 gap-2">
-              {stage.subjects.map((sub: string, i: number) => (
-                <div key={i} className="flex items-center gap-3 p-3 rounded-xl text-sm text-gold-200/60"
-                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
-                  <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'rgba(211,156,59,0.6)' }} />
-                  {sub}
-                </div>
-              ))}
+              {stage.subjects.map((sub: string, i: number) => {
+                const isConceptDone = (conceptProgress[stage.id] || []).includes(sub);
+                const totalConcepts = (stage.subjects || []).length;
+                const canCheck = stageIndex <= completedStages.length;
+
+                return (
+                  <div
+                    key={i}
+                    onClick={() => {
+                      if (!isCompleted && canCheck) {
+                        toggleConcept(stage.id, stageIndex, sub, totalConcepts);
+                      } else if (!canCheck) {
+                        showToast("Please complete the previous stages first!");
+                      }
+                    }}
+                    className={`flex items-center gap-3 p-3 rounded-xl text-sm transition-all ${
+                      isCompleted ? 'opacity-70 cursor-default' : (!canCheck ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-white/5')
+                    } ${isLight ? 'text-amber-900/80 bg-zinc-50 border-zinc-200' : 'text-gold-200/60 bg-white/3'}`}
+                    style={{
+                      border: isLight 
+                        ? `1px solid ${isConceptDone ? 'rgba(124,58,237,0.4)' : 'rgba(211,156,59,0.15)'}` 
+                        : `1px solid ${isConceptDone ? 'rgba(124,58,237,0.4)' : 'rgba(255,255,255,0.06)'}`,
+                      boxShadow: isConceptDone ? '0 0 10px rgba(124,58,237,0.1)' : 'none'
+                    }}
+                  >
+                    <div 
+                      className={`w-4 h-4 rounded border flex items-center justify-center transition-all shrink-0 ${
+                        isConceptDone 
+                          ? 'bg-purple-500 border-purple-400' 
+                          : 'border-gold-500/30'
+                      }`}
+                    >
+                      {isConceptDone && <CheckCircle2 size={10} className="text-white" />}
+                    </div>
+                    <span className={isConceptDone ? 'line-through opacity-50' : ''}>{sub}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -439,12 +494,42 @@ function StageDetailPanel({ stage, onClose, theme }: { stage: any; onClose: () =
               <Code size={12} className="text-purple-400/60" /> Projects to Build
             </h4>
             <div className="space-y-2">
-              {stage.projects.map((proj: string, i: number) => (
-                <div key={i} className="p-3.5 rounded-xl text-sm text-gold-100/70 leading-relaxed italic"
-                  style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.20)' }}>
-                  {proj}
-                </div>
-              ))}
+              {stage.projects.map((proj: string, i: number) => {
+                const isProjectDone = (projectProgress[stage.id] || []).includes(proj);
+                const canCheck = stageIndex <= completedStages.length;
+
+                return (
+                  <div
+                    key={i}
+                    onClick={() => {
+                      if (!isCompleted && canCheck) {
+                        toggleProject(stage.id, stageIndex, proj);
+                      } else if (!canCheck) {
+                        showToast("Please complete the previous stages first!");
+                      }
+                    }}
+                    className={`flex items-center gap-3 p-3 rounded-xl text-sm transition-all ${
+                      isCompleted ? 'opacity-70 cursor-default' : (!canCheck ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-white/5')
+                    } ${isLight ? 'text-purple-900/80 bg-purple-50' : 'text-gold-100/70 bg-purple-500/8'}`}
+                    style={{
+                      border: isLight 
+                        ? `1px solid ${isProjectDone ? 'rgba(124,58,237,0.5)' : 'rgba(124,58,237,0.2)'}` 
+                        : `1px solid ${isProjectDone ? 'rgba(124,58,237,0.5)' : 'rgba(124,58,237,0.20)'}`
+                    }}
+                  >
+                    <div 
+                      className={`w-4 h-4 rounded border flex items-center justify-center transition-all shrink-0 ${
+                        isProjectDone 
+                          ? 'bg-purple-500 border-purple-400' 
+                          : 'border-gold-500/30'
+                      }`}
+                    >
+                      {isProjectDone && <CheckCircle2 size={10} className="text-white" />}
+                    </div>
+                    <span className={isProjectDone ? 'line-through opacity-50' : ''}>{proj}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -520,6 +605,16 @@ export default function RoadmapView({
   useEffect(() => {
     localStorage.setItem('kalamspark_concept_progress', JSON.stringify(conceptProgress));
   }, [conceptProgress]);
+
+  const [projectProgress, setProjectProgress] = useState<Record<string, string[]>>(() => {
+    const saved = localStorage.getItem('kalamspark_project_progress');
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  useEffect(() => {
+    localStorage.setItem('kalamspark_project_progress', JSON.stringify(projectProgress));
+  }, [projectProgress]);
+
   const isLight = user.settings?.theme === 'light';
 
   useEffect(() => {
@@ -653,6 +748,24 @@ export default function RoadmapView({
     });
   };
 
+  const toggleProject = (stageId: string, stageIndex: number, project: string) => {
+    if (stageIndex > completedStages.length) {
+      showToast("Please complete the previous stages first!");
+      return;
+    }
+
+    setProjectProgress(prev => {
+      const current = prev[stageId] || [];
+      let next: string[];
+      if (current.includes(project)) {
+        next = current.filter(p => p !== project);
+      } else {
+        next = [...current, project];
+      }
+      return { ...prev, [stageId]: next };
+    });
+  };
+
   if (loading) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center p-6 text-center fade-up relative">
@@ -719,7 +832,21 @@ export default function RoadmapView({
 
       <div className="space-y-7 fade-up">
         {/* Stage Detail Panel */}
-        {selectedStage && <StageDetailPanel theme={user.settings?.theme} stage={selectedStage} onClose={() => setSelectedStage(null)} />}
+        {selectedStage && (
+          <StageDetailPanel 
+            theme={user.settings?.theme} 
+            stage={selectedStage} 
+            onClose={() => setSelectedStage(null)} 
+            conceptProgress={conceptProgress}
+            toggleConcept={toggleConcept}
+            completedStages={completedStages}
+            stageIndex={roadmap?.stages?.findIndex((s: any) => s.id === selectedStage.id) ?? 0}
+            isCompleted={completedStages.includes(selectedStage.id)}
+            showToast={showToast}
+            projectProgress={projectProgress}
+            toggleProject={toggleProject}
+          />
+        )}
 
       {/* Header */}
       <div className="mb-2">
@@ -849,9 +976,9 @@ export default function RoadmapView({
                             <BookOpen size={12} className="text-gold-500/50" /> Learn Concepts
                           </p>
                           <div className="space-y-1.5">
-                            {(stage.concepts || stage.subjects || []).map((sub: string, si: number) => {
+                            {(stage.subjects || []).map((sub: string, si: number) => {
                               const isConceptDone = (conceptProgress[stage.id] || []).includes(sub);
-                              const totalConcepts = (stage.concepts || stage.subjects || []).length;
+                              const totalConcepts = (stage.subjects || []).length;
                               const canCheck = idx <= completedStages.length;
 
                               return (
@@ -896,11 +1023,50 @@ export default function RoadmapView({
                           <p className="roadmap-stage-topic-title text-xs text-gold-400/60 font-semibold uppercase tracking-widest mb-3 flex items-center gap-2">
                             <Code size={12} className="text-purple-400/60" /> Project Task
                           </p>
-                          <div
-                            className={`roadmap-stage-topic-item p-3.5 rounded-xl text-sm leading-relaxed ${isLight ? 'text-purple-900/80 bg-purple-50 border-purple-200' : 'text-gold-100/70'}`}
-                            style={!isLight ? { background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.20)' } : {}}
-                          >
-                            {stage.projects?.[0] || 'Create your first project'}
+                          <div className="space-y-1.5">
+                            {(stage.projects || []).map((proj: string, pi: number) => {
+                              const isProjectDone = (projectProgress[stage.id] || []).includes(proj);
+                              const canCheck = idx <= completedStages.length;
+
+                              return (
+                                <div
+                                  key={pi}
+                                  onClick={() => {
+                                    if (!isCompleted && canCheck) {
+                                      toggleProject(stage.id, idx, proj);
+                                    } else if (!canCheck) {
+                                      showToast("Please complete the previous stages first!");
+                                    }
+                                  }}
+                                  className={`roadmap-stage-topic-item flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs transition-all ${
+                                    isCompleted ? 'opacity-70 cursor-default' : (!canCheck ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-white/5')
+                                  } ${isLight ? 'text-purple-900/85' : 'text-gold-100/70'}`}
+                                  style={{
+                                    background: isLight ? 'rgba(124,58,237,0.05)' : 'rgba(124,58,237,0.06)',
+                                    border: isLight 
+                                      ? `1px solid ${isProjectDone ? 'rgba(124,58,237,0.5)' : 'rgba(124,58,237,0.2)'}` 
+                                      : `1px solid ${isProjectDone ? 'rgba(124,58,237,0.5)' : 'rgba(124,58,237,0.20)'}`,
+                                    boxShadow: isProjectDone ? '0 0 10px rgba(124,58,237,0.1)' : 'none'
+                                  }}
+                                >
+                                  <div 
+                                    className={`w-4 h-4 rounded border flex items-center justify-center transition-all shrink-0 ${
+                                      isProjectDone 
+                                        ? 'bg-purple-500 border-purple-400' 
+                                        : 'border-gold-500/30'
+                                    }`}
+                                  >
+                                    {isProjectDone && <CheckCircle2 size={10} className="text-white" />}
+                                  </div>
+                                  <span className={isProjectDone ? 'line-through opacity-50' : ''}>{proj}</span>
+                                </div>
+                              );
+                            })}
+                            {(stage.projects || []).length === 0 && (
+                              <div className={`p-3 rounded-xl text-xs ${isLight ? 'bg-zinc-50 border border-zinc-200 text-zinc-500' : 'bg-white/3 border border-white/5 text-gold-200/40'}`}>
+                                No projects assigned for this stage.
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>

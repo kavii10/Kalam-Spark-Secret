@@ -270,83 +270,65 @@ function LibraryTTSPlayer({ lines, podcastLang, host1, host2, durationEst, user 
     window.speechSynthesis.cancel();
     activeRef.current = true;
     setPlaying(true);
-    let consecutiveErrors = 0;
-    const langMap: Record<string, string> = {
-      en: 'en-US', ta: 'ta-IN', hi: 'hi-IN', te: 'te-IN',
-      kn: 'kn-IN', ml: 'ml-IN', bn: 'bn-IN', mr: 'mr-IN',
-      es: 'es-ES', fr: 'fr-FR', de: 'de-DE', zh: 'zh-CN',
-      ja: 'ja-JP', ko: 'ko-KR', ar: 'ar-SA', ru: 'ru-RU',
-      pt: 'pt-BR', it: 'it-IT', id: 'id-ID', tr: 'tr-TR', vi: 'vi-VN',
-    };
-    const lang = langMap[podcastLang] || 'en-US';
-    const speak = (idx: number) => {
-      if (!activeRef.current || idx >= lines.length) {
-        setPlaying(false); setLineIdx(0); activeRef.current = false; return;
-      }
-      setLineIdx(idx);
-      const utt = new SpeechSynthesisUtterance(lines[idx].text);
-      utt.lang = lang;
+
+    const go = () => {
+      if (!activeRef.current) return;
+      const langMap: Record<string, string> = {
+        en: 'en-US', ta: 'ta-IN', hi: 'hi-IN', te: 'te-IN',
+        kn: 'kn-IN', ml: 'ml-IN', bn: 'bn-IN', mr: 'mr-IN',
+        es: 'es-ES', fr: 'fr-FR', de: 'de-DE', zh: 'zh-CN',
+        ja: 'ja-JP', ko: 'ko-KR', ar: 'ar-SA', ru: 'ru-RU',
+        pt: 'pt-BR', it: 'it-IT', id: 'id-ID', tr: 'tr-TR', vi: 'vi-VN',
+      };
+      const lang = langMap[podcastLang] || 'en-US';
       const voices = window.speechSynthesis.getVoices();
       const lv = voices.filter(v => v.lang.startsWith(lang.split('-')[0]));
-      const isH1 = lines[idx].speaker === host1;
-      if (lv.length >= 2) utt.voice = lv[isH1 ? 0 : 1];
-      else if (lv.length === 1) utt.voice = lv[0];
-      utt.pitch = isH1 ? 0.9 : 1.15;
-      utt.rate = isH1 ? 0.95 : 1.0;
-      utt.onend = () => {
-        consecutiveErrors = 0;
-        speak(idx + 1);
-      };
-      utt.onerror = (e) => {
-        console.warn('[LibraryTTSPlayer] TTS voice error, retrying with default voice:', e);
-        if (e.error === 'interrupted' || e.error === 'canceled') {
-          return;
-        }
-        if (utt.voice) {
-          const fallback = new SpeechSynthesisUtterance(lines[idx].text);
-          fallback.lang = utt.lang;
-          fallback.pitch = utt.pitch;
-          fallback.rate = utt.rate;
-          fallback.onend = () => {
-            consecutiveErrors = 0;
-            speak(idx + 1);
-          };
-          fallback.onerror = (fe) => {
-            if (fe.error === 'interrupted' || fe.error === 'canceled') {
-              return;
-            }
-            consecutiveErrors++;
-            if (consecutiveErrors >= 3) {
-              alert("Speech Synthesis (Read Aloud) failed. Please check if your system volume is turned up, an audio output device is connected, and Speech/TTS voices are installed in your OS settings.");
-              pause();
-            } else {
-              speak(idx + 1);
-            }
-          };
-          window.speechSynthesis.speak(fallback);
-        } else {
-          consecutiveErrors++;
-          if (consecutiveErrors >= 3) {
-            alert("Speech Synthesis (Read Aloud) failed. Please check if your system volume is turned up, an audio output device is connected, and Speech/TTS voices are installed in your OS settings.");
-            pause();
-          } else {
-            speak(idx + 1);
+
+      for (let i = startIdx; i < lines.length; i++) {
+        const utt = new SpeechSynthesisUtterance(lines[i].text);
+        utt.lang = lang;
+        const isH1 = lines[i].speaker === host1;
+        if (lv.length >= 2) utt.voice = lv[isH1 ? 0 : 1];
+        else if (lv.length === 1) utt.voice = lv[0];
+        utt.pitch = isH1 ? 0.9 : 1.15;
+        utt.rate = isH1 ? 0.95 : 1.0;
+
+        utt.onstart = () => {
+          if (activeRef.current) {
+            setLineIdx(i);
           }
-        }
-      };
-      window.speechSynthesis.speak(utt);
+        };
+
+        utt.onend = () => {
+          if (i === lines.length - 1) {
+            setPlaying(false);
+            setLineIdx(0);
+            activeRef.current = false;
+          }
+        };
+
+        utt.onerror = (e) => {
+          console.warn(`[LibraryTTSPlayer] Error on line ${i}:`, e);
+          if (i === lines.length - 1) {
+            setPlaying(false);
+            activeRef.current = false;
+          }
+        };
+
+        window.speechSynthesis.speak(utt);
+      }
     };
 
-    setTimeout(() => {
-      const voicesNow = window.speechSynthesis.getVoices();
-      if (voicesNow.length > 0) { speak(startIdx); }
-      else {
-        let started = false;
-        const go = () => { if (started) return; started = true; speak(startIdx); };
-        window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.onvoiceschanged = null; go(); };
-        setTimeout(go, 600);
-      }
-    }, 100);
+    const voicesNow = window.speechSynthesis.getVoices();
+    if (voicesNow.length > 0) {
+      go();
+    } else {
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.onvoiceschanged = null;
+        go();
+      };
+      setTimeout(go, 500);
+    }
   };
 
   const pause = () => { window.speechSynthesis.cancel(); activeRef.current = false; setPlaying(false); };
@@ -508,18 +490,10 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
     window.speechSynthesis.cancel();
     ttsActiveRef.current = true;
     setPlaying(true);
-    let consecutiveErrors = 0;
 
-    const speakLine = (idx: number) => {
-      if (!ttsActiveRef.current || idx >= lines.length) {
-        setPlaying(false);
-        setTtsLineIdx(0);
-        ttsActiveRef.current = false;
-        return;
-      }
-      setTtsLineIdx(idx);
-      const line = lines[idx];
-      const utt = new SpeechSynthesisUtterance(line.text);
+    const go = () => {
+      if (!ttsActiveRef.current) return;
+      const voices = window.speechSynthesis.getVoices();
       const langCode = podcastLang || 'en';
       const langMap: Record<string, string> = {
         en: 'en-US', ta: 'ta-IN', hi: 'hi-IN', te: 'te-IN',
@@ -528,79 +502,57 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
         ja: 'ja-JP', ko: 'ko-KR', ar: 'ar-SA', ru: 'ru-RU',
         pt: 'pt-BR', it: 'it-IT', id: 'id-ID', tr: 'tr-TR', vi: 'vi-VN',
       };
-      utt.lang = langMap[langCode] || 'en-US';
+      const targetLang = langMap[langCode] || 'en-US';
+      const langVoices = voices.filter(v => v.lang.startsWith(targetLang.split('-')[0]));
 
-      // Load voices — may be empty on first call; retry after voiceschanged
-      const assignVoice = () => {
-        const voices = window.speechSynthesis.getVoices();
-        const langVoices = voices.filter(v => v.lang.startsWith(utt.lang.split('-')[0]));
+      for (let i = startIdx; i < lines.length; i++) {
+        const line = lines[i];
+        const utt = new SpeechSynthesisUtterance(line.text);
+        utt.lang = targetLang;
+        
         const isHost1 = line.speaker === host1;
         if (langVoices.length >= 2) utt.voice = langVoices[isHost1 ? 0 : 1];
         else if (langVoices.length === 1) utt.voice = langVoices[0];
+        
         utt.pitch = isHost1 ? 0.9 : 1.15;
         utt.rate = (isHost1 ? 0.95 : 1.0) * speed;
-        utt.onend = () => {
-          consecutiveErrors = 0;
-          speakLine(idx + 1);
-        };
-        utt.onerror = (e) => {
-          console.warn('[AudioPlayer TTS] TTS voice error, retrying with default voice:', e);
-          if (e.error === 'interrupted' || e.error === 'canceled') {
-            return;
-          }
-          if (utt.voice) {
-            const fallback = new SpeechSynthesisUtterance(line.text);
-            fallback.lang = utt.lang;
-            fallback.pitch = utt.pitch;
-            fallback.rate = utt.rate;
-            fallback.onend = () => {
-              consecutiveErrors = 0;
-              speakLine(idx + 1);
-            };
-            fallback.onerror = (fe) => {
-              if (fe.error === 'interrupted' || fe.error === 'canceled') {
-                return;
-              }
-              consecutiveErrors++;
-              if (consecutiveErrors >= 3) {
-                alert("Speech Synthesis (Read Aloud) failed. Please check if your system volume is turned up, an audio output device is connected, and Speech/TTS voices are installed in your OS settings.");
-                pauseTTS();
-              } else {
-                speakLine(idx + 1);
-              }
-            };
-            window.speechSynthesis.speak(fallback);
-          } else {
-            consecutiveErrors++;
-            if (consecutiveErrors >= 3) {
-              alert("Speech Synthesis (Read Aloud) failed. Please check if your system volume is turned up, an audio output device is connected, and Speech/TTS voices are installed in your OS settings.");
-              pauseTTS();
-            } else {
-              speakLine(idx + 1);
-            }
-          }
-        };
-        window.speechSynthesis.speak(utt);
-      };
 
-      const voices = window.speechSynthesis.getVoices();
-      if (voices.length > 0) {
-        assignVoice();
-      } else {
-        window.speechSynthesis.onvoiceschanged = () => {
-          window.speechSynthesis.onvoiceschanged = null;
-          assignVoice();
+        utt.onstart = () => {
+          if (ttsActiveRef.current) {
+            setTtsLineIdx(i);
+          }
         };
-        // Fallback: speak without a specific voice after 500ms
-        setTimeout(() => {
-          if (!window.speechSynthesis.speaking) assignVoice();
-        }, 500);
+
+        utt.onend = () => {
+          if (i === lines.length - 1) {
+            setPlaying(false);
+            setTtsLineIdx(0);
+            ttsActiveRef.current = false;
+          }
+        };
+
+        utt.onerror = (e) => {
+          console.warn(`[AudioPlayer TTS] Error on line ${i}:`, e);
+          if (i === lines.length - 1) {
+            setPlaying(false);
+            ttsActiveRef.current = false;
+          }
+        };
+
+        window.speechSynthesis.speak(utt);
       }
     };
 
-    setTimeout(() => {
-      speakLine(startIdx);
-    }, 100);
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length > 0) {
+      go();
+    } else {
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.onvoiceschanged = null;
+        go();
+      };
+      setTimeout(go, 500);
+    }
   };
 
   const pauseTTS = () => {
@@ -1636,7 +1588,7 @@ ${docContent}
 ${focusInstruction}
 
 Write a ${lengthInstruction} podcast script between two hosts named "${host1Name}" (expert who explains the document) and "${host2Name}" (curious learner).
-Tone: ${podcastTone}. Language: ${podcastLang === 'en' ? 'English' : podcastLang}.
+Tone: ${podcastTone}. Language: ${PODCAST_LANGUAGES.find(l => l.code === podcastLang)?.label || 'English'}.
 Each exchange MUST reference specific details from the SOURCE DOCUMENT. Do NOT discuss anything not in the document.
 
 Return as a JSON array: [{"speaker": "${host1Name}", "text": "..."}, {"speaker": "${host2Name}", "text": "..."}, ...]

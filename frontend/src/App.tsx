@@ -533,6 +533,11 @@ const LIGHT_THEME_CSS = `
     background: #ffffff !important;
     border-color: #d1d5db !important;
     color: #1f2937 !important;
+    caret-color: #ea580c !important;
+  }
+  .flashcard-create-input::selection {
+    background: rgba(234, 88, 12, 0.2) !important;
+    color: #1f2937 !important;
   }
   .flashcard-create-input::placeholder { color: #9ca3af !important; }
   .flashcard-create-box {
@@ -629,6 +634,28 @@ const LIGHT_THEME_CSS = `
   }
   .reward-shower-xp span { color: #6d28d9 !important; }
   .reward-shower-backdrop { background-color: rgba(255,255,255,0.75) !important; }
+
+  /* Fix Android WebView caret selection handle rendering artifacts in light mode modals */
+  .backdrop-blur-md, .backdrop-blur-sm, [class*="backdrop-blur"] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  .bg-black\\/80, .bg-black\\/70, .bg-black\\/50 {
+    background-color: rgba(0, 0, 0, 0.45) !important;
+  }
+
+  /* Global light mode text selection and caret accent alignment */
+  input, textarea, [contenteditable="true"] {
+    caret-color: #ea580c !important;
+  }
+  ::selection {
+    background: rgba(234, 88, 12, 0.25) !important;
+    color: #111827 !important;
+  }
+  input::selection, textarea::selection, [contenteditable="true"]::selection {
+    background: rgba(234, 88, 12, 0.25) !important;
+    color: #111827 !important;
+  }
 
   /* ── Access Terminal (Login page) light mode ── */
   /* Handled via conditional inline styles in JSX — no CSS overrides needed */

@@ -28,6 +28,7 @@ export interface BookResource {
   source: 'google-books' | 'open-library' | 'gutendex';
   /** Whether the full text is freely readable */
   isOpenAccess?: boolean;
+  type?: 'book';
 }
 
 export interface VideoResource {
@@ -39,6 +40,7 @@ export interface VideoResource {
   link: string;
   thumbnail?: string;
   source: 'youtube' | 'khan-academy' | 'mit-ocw';
+  type?: 'video';
 }
 
 export interface PaperResource {
@@ -50,6 +52,7 @@ export interface PaperResource {
   link: string;
   source: 'arxiv' | 'semantic-scholar';
   publishedYear?: string;
+  type?: 'paper';
 }
 
 export interface NewsResource {
@@ -60,6 +63,7 @@ export interface NewsResource {
   source: string;
   publishedAt?: string;
   imageUrl?: string;
+  type?: 'news';
 }
 
 export interface ResourceData {
@@ -991,10 +995,10 @@ export async function fetchDirectResources(
   }
 
   return {
-    books:  mergedBooks,
-    videos: mergedVideos.slice(0, 10),
-    papers: mergedPapers.slice(0, 10),
-    news:   (news.status === 'fulfilled' ? news.value : []).slice(0, 10),
+    books:  mergedBooks.map(item => ({ ...item, type: 'book' as const })),
+    videos: mergedVideos.slice(0, 10).map(item => ({ ...item, type: 'video' as const })),
+    papers: mergedPapers.slice(0, 10).map(item => ({ ...item, type: 'paper' as const })),
+    news:   (news.status === 'fulfilled' ? news.value : []).slice(0, 10).map(item => ({ ...item, type: 'news' as const })),
   };
 }
 
@@ -1011,9 +1015,9 @@ export async function searchAllResources(query: string, userDream = ''): Promise
   ]);
 
   return {
-    books:  books.status  === 'fulfilled' ? books.value  : [],
-    videos: videos.status === 'fulfilled' ? videos.value : [],
-    papers: papers.status === 'fulfilled' ? papers.value : [],
-    news:   news.status   === 'fulfilled' ? news.value   : [],
+    books:  (books.status  === 'fulfilled' ? books.value  : []).map(item => ({ ...item, type: 'book' as const })),
+    videos: (videos.status === 'fulfilled' ? videos.value : []).map(item => ({ ...item, type: 'video' as const })),
+    papers: (papers.status === 'fulfilled' ? papers.value : []).map(item => ({ ...item, type: 'paper' as const })),
+    news:   (news.status   === 'fulfilled' ? news.value   : []).map(item => ({ ...item, type: 'news' as const })),
   };
 }

@@ -95,12 +95,95 @@ LANGUAGE_VOICES: dict[str, dict] = {
         "name": "Marathi",
         "rec_lang": "mr-IN",
     },
+    "es": {
+        "host1": "es-ES-AlvaroNeural",
+        "host2": "es-ES-ElviraNeural",
+        "name": "Spanish",
+        "rec_lang": "es-ES",
+    },
+    "fr": {
+        "host1": "fr-FR-HenriNeural",
+        "host2": "fr-FR-DeniseNeural",
+        "name": "French",
+        "rec_lang": "fr-FR",
+    },
+    "de": {
+        "host1": "de-DE-KillianNeural",
+        "host2": "de-DE-KatjaNeural",
+        "name": "German",
+        "rec_lang": "de-DE",
+    },
+    "zh": {
+        "host1": "zh-CN-YunxiNeural",
+        "host2": "zh-CN-XiaoxiaoNeural",
+        "name": "Chinese",
+        "rec_lang": "zh-CN",
+    },
+    "ar": {
+        "host1": "ar-SA-HamedNeural",
+        "host2": "ar-SA-ZariyahNeural",
+        "name": "Arabic",
+        "rec_lang": "ar-SA",
+    },
+    "ru": {
+        "host1": "ru-RU-DmitryNeural",
+        "host2": "ru-RU-SvetlanaNeural",
+        "name": "Russian",
+        "rec_lang": "ru-RU",
+    },
+    "pt": {
+        "host1": "pt-BR-AntonioNeural",
+        "host2": "pt-BR-FranciscaNeural",
+        "name": "Portuguese",
+        "rec_lang": "pt-BR",
+    },
+    "ja": {
+        "host1": "ja-JP-KeitaNeural",
+        "host2": "ja-JP-NanamiNeural",
+        "name": "Japanese",
+        "rec_lang": "ja-JP",
+    },
+    "ko": {
+        "host1": "ko-KR-InJoonNeural",
+        "host2": "ko-KR-SunHiNeural",
+        "name": "Korean",
+        "rec_lang": "ko-KR",
+    },
+    "it": {
+        "host1": "it-IT-DiegoNeural",
+        "host2": "it-IT-ElsaNeural",
+        "name": "Italian",
+        "rec_lang": "it-IT",
+    },
+    "id": {
+        "host1": "id-ID-ArdiNeural",
+        "host2": "id-ID-GadisNeural",
+        "name": "Indonesian",
+        "rec_lang": "id-ID",
+    },
+    "tr": {
+        "host1": "tr-TR-AhmetNeural",
+        "host2": "tr-TR-EmelNeural",
+        "name": "Turkish",
+        "rec_lang": "tr-TR",
+    },
+    "vi": {
+        "host1": "vi-VN-NamMinhNeural",
+        "host2": "vi-VN-HoaiMyNeural",
+        "name": "Vietnamese",
+        "rec_lang": "vi-VN",
+    },
 }
 
 LANGUAGE_NAMES = {
     "en": "English", "ta": "Tamil", "hi": "Hindi",
     "te": "Telugu", "kn": "Kannada", "ml": "Malayalam",
     "bn": "Bengali", "mr": "Marathi",
+    "es": "Spanish", "fr": "French", "de": "German",
+    "zh": "Chinese", "ar": "Arabic", "ru": "Russian",
+    "pt": "Portuguese", "ja": "Japanese", "ko": "Korean",
+    "it": "Italian", "id": "Indonesian", "tr": "Turkish",
+    "vi": "Vietnamese",
 }
 
 # ─────────────────────────────────────────────────────────

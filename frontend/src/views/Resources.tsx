@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   BookOpen, Youtube, Newspaper, FlaskConical, Search, RefreshCw,
   ExternalLink, Loader2, ChevronLeft, ChevronRight, AlertCircle,
-  X, Library, GraduationCap, Atom, Rss, Bookmark, Plus, ListVideo, FolderPlus, Check, Trash2, Volume2
+  X, Library, GraduationCap, Atom, Rss, Bookmark, Plus, ListVideo, FolderPlus, Check, Trash2, Volume2, Folder, FolderOpen
 } from 'lucide-react';
 import { UserProfile, CareerRoadmap } from '../types';
 import {
@@ -567,7 +567,12 @@ function getLocalResourcesPlaceholder(dream: string, stageTitle: string): any {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return { books, videos, papers, news } as any;
+  return {
+    books: books.map(b => ({ ...b, type: 'book' })),
+    videos: videos.map(v => ({ ...v, type: 'video' })),
+    papers: papers.map(p => ({ ...p, type: 'paper' })),
+    news: news.map(n => ({ ...n, type: 'news' }))
+  } as any;
 }
 
 // ─── Main Component ─────────────────────────────────────────────────────────────
@@ -583,6 +588,11 @@ export default function Resources({ user }: { user: UserProfile }) {
   const isLight = user.settings?.theme === 'light';
   const [isOfflineAndNoCache, setIsOfflineAndNoCache] = useState(false);
   const navigate = useNavigate();
+  const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setActivePlaylistId(null);
+  }, [activeTab]);
 
   // Keep a stable ref to the latest user to avoid stale closures in callbacks
   const userRef = useRef(user);
@@ -1108,9 +1118,13 @@ export default function Resources({ user }: { user: UserProfile }) {
                 items={roadmap?.watchLater || []}
                 renderCard={(item, i) => {
                   let CardType: any = BookCard;
-                  if (item.source && (item.source === 'youtube' || item.link?.includes('youtube') || item.channel)) CardType = VideoCard;
-                  else if (item.authors && item.publishedYear) CardType = PaperCard;
-                  else if (item.imageUrl || item.link?.includes('news')) CardType = NewsCard;
+                  const isVideo = item.type === 'video' || (item.source && ['youtube', 'khan-academy', 'mit-ocw'].includes(item.source)) || item.channel || item.link?.includes('youtube');
+                  const isPaper = item.type === 'paper' || (item.source && ['arxiv', 'semantic-scholar'].includes(item.source)) || (item.authors && item.publishedYear);
+                  const isNews = item.type === 'news' || (item.source && !['google-books', 'open-library', 'gutendex', 'youtube', 'khan-academy', 'mit-ocw', 'arxiv', 'semantic-scholar'].includes(item.source)) || item.imageUrl || item.link?.includes('news');
+                  
+                  if (isVideo) CardType = VideoCard;
+                  else if (isPaper) CardType = PaperCard;
+                  else if (isNews) CardType = NewsCard;
                   return (
                           <div key={i} className="relative group">
                             <CardType item={item} />
@@ -1131,84 +1145,204 @@ export default function Resources({ user }: { user: UserProfile }) {
 
           {activeTab === 'playlists' && (
             <div className="space-y-8">
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 rounded-xl playlist-header-bg" style={{ background: 'rgba(6,3,18,0.4)', border: '1px solid rgba(168,85,247,0.2)' }}>
-                <div>
-                  <h3 className="text-sm font-semibold text-purple-300">Your Playlists</h3>
-                  <p className="text-xs text-gold-500/50 mt-1">Organize resources into custom collections</p>
-                </div>
-                <div className="flex gap-2 w-full sm:w-auto">
-                  <input 
-                    type="text" 
-                    placeholder="New playlist name..." 
-                    id="newPlaylistNameInput"
-                    className="flex-1 min-w-0 sm:w-48 bg-black/20 text-sm text-gold-200 px-3 py-2 rounded-lg border border-white/10 outline-none focus:border-purple-400/50 transition-colors"
-                  />
-                  <button 
-                    onClick={(e) => {
-                      e.preventDefault();
-                      const inp = document.getElementById('newPlaylistNameInput') as HTMLInputElement;
-                      if (!inp || !inp.value.trim()) return;
-                      const rm = { ...roadmap! };
-                      if (!rm.playlists) rm.playlists = [];
-                      rm.playlists.push({ id: Date.now().toString(), name: inp.value.trim(), items: [] });
-                      updateRoadmap(rm);
-                      inp.value = '';
-                    }}
-                    className="btn-primary flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-purple-600 hover:bg-purple-500 flex-shrink-0"
-                    style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #9333ea 100%)', boxShadow: '0 4px 14px rgba(124,58,237,0.40)' }}
-                  >
-                    <Plus size={16} /> Create
-                  </button>
-                </div>
-              </div>
+              {!activePlaylistId ? (
+                <>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 rounded-xl playlist-header-bg" style={{ background: isLight ? 'rgba(255,255,255,0.45)' : 'rgba(6,3,18,0.4)', border: isLight ? '1px solid rgba(168,85,247,0.3)' : '1px solid rgba(168,85,247,0.2)' }}>
+                    <div>
+                      <h3 className={`text-sm font-semibold ${isLight ? 'text-purple-700' : 'text-purple-300'}`}>Your Playlists</h3>
+                      <p className={`text-xs mt-1 ${isLight ? 'text-slate-500' : 'text-gold-500/50'}`}>Organize resources into custom collections</p>
+                    </div>
+                    <div className="flex gap-2 w-full sm:w-auto">
+                      <input 
+                        type="text" 
+                        placeholder="New playlist name..." 
+                        id="newPlaylistNameInput"
+                        className={`flex-1 min-w-0 sm:w-48 text-sm px-3 py-2 rounded-lg border outline-none transition-colors ${isLight ? 'bg-white text-slate-800 border-slate-350 focus:border-purple-500' : 'bg-black/20 text-gold-200 border-white/10 focus:border-purple-400/50'}`}
+                      />
+                      <button 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          const inp = document.getElementById('newPlaylistNameInput') as HTMLInputElement;
+                          if (!inp || !inp.value.trim()) return;
+                          const rm = { ...roadmap! };
+                          if (!rm.playlists) rm.playlists = [];
+                          rm.playlists.push({ id: Date.now().toString(), name: inp.value.trim(), items: [] });
+                          updateRoadmap(rm);
+                          inp.value = '';
+                        }}
+                        className="btn-primary flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-purple-600 hover:bg-purple-500 flex-shrink-0"
+                        style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #9333ea 100%)', boxShadow: '0 4px 14px rgba(124,58,237,0.40)', color: '#fff' }}
+                      >
+                        <Plus size={16} /> Create
+                      </button>
+                    </div>
+                  </div>
 
-              {(!roadmap?.playlists || roadmap.playlists.length === 0) ? (
-                <div className="flex flex-col items-center justify-center py-10 rounded-2xl border border-white/5 bg-white/5 gap-3 playlist-empty-bg">
-                  <ListVideo size={32} className="text-gold-500/30" />
-                  <p className="text-sm text-gold-500/50">No playlists yet. Add resources to playlists first.</p>
-                </div>
-              ) : (
-                roadmap.playlists.map(pl => (
-                  <div key={pl.id} className="space-y-4 relative">
-                    <ScrollRow
-                      title={pl.name} icon={FolderPlus} iconColor="text-purple-400"
-                      items={pl.items}
-                      renderCard={(item, i) => {
-                        let CardType: any = BookCard;
-                        if (item.source && (item.source === 'youtube' || item.link?.includes('youtube') || item.channel)) CardType = VideoCard;
-                        else if (item.authors && item.publishedYear) CardType = PaperCard;
-                        else if (item.imageUrl || item.link?.includes('news')) CardType = NewsCard;
+                  {(!roadmap?.playlists || roadmap.playlists.length === 0) ? (
+                    <div className={`flex flex-col items-center justify-center py-10 rounded-2xl border gap-3 ${isLight ? 'border-slate-200 bg-black/5' : 'border-white/5 bg-white/5'}`}>
+                      <ListVideo size={32} className={isLight ? 'text-slate-400' : 'text-gold-500/30'} />
+                      <p className={`text-sm ${isLight ? 'text-slate-500' : 'text-gold-500/50'}`}>No playlists yet. Add resources to playlists first.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                      {roadmap.playlists.map(pl => {
+                        const firstItem = pl.items[0];
+                        const thumbnail = firstItem?.thumbnail || firstItem?.imageUrl;
+                        const plBg = isLight ? 'rgba(255, 255, 255, 0.55)' : 'rgba(30, 20, 45, 0.4)';
+                        const plBorder = isLight ? 'rgba(124, 58, 237, 0.2)' : 'rgba(255, 255, 255, 0.08)';
+                        const plCoverBg = isLight ? 'linear-gradient(135deg, rgba(124, 58, 237, 0.1) 0%, rgba(147, 51, 234, 0.05) 100%)' : 'linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(0, 0, 0, 0.4) 100%)';
                         
                         return (
-                          <div key={i} className="relative group">
-                            <CardType item={item} />
-                            <div className="absolute top-2 left-2 z-10 pointer-events-none">
-                              <span className="px-2 py-1 text-[9px] font-bold uppercase tracking-wider rounded-md bg-black/60 text-white backdrop-blur border border-white/10 shadow-lg" style={{ color: CardType === BookCard ? '#f59e0b' : CardType === VideoCard ? '#ef4444' : CardType === PaperCard ? '#f97316' : '#10b981' }}>
-                                {CardType === BookCard ? 'Book' : CardType === VideoCard ? 'Video' : CardType === PaperCard ? 'Paper' : 'News'}
-                              </span>
+                          <div 
+                            key={pl.id} 
+                            onClick={() => setActivePlaylistId(pl.id)}
+                            className={`group relative cursor-pointer rounded-xl overflow-hidden border hover:border-purple-500/50 transition-all hover:scale-[1.03] duration-300 flex flex-col h-[180px]`}
+                            style={{ background: plBg, borderColor: plBorder, backdropFilter: 'blur(10px)' }}
+                          >
+                            {/* YouTube style playlist stacked cover */}
+                            <div className="relative h-[110px] w-full flex items-center justify-center overflow-hidden border-b border-black/10" style={{ background: plCoverBg }}>
+                              {thumbnail ? (
+                                <img src={thumbnail} alt={pl.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                              ) : (
+                                <Folder size={36} className="text-purple-500/60 group-hover:text-purple-400 transition-colors" />
+                              )}
+                              
+                              {/* Overlay showing count / list icon */}
+                              <div className="absolute inset-y-0 right-0 w-1/3 flex flex-col items-center justify-center border-l border-white/10" style={{ background: isLight ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.85)', backdropFilter: 'blur(4px)' }}>
+                                <ListVideo size={18} className="text-purple-500 mb-1" />
+                                <span className={`text-xs font-bold ${isLight ? 'text-purple-600' : 'text-white'}`}>{pl.items.length}</span>
+                                <span className={`text-[9px] uppercase tracking-wider mt-0.5 ${isLight ? 'text-purple-500/70' : 'text-white/60'}`}>items</span>
+                              </div>
                             </div>
-                            <div className="absolute top-2 right-2 flex gap-1 z-10">
-                              <button 
+
+                            {/* Playlist Name and Info */}
+                            <div className="p-3 flex-1 flex flex-col justify-between min-w-0">
+                              <div className="flex items-start justify-between gap-1.5 min-w-0">
+                                <h4 className={`text-xs font-semibold line-clamp-2 group-hover:text-purple-500 transition-colors leading-tight min-w-0 ${isLight ? 'text-slate-800' : 'text-gold-200'}`}>
+                                  {pl.name}
+                                </h4>
+                                <button
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (confirm(`Are you sure you want to delete the playlist "${pl.name}"?`)) {
+                                      const rm = { ...roadmap! };
+                                      rm.playlists = rm.playlists!.filter(p => p.id !== pl.id);
+                                      updateRoadmap(rm);
+                                    }
+                                  }}
+                                  className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg bg-black/40 hover:bg-black/60 text-red-400 border border-white/5 hover:border-red-500/20 transition-all shadow-md shrink-0"
+                                  title="Delete Playlist"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                              <p className={`text-[10px] ${isLight ? 'text-slate-400' : 'text-gold-500/40'}`}>Playlist</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              ) : (() => {
+                const pl = roadmap?.playlists?.find(p => p.id === activePlaylistId);
+                if (!pl) {
+                  setActivePlaylistId(null);
+                  return null;
+                }
+                return (
+                  <div className="space-y-6">
+                    {/* Header with back button */}
+                    <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                      <div className="flex items-center gap-3">
+                        <button 
+                          onClick={() => setActivePlaylistId(null)}
+                          className={`flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all ${isLight ? 'bg-black/5 hover:bg-black/10 text-slate-800 border-slate-200' : 'bg-white/5 hover:bg-white/10 text-gold-200 border-white/10'}`}
+                        >
+                          <ChevronLeft size={14} /> Back
+                        </button>
+                        <div>
+                          <h3 className={`text-base font-bold flex items-center gap-2 ${isLight ? 'text-slate-800' : 'text-purple-300'}`}>
+                            <FolderOpen size={18} className="text-purple-400" />
+                            {pl.name}
+                          </h3>
+                          <p className={`text-xs mt-0.5 ${isLight ? 'text-slate-500' : 'text-gold-500/50'}`}>{pl.items.length} resources inside</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (confirm(`Are you sure you want to delete the playlist "${pl.name}"?`)) {
+                            const rm = { ...roadmap! };
+                            rm.playlists = rm.playlists!.filter(p => p.id !== pl.id);
+                            updateRoadmap(rm);
+                            setActivePlaylistId(null);
+                          }
+                        }}
+                        className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-red-400 transition-all"
+                      >
+                        <Trash2 size={13} /> Delete Playlist
+                      </button>
+                    </div>
+
+                    {pl.items.length === 0 ? (
+                      <div className={`flex flex-col items-center justify-center py-14 rounded-2xl border border-dashed gap-3 ${isLight ? 'border-slate-300 bg-black/5' : 'border-white/10 bg-white/5'}`}>
+                        <FolderPlus size={32} className={isLight ? 'text-slate-400' : 'text-gold-500/20'} />
+                        <p className={`text-sm ${isLight ? 'text-slate-500' : 'text-gold-500/40'}`}>This playlist is empty.</p>
+                        <button 
+                          onClick={() => setActivePlaylistId(null)}
+                          className="text-xs text-purple-400 hover:underline"
+                        >
+                          Browse resources to add
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                        {pl.items.map((item, i) => {
+                          let CardType: any = BookCard;
+                          const isVideo = item.type === 'video' || (item.source && ['youtube', 'khan-academy', 'mit-ocw'].includes(item.source)) || item.channel || item.link?.includes('youtube');
+                          const isPaper = item.type === 'paper' || (item.source && ['arxiv', 'semantic-scholar'].includes(item.source)) || (item.authors && item.publishedYear);
+                          const isNews = item.type === 'news' || (item.source && !['google-books', 'open-library', 'gutendex', 'youtube', 'khan-academy', 'mit-ocw', 'arxiv', 'semantic-scholar'].includes(item.source)) || item.imageUrl || item.link?.includes('news');
+                          
+                          if (isVideo) CardType = VideoCard;
+                          else if (isPaper) CardType = PaperCard;
+                          else if (isNews) CardType = NewsCard;
+
+                          return (
+                            <div key={i} className="relative group">
+                              <CardType item={item} />
+                              <div className="absolute top-2 left-2 z-10 pointer-events-none">
+                                <span className="px-2 py-1 text-[9px] font-bold uppercase tracking-wider rounded-md bg-black/60 text-white backdrop-blur border border-white/10 shadow-lg" style={{ color: CardType === BookCard ? '#f59e0b' : CardType === VideoCard ? '#ef4444' : CardType === PaperCard ? '#f97316' : '#10b981' }}>
+                                  {CardType === BookCard ? 'Book' : CardType === VideoCard ? 'Video' : CardType === PaperCard ? 'Paper' : 'News'}
+                                </span>
+                              </div>
+                              <div className="absolute top-2 right-2 flex gap-1 z-10">
+                                <button 
                                   onClick={(e) => { 
                                     e.preventDefault(); 
                                     const rm = {...roadmap!}; 
                                     const targetPl = rm.playlists!.find(p => p.id === pl.id);
-                                    if (targetPl) { targetPl.items = targetPl.items.filter(x => x.link !== item.link); updateRoadmap(rm); }
+                                    if (targetPl) { 
+                                      targetPl.items = targetPl.items.filter(x => x.link !== item.link); 
+                                      updateRoadmap(rm); 
+                                    }
                                   }}
                                   className="w-8 h-8 rounded-full flex items-center justify-center bg-black/60 hover:bg-black/80 text-white border border-white/20 shadow-lg backdrop-blur"
-                              >
+                                  title="Remove from Playlist"
+                                >
                                   <Trash2 size={12} className="text-red-400" />
-                              </button>
-                              <ResourceActions item={item} roadmap={roadmap!} onUpdate={updateRoadmap} inStack={true} />
+                                </button>
+                                <ResourceActions item={item} roadmap={roadmap!} onUpdate={updateRoadmap} inStack={true} />
+                              </div>
                             </div>
-                          </div>
-                        );
-                      }}
-                      emptyMsg="No items in this playlist"
-                    />
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                ))
-              )}
+                );
+              })()}
             </div>
           )}
 

@@ -124,6 +124,7 @@ export default function CareerPivot({ user, setUser }: Props) {
     setLoading(true);
     setResult(null);
     setError("");
+    let data: any = null;
 
     // Helper to repair and parse JSON
     const tryParseJson = (text: string): any => {

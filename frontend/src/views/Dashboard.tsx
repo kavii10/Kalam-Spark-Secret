@@ -176,7 +176,7 @@ export default function Dashboard({ user }: { user: UserProfile }) {
         </div>
       </div>
       <p className="text-3xl font-bold text-gold-100">{value}</p>
-      {sub && <p className="text-[11px] text-gold-500/40">{sub}</p>}
+      {sub && <p className={`text-[11px] ${isLight ? 'text-gold-600/60' : 'text-gold-200/50'}`}>{sub}</p>}
       {barPercent !== undefined && (
         <div className="progress-track h-1.5 mt-1">
           <div className={`h-full ${barClass}`} style={{ width: `${barPercent}%` }} />
@@ -198,7 +198,7 @@ export default function Dashboard({ user }: { user: UserProfile }) {
               <Crown size={22} className="text-gold-300 relative z-10 animate-pulse" strokeWidth={2.5} />
             </div>
           </h1>
-          <p className="text-gold-300/50 text-sm mt-2">
+          <p className={`text-sm mt-2 ${isLight ? 'text-gold-700/70' : 'text-gold-200/60'}`}>
             {t('dash_working_towards', lang)}{' '}
             <span className="text-purple-400 font-semibold">{user.dream || 'your dream'}</span>
           </p>
@@ -255,7 +255,7 @@ export default function Dashboard({ user }: { user: UserProfile }) {
               </div>
               <p className="text-3xl font-bold text-gold-100">{rewards.length}</p>
               {rewards.length === 0 ? (
-                <p className="text-[10px] text-gold-500/30 leading-tight">Complete tasks & stages to earn badges</p>
+                 <p className={`text-[10px] leading-tight ${isLight ? 'text-gold-600/50' : 'text-gold-200/45'}`}>Complete tasks & stages to earn badges</p>
               ) : (
                 <div className="flex gap-1 flex-wrap mt-1">
                   {rewards.slice(0, 5).map(r => (
@@ -308,7 +308,7 @@ export default function Dashboard({ user }: { user: UserProfile }) {
             <div className="progress-track h-2.5 mb-3">
               <div className="progress-bar-purple h-full" style={{ width: `${progress}%` }} />
             </div>
-            <p className="text-xs text-gold-500/40">{progress}% {t('complete', lang)} — Stage {user.currentStageIndex + 1} {t('of', lang)} your journey</p>
+             <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-gold-200/60'}`}>{progress}% {t('complete', lang)} — Stage {user.currentStageIndex + 1} {t('of', lang)} your journey</p>
           </div>
         </>
       ) : (
@@ -356,7 +356,7 @@ export default function Dashboard({ user }: { user: UserProfile }) {
 
             <div className={`w-full p-4 rounded-xl text-xs space-y-2 text-left leading-relaxed ${isLight ? 'bg-orange-50 border border-orange-100' : 'bg-white/5 border border-gold-500/10'}`}>
               <p className={isLight ? 'text-orange-950/80' : 'text-gold-200/70'}><span className="font-bold text-orange-400">🔥 Level Milestone:</span> You are <span className="font-bold">{xpNeededForNext} XP</span> away from Level {level + 1}.</p>
-              <p className={isLight ? 'text-orange-900/60' : 'text-gold-500/40'}><span className="font-bold">🎯 Tip:</span> Complete approximately <span className={isLight ? 'text-orange-600 font-bold' : 'text-orange-400 font-bold'}>{tasksNeededForNext} tasks</span> (+25 XP each) to level up your expertise!</p>
+               <p className={isLight ? 'text-orange-900/60' : 'text-gold-200/60'}><span className="font-bold">🎯 Tip:</span> Complete approximately <span className={isLight ? 'text-orange-600 font-bold' : 'text-orange-400 font-bold'}>{tasksNeededForNext} tasks</span> (+25 XP each) to level up your expertise!</p>
             </div>
           </div>
 
@@ -377,7 +377,7 @@ export default function Dashboard({ user }: { user: UserProfile }) {
             {taskStats.total === 0 ? (
               <div className="py-14 text-center rounded-xl border border-dashed border-white/10 flex flex-col items-center gap-2">
                 <CheckCircle2 size={32} className="text-gold-500/30" />
-                <p className="text-xs text-gold-500/50">No tasks generated today</p>
+                 <p className={`text-xs ${isLight ? 'text-slate-400' : 'text-gold-200/60'}`}>No tasks generated today</p>
                 <Link to="/planner" className="btn-primary py-2 px-5 text-xs font-bold mt-2">Go to Task Planner</Link>
               </div>
             ) : (
@@ -385,13 +385,13 @@ export default function Dashboard({ user }: { user: UserProfile }) {
                 {/* Circular Efficiency Indicator */}
                 <div className="flex flex-col items-center justify-center p-4 border border-white/5 rounded-2xl bg-black/10">
                   <div className="text-4xl font-extrabold text-emerald-400 font-cinzel">{taskStats.completed} <span className="text-lg text-gold-400/50">/ {taskStats.total}</span></div>
-                  <p className={`text-[10px] uppercase font-bold tracking-wider mt-2 ${isLight ? 'text-zinc-500' : 'text-gold-500/50'}`}>Tasks Complete</p>
+                   <p className={`text-[10px] uppercase font-bold tracking-wider mt-2 ${isLight ? 'text-zinc-500' : 'text-gold-200/60'}`}>Tasks Complete</p>
                   
                   {/* Small progress meter */}
                   <div className="w-full progress-track h-2 mt-4">
                     <div className="progress-bar-gold h-full" style={{ width: `${(taskStats.completed / taskStats.total) * 100}%` }} />
                   </div>
-                  <p className={`text-[10px] mt-2 italic text-center ${isLight ? 'text-zinc-400' : 'text-gold-500/30'}`}>Archive completed tasks at midnight to generate new ones.</p>
+                   <p className={`text-[10px] mt-2 italic text-center ${isLight ? 'text-zinc-500' : 'text-gold-200/60'}`}>Archive completed tasks at midnight to generate new ones.</p>
                 </div>
 
                 {/* Task Categories Progress */}
@@ -431,9 +431,9 @@ export default function Dashboard({ user }: { user: UserProfile }) {
             <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
               <div>
                 <p className={`text-3xl font-black ${isLight ? 'text-orange-600' : 'text-orange-400'} font-cinzel`}>{user.streak || 0} Day Streak</p>
-                <p className={`text-xs mt-1 max-w-sm leading-relaxed ${isLight ? 'text-zinc-500' : 'text-gold-500/50'}`}>
-                  Streak tracks the consecutive days you logged XP in Kalam Spark. Keep completing daily planner tasks to protect your streak milestones!
-                </p>
+                 <p className={`text-xs mt-1 max-w-sm leading-relaxed ${isLight ? 'text-zinc-500' : 'text-gold-200/60'}`}>
+                   Streak tracks the consecutive days you logged XP in Kalam Spark. Keep completing daily planner tasks to protect your streak milestones!
+                 </p>
               </div>
 
               {/* 7 Day calendar nodes */}
@@ -446,10 +446,16 @@ export default function Dashboard({ user }: { user: UserProfile }) {
                         ? 'bg-orange-500/10 border-orange-500/60 shadow-[0_0_10px_rgba(249,115,22,0.15)]' 
                         : day.isToday 
                           ? isLight ? 'bg-zinc-200 border-zinc-400' : 'bg-white/10 border-white/30'
-                          : isLight ? 'bg-zinc-100 border-zinc-200 opacity-60' : 'bg-black/30 border-white/5 opacity-40'
+                          : isLight ? 'bg-zinc-100 border-zinc-200' : 'bg-white/5 border-white/5'
                     }`}
                   >
-                    <span className={`text-[9px] uppercase tracking-wider font-semibold ${day.isActive ? 'text-orange-400' : isLight ? 'text-zinc-500' : 'text-gold-500/50'}`}>
+                    <span className={`text-[9px] uppercase tracking-wider font-semibold ${
+                      day.isActive 
+                        ? 'text-orange-400' 
+                        : day.isToday 
+                          ? isLight ? 'text-zinc-700 font-bold' : 'text-gold-200 font-bold'
+                          : isLight ? 'text-zinc-400' : 'text-gold-200/50'
+                    }`}>
                       {day.day}
                     </span>
                     <div className="mt-1">
@@ -486,11 +492,11 @@ export default function Dashboard({ user }: { user: UserProfile }) {
               ].map((metric, i) => (
                 <div key={i} className={`p-4 rounded-xl border ${isLight ? 'bg-zinc-50 border-zinc-200' : 'bg-white/5 border-white/5'}`}>
                   <div className="flex items-center justify-between mb-2">
-                    <span className={`text-[10px] uppercase font-bold tracking-wider ${isLight ? 'text-zinc-500' : 'text-gold-500/50'}`}>{metric.label}</span>
+                     <span className={`text-[10px] uppercase font-bold tracking-wider ${isLight ? 'text-zinc-500' : 'text-gold-200/60'}`}>{metric.label}</span>
                     {metric.icon}
                   </div>
                   <p className="text-2xl font-bold text-gold-100 font-cinzel">{metric.val}</p>
-                  <p className={`text-[10px] mt-0.5 ${isLight ? 'text-zinc-400' : 'text-gold-500/30'}`}>{metric.sub}</p>
+                   <p className={`text-[10px] mt-0.5 ${isLight ? 'text-zinc-400' : 'text-gold-200/50'}`}>{metric.sub}</p>
                 </div>
               ))}
             </div>
