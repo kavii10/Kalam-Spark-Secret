@@ -492,72 +492,84 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
         return;
       }
       window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text.replace(/[*_#`]/g, ''));
-      const currentLang = getCurrentLang() || 'en';
-      const langMap: Record<string, string> = { 'en': 'en-US', 'ta': 'ta-IN', 'hi': 'hi-IN' };
-      
-      let lang = langMap[currentLang] || 'en-US';
-      // Auto-detect text language based on unicode ranges if the text contains native scripts
-      if (/[\u0B80-\u0BFF]/.test(text)) lang = 'ta-IN'; // Tamil
-      else if (/[\u0900-\u097F]/.test(text)) lang = 'hi-IN'; // Hindi/Marathi
-      else if (/[\u0C00-\u0C7F]/.test(text)) lang = 'te-IN'; // Telugu
-      else if (/[\u0C80-\u0CFF]/.test(text)) lang = 'kn-IN'; // Kannada
-      else if (/[\u0D00-\u0D7F]/.test(text)) lang = 'ml-IN'; // Malayalam
-      else if (/[\u0980-\u09FF]/.test(text)) lang = 'bn-IN'; // Bengali
-      
-      utterance.lang = lang;
 
-      const doSpeak = () => {
-        // Explicitly attach the voice object (browsers often ignore the 'lang' string)
-        const voices = window.speechSynthesis.getVoices();
-        if (voices.length > 0) {
-          // Try exact match first (e.g. 'ta-IN'), then broad match (e.g. 'ta')
-          const voice = voices.find(v => v.lang === lang) || voices.find(v => v.lang.startsWith(lang.split('-')[0]));
-          if (voice) utterance.voice = voice;
-        }
-        utterance.onend = () => setSpeakingIdx(null);
-        utterance.onerror = (e) => {
-          console.warn('[MentorChat TTS] TTS voice error, retrying with default voice:', e);
-          if (utterance.voice) {
-            const fallback = new SpeechSynthesisUtterance(text.replace(/[*_#`]/g, ''));
-            fallback.lang = utterance.lang;
-            fallback.onend = () => setSpeakingIdx(null);
-            fallback.onerror = () => {
+      // Add a small delay after cancel to allow the speech engine to reset
+      setTimeout(() => {
+        const utterance = new SpeechSynthesisUtterance(text.replace(/[*_#`]/g, ''));
+        const currentLang = getCurrentLang() || 'en';
+        const langMap: Record<string, string> = { 'en': 'en-US', 'ta': 'ta-IN', 'hi': 'hi-IN' };
+        
+        let lang = langMap[currentLang] || 'en-US';
+        // Auto-detect text language based on unicode ranges if the text contains native scripts
+        if (/[\u0B80-\u0BFF]/.test(text)) lang = 'ta-IN'; // Tamil
+        else if (/[\u0900-\u097F]/.test(text)) lang = 'hi-IN'; // Hindi/Marathi
+        else if (/[\u0C00-\u0C7F]/.test(text)) lang = 'te-IN'; // Telugu
+        else if (/[\u0C80-\u0CFF]/.test(text)) lang = 'kn-IN'; // Kannada
+        else if (/[\u0D00-\u0D7F]/.test(text)) lang = 'ml-IN'; // Malayalam
+        else if (/[\u0980-\u09FF]/.test(text)) lang = 'bn-IN'; // Bengali
+        
+        utterance.lang = lang;
+
+        const doSpeak = () => {
+          // Explicitly attach the voice object (browsers often ignore the 'lang' string)
+          const voices = window.speechSynthesis.getVoices();
+          if (voices.length > 0) {
+            // Try exact match first (e.g. 'ta-IN'), then broad match (e.g. 'ta')
+            const voice = voices.find(v => v.lang === lang) || voices.find(v => v.lang.startsWith(lang.split('-')[0]));
+            if (voice) utterance.voice = voice;
+          }
+          utterance.onend = () => setSpeakingIdx(null);
+          utterance.onerror = (e) => {
+            console.warn('[MentorChat TTS] TTS voice error, retrying with default voice:', e);
+            if (e.error === 'interrupted' || e.error === 'canceled') {
+              setSpeakingIdx(null);
+              return;
+            }
+            if (utterance.voice) {
+              const fallback = new SpeechSynthesisUtterance(text.replace(/[*_#`]/g, ''));
+              fallback.lang = utterance.lang;
+              fallback.onend = () => setSpeakingIdx(null);
+              fallback.onerror = (fe) => {
+                if (fe.error === 'interrupted' || fe.error === 'canceled') {
+                  setSpeakingIdx(null);
+                  return;
+                }
+                setSpeakingIdx(null);
+                alert("Speech Synthesis (Read Aloud) failed. Please check if your system volume is turned up, an audio output device is connected, and Speech/TTS voices are installed in your OS settings.");
+              };
+              window.speechSynthesis.speak(fallback);
+            } else {
               setSpeakingIdx(null);
               alert("Speech Synthesis (Read Aloud) failed. Please check if your system volume is turned up, an audio output device is connected, and Speech/TTS voices are installed in your OS settings.");
-            };
-            window.speechSynthesis.speak(fallback);
-          } else {
-            setSpeakingIdx(null);
-            alert("Speech Synthesis (Read Aloud) failed. Please check if your system volume is turned up, an audio output device is connected, and Speech/TTS voices are installed in your OS settings.");
-          }
+            }
+          };
+          window.speechSynthesis.speak(utterance);
+          setSpeakingIdx(idx);
         };
-        window.speechSynthesis.speak(utterance);
-        setSpeakingIdx(idx);
-      };
 
-      // On Android WebView, voices may not be loaded yet — use onvoiceschanged or timeout fallback
-      const voices = window.speechSynthesis.getVoices();
-      if (voices.length > 0) {
-        doSpeak();
-      } else {
-        // Track whether we've already spoken to avoid double-call (race between
-        // onvoiceschanged and setTimeout both triggering doSpeak)
-        let alreadySpoken = false;
-        const safeSpeak = () => {
-          if (alreadySpoken) return;
-          alreadySpoken = true;
+        // On Android WebView, voices may not be loaded yet — use onvoiceschanged or timeout fallback
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length > 0) {
           doSpeak();
-        };
-        window.speechSynthesis.onvoiceschanged = () => {
-          window.speechSynthesis.onvoiceschanged = null;
-          safeSpeak();
-        };
-        // Fallback: speak without a specific voice after 600ms
-        setTimeout(() => {
-          if (!window.speechSynthesis.speaking) safeSpeak();
-        }, 600);
-      }
+        } else {
+          // Track whether we've already spoken to avoid double-call (race between
+          // onvoiceschanged and setTimeout both triggering doSpeak)
+          let alreadySpoken = false;
+          const safeSpeak = () => {
+            if (alreadySpoken) return;
+            alreadySpoken = true;
+            doSpeak();
+          };
+          window.speechSynthesis.onvoiceschanged = () => {
+            window.speechSynthesis.onvoiceschanged = null;
+            safeSpeak();
+          };
+          // Fallback: speak without a specific voice after 600ms
+          setTimeout(() => {
+            if (!window.speechSynthesis.speaking) safeSpeak();
+          }, 600);
+        }
+      }, 100);
     }
   };
 

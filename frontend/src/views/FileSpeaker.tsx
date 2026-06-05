@@ -21,7 +21,7 @@ const getBackendUrl = () => {
   if (envUrl) return envUrl.replace(/\/$/, '');
   return "http://localhost:8000";
 };
-const BACKEND = IS_NATIVE_MOBILE ? '' : getBackendUrl();
+const BACKEND = getBackendUrl();
 
 /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Types Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 interface Source {
@@ -304,6 +304,9 @@ function LibraryTTSPlayer({ lines, podcastLang, host1, host2, durationEst, user 
       };
       utt.onerror = (e) => {
         console.warn('[LibraryTTSPlayer] TTS voice error, retrying with default voice:', e);
+        if (e.error === 'interrupted' || e.error === 'canceled') {
+          return;
+        }
         if (utt.voice) {
           const fallback = new SpeechSynthesisUtterance(lines[idx].text);
           fallback.lang = utt.lang;
@@ -313,7 +316,10 @@ function LibraryTTSPlayer({ lines, podcastLang, host1, host2, durationEst, user 
             consecutiveErrors = 0;
             speak(idx + 1);
           };
-          fallback.onerror = () => {
+          fallback.onerror = (fe) => {
+            if (fe.error === 'interrupted' || fe.error === 'canceled') {
+              return;
+            }
             consecutiveErrors++;
             if (consecutiveErrors >= 3) {
               alert("Speech Synthesis (Read Aloud) failed. Please check if your system volume is turned up, an audio output device is connected, and Speech/TTS voices are installed in your OS settings.");
@@ -335,14 +341,17 @@ function LibraryTTSPlayer({ lines, podcastLang, host1, host2, durationEst, user 
       };
       window.speechSynthesis.speak(utt);
     };
-    const voicesNow = window.speechSynthesis.getVoices();
-    if (voicesNow.length > 0) { speak(startIdx); }
-    else {
-      let started = false;
-      const go = () => { if (started) return; started = true; speak(startIdx); };
-      window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.onvoiceschanged = null; go(); };
-      setTimeout(go, 600);
-    }
+
+    setTimeout(() => {
+      const voicesNow = window.speechSynthesis.getVoices();
+      if (voicesNow.length > 0) { speak(startIdx); }
+      else {
+        let started = false;
+        const go = () => { if (started) return; started = true; speak(startIdx); };
+        window.speechSynthesis.onvoiceschanged = () => { window.speechSynthesis.onvoiceschanged = null; go(); };
+        setTimeout(go, 600);
+      }
+    }, 100);
   };
 
   const pause = () => { window.speechSynthesis.cancel(); activeRef.current = false; setPlaying(false); };
@@ -383,7 +392,7 @@ function LibraryTTSPlayer({ lines, podcastLang, host1, host2, durationEst, user 
   );
 }
 
-function LibraryAudioPlayer({ audioFilename }: { audioFilename: string }) {
+function LibraryAudioPlayer({ audioFilename, onLoadError }: { audioFilename: string; onLoadError?: () => void }) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -398,6 +407,7 @@ function LibraryAudioPlayer({ audioFilename }: { audioFilename: string }) {
       setBlobUrl(URL.createObjectURL(blob));
     } catch (e) {
       console.error("Failed to load audio inline", e);
+      if (onLoadError) onLoadError();
     } finally {
       setLoading(false);
     }
@@ -430,7 +440,7 @@ function LibraryAudioPlayer({ audioFilename }: { audioFilename: string }) {
   );
 }
 
-function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, audioRef, user, lines, podcastLang }: { 
+function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, audioRef, user, lines, podcastLang, isLocal }: { 
   src: string; 
   host1: string; 
   host2: string; 
@@ -441,6 +451,7 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
   user: UserProfile;
   lines?: { speaker: string; text: string }[];
   podcastLang?: string;
+  isLocal?: boolean;
 }) {
   const [playing, setPlaying] = useState(false);
   const [current, setCurrent] = useState(0);
@@ -451,6 +462,9 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
   const progressBarRef = useRef<HTMLDivElement>(null);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [audioFailed, setAudioFailed] = useState(false);
+
+  const useTTS = isLocal || audioFailed || !BACKEND || src.endsWith('/undefined') || src.endsWith('/null') || src.endsWith('/') || !src;
 
   const handleDownload = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -495,7 +509,7 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
 
   // --- MOBILE MODE: Web Speech API playback ---
   const playTTS = (startIdx = 0) => {
-    if (!IS_NATIVE_MOBILE || !lines || lines.length === 0) return;
+    if (!lines || lines.length === 0) return;
     window.speechSynthesis.cancel();
     ttsActiveRef.current = true;
     setPlaying(true);
@@ -521,7 +535,7 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
       };
       utt.lang = langMap[langCode] || 'en-US';
 
-      // Load voices —  may be empty on first call; retry after voiceschanged
+      // Load voices — may be empty on first call; retry after voiceschanged
       const assignVoice = () => {
         const voices = window.speechSynthesis.getVoices();
         const langVoices = voices.filter(v => v.lang.startsWith(utt.lang.split('-')[0]));
@@ -536,6 +550,9 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
         };
         utt.onerror = (e) => {
           console.warn('[AudioPlayer TTS] TTS voice error, retrying with default voice:', e);
+          if (e.error === 'interrupted' || e.error === 'canceled') {
+            return;
+          }
           if (utt.voice) {
             const fallback = new SpeechSynthesisUtterance(line.text);
             fallback.lang = utt.lang;
@@ -545,7 +562,10 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
               consecutiveErrors = 0;
               speakLine(idx + 1);
             };
-            fallback.onerror = () => {
+            fallback.onerror = (fe) => {
+              if (fe.error === 'interrupted' || fe.error === 'canceled') {
+                return;
+              }
               consecutiveErrors++;
               if (consecutiveErrors >= 3) {
                 alert("Speech Synthesis (Read Aloud) failed. Please check if your system volume is turned up, an audio output device is connected, and Speech/TTS voices are installed in your OS settings.");
@@ -583,7 +603,9 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
       }
     };
 
-    speakLine(startIdx);
+    setTimeout(() => {
+      speakLine(startIdx);
+    }, 100);
   };
 
   const pauseTTS = () => {
@@ -600,30 +622,36 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
     }
   };
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ DESKTOP MODE: HTML Audio element Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // ── DESKTOP MODE: HTML Audio element ──
   useEffect(() => {
-    if (IS_NATIVE_MOBILE) return; // skip audio fetch on mobile
+    if (useTTS) return; // skip audio fetch if using TTS
     let active = true;
     fetch(src)
-      .then(res => res.blob())
+      .then(res => {
+        if (!res.ok) throw new Error("Load failed");
+        return res.blob();
+      })
       .then(blob => {
         if (active) setBlobUrl(URL.createObjectURL(blob));
       })
-      .catch(e => console.error("Failed to load audio for scrubbing", e));
+      .catch(e => {
+        console.error("Failed to load audio for scrubbing", e);
+        if (active) setAudioFailed(true);
+      });
     return () => {
       active = false;
     };
-  }, [src]);
+  }, [src, useTTS]);
 
   useEffect(() => {
-    if (IS_NATIVE_MOBILE) return;
+    if (useTTS) return;
     return () => {
       if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
-  }, [blobUrl]);
+  }, [blobUrl, useTTS]);
 
   useEffect(() => {
-    if (IS_NATIVE_MOBILE) return;
+    if (useTTS) return;
     const el = audioRef.current;
     if (!el) return;
     const onTime = () => {
@@ -649,9 +677,13 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
       el.removeEventListener('pause', onPause);
       el.removeEventListener('ended', onEnd);
     };
-  }, [audioRef, isDragging]);
+  }, [audioRef, isDragging, useTTS]);
 
   const toggle = () => {
+    if (useTTS) {
+      toggleTTS();
+      return;
+    }
     const el = audioRef.current;
     if (!el) return;
     if (playing) el.pause();
@@ -660,11 +692,12 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
 
   const changeSpeed = (s: number) => {
     setSpeed(s);
-    if (!IS_NATIVE_MOBILE && audioRef.current) audioRef.current.playbackRate = s;
+    if (!useTTS && audioRef.current) audioRef.current.playbackRate = s;
     setShowSpeedMenu(false);
   };
 
   const seek = (delta: number) => {
+    if (useTTS) return;
     const el = audioRef.current;
     if (!el) return;
     el.currentTime = Math.max(0, Math.min(el.currentTime + delta, el.duration || 0));
@@ -679,7 +712,7 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
   const pct = duration > 0 ? (current / duration) * 100 : 0;
 
   const handleScrub = (clientX: number) => {
-    if (!progressBarRef.current || !audioRef.current || !isFinite(audioRef.current.duration)) return;
+    if (useTTS || !progressBarRef.current || !audioRef.current || !isFinite(audioRef.current.duration)) return;
     const rect = progressBarRef.current.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     const newTime = ratio * audioRef.current.duration;
@@ -707,8 +740,8 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
     };
   }, [isDragging, current, audioRef]);
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ MOBILE MODE render Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-  if (IS_NATIVE_MOBILE) {
+  // ── MOBILE MODE render ──
+  if (useTTS) {
     const totalLines = lines?.length || linesCount;
     const progressPct = totalLines > 0 ? (ttsLineIdx / totalLines) * 100 : 0;
     return (
@@ -991,11 +1024,11 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
 
   // Ã¢â€â‚¬Ã¢â€â‚¬ Sync internal FileSpeaker state to global UserProfile (for Supabase sync) Ã¢â€â‚¬Ã¢â€â‚¬
   useEffect(() => {
-    const freshData = { sources, activeId: activeSourceId, states: sourceStates };
+    const freshData = { sources, activeId: activeSourceId || '', states: sourceStates, checked: checkedSources };
     if (JSON.stringify(user.fileSpeakerData) !== JSON.stringify(freshData)) {
-      setUser((prev: any) => ({ ...prev, fileSpeakerData: freshData }));
+      setUser({ ...user, fileSpeakerData: freshData });
     }
-  }, [sources, activeSourceId, sourceStates]);
+  }, [sources, activeSourceId, sourceStates, checkedSources]);
 
   // Keep localStorage as a local secondary backup
   useEffect(() => { localStorage.setItem('fs_sources', JSON.stringify(sources)); }, [sources]);
@@ -1008,6 +1041,7 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
   const [textInput, setTextInput] = useState('');
   const [textTitle, setTextTitle] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [failedAudioIds, setFailedAudioIds] = useState<Record<string, boolean>>({});
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [chatInput, setChatInput]   = useState('');
@@ -1023,7 +1057,7 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
   const [podcastTone, setPodcastTone]   = useState('educational and engaging');
   const [podcastLength, setPodcastLength] = useState('medium');
   // BUG FIX 4 (new): Track selected podcast language separately from app UI language
-  const [podcastLang, setPodcastLang]   = useState(() => getCurrentLang() || 'en');
+  const [podcastLang, setPodcastLang]   = useState<string>(() => (getCurrentLang() || 'en') as string);
   const [langDropdownOpen, setLangDropdownOpen] = useState(false);
   const [langSearchQuery, setLangSearchQuery] = useState('');
   const [host1VoiceOpen, setHost1VoiceOpen] = useState(false);
@@ -1112,7 +1146,7 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
     setUploading(true);
     try {
       // Ã¢â€â‚¬Ã¢â€â‚¬ Try backend first (desktop only) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-      if (!IS_NATIVE_MOBILE && BACKEND) {
+      if (BACKEND) {
         try {
           const form = new FormData();
           form.append('file', file);
@@ -1218,8 +1252,8 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
       await networkService.ready();
       const isOnline = networkService.isOnline();
 
-      // Desktop: try backend first for full crawl4ai extraction
-      if (!IS_NATIVE_MOBILE && BACKEND && isOnline) {
+      // Try backend first for full crawl4ai extraction
+      if (BACKEND && isOnline) {
         try {
           const res = await fetch(`${BACKEND}/api/filespeaker/url`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1289,8 +1323,8 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
       const text = textInput.trim();
       const isOnline = networkService.isOnline();
 
-      // Desktop + online: try backend first
-      if (!IS_NATIVE_MOBILE && BACKEND && isOnline) {
+      // Try backend first if online
+      if (BACKEND && isOnline) {
         try {
           const res = await fetch(`${BACKEND}/api/filespeaker/text`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1346,8 +1380,8 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
 
     try {
       if (isOnline) {
-        // Route 1: Try FastAPI backend (desktop only)
-        if (!IS_NATIVE_MOBILE && BACKEND) {
+        // Route 1: Try FastAPI backend
+        if (BACKEND) {
           try {
             const res = await fetch(`${BACKEND}/api/filespeaker/chat`, {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1436,8 +1470,8 @@ Be accurate and concise. Never invent facts.`;
       const sourceText = activeSource.text || activeSource.preview;
 
       if (isOnline) {
-        // Route 1: Try FastAPI backend (desktop only)
-        if (!IS_NATIVE_MOBILE && BACKEND) {
+        // Route 1: Try FastAPI backend
+        if (BACKEND) {
           try {
             const res = await fetch(`${BACKEND}/api/filespeaker/transform`, {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1545,40 +1579,47 @@ Be accurate and concise. Never invent facts.`;
     const sid = activeSource.source_id;
     patchState(sid, { podcast: null });
     try {
-      // ── Desktop path: use backend ──
-      if (!IS_NATIVE_MOBILE && BACKEND) {
-        const res  = await fetch(`${BACKEND}/api/filespeaker/podcast`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            source_id: sid, source_text: activeSource.text || activeSource.preview,
-            topic: podcastTopic, host1_name: host1Name, host2_name: host2Name,
-            host1_voice: host1Voice, host2_voice: host2Voice,
-            tone: podcastTone, length: podcastLength,
-            language: podcastLang,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || 'Podcast generation failed');
-        patchState(sid, { podcast: data });
+      // ── Try backend first ──
+      if (BACKEND) {
+        try {
+          const res  = await fetch(`${BACKEND}/api/filespeaker/podcast`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              source_id: sid, source_text: activeSource.text || activeSource.preview,
+              topic: podcastTopic, host1_name: host1Name, host2_name: host2Name,
+              host1_voice: host1Voice, host2_voice: host2Voice,
+              tone: podcastTone, length: podcastLength,
+              language: podcastLang,
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            patchState(sid, { podcast: data });
 
-        // Save to Podcast Library
-        const record: PodcastRecord = {
-          id: data.podcast_id || String(Date.now()),
-          sourceTitle: activeSource.title,
-          topic: podcastTopic,
-          host1: host1Name,
-          host2: host2Name,
-          language: data.language || podcastLang,
-          languageName: data.language_name || 'English',
-          audioFilename: data.audio_filename,
-          durationEst: data.duration_estimate || '~? min',
-          linesCount: data.lines?.length || 0,
-          createdAt: Date.now(),
-          script: data.script || '',
-          lines: data.lines || [],
-        };
-        setPodcastLibrary(prev => [record, ...prev.slice(0, 49)]); // keep max 50
-        return;
+            // Save to Podcast Library
+            const record: PodcastRecord = {
+              id: data.podcast_id || String(Date.now()),
+              sourceTitle: activeSource.title,
+              topic: podcastTopic,
+              host1: host1Name,
+              host2: host2Name,
+              language: data.language || podcastLang,
+              languageName: data.language_name || 'English',
+              audioFilename: data.audio_filename,
+              durationEst: data.duration_estimate || '~? min',
+              linesCount: data.lines?.length || 0,
+              createdAt: Date.now(),
+              script: data.script || '',
+              lines: data.lines || [],
+            };
+            setPodcastLibrary(prev => [record, ...prev.slice(0, 49)]); // keep max 50
+            return;
+          } else {
+            console.warn('[FileSpeaker] Backend podcast generation failed, status code:', res.status);
+          }
+        } catch (e) {
+          console.warn('[FileSpeaker] Backend podcast generation failed, falling back to offline...', e);
+        }
       }
 
       // ── Mobile / No-backend path: generate script via LLM + play with Web Speech API ──
@@ -2578,6 +2619,7 @@ The generated content must be extremely detailed, educational, and structured, s
                         user={user}
                         lines={podcast.lines || []}
                         podcastLang={podcastLang}
+                        isLocal={podcast.is_local}
                       />
                       <details className="text-xs">
                         <summary className={`cursor-pointer select-none py-1 ${isLight ? 'text-zinc-500 hover:text-zinc-800' : 'text-zinc-500 hover:text-zinc-300'}`}>View Full Script ↓</summary>
@@ -2712,7 +2754,7 @@ The generated content must be extremely detailed, educational, and structured, s
                       </button>
                     </div>
                     <div className="mt-3">
-                      {IS_NATIVE_MOBILE ? (
+                      {(IS_NATIVE_MOBILE && (!rec.audioFilename || failedAudioIds[rec.id])) ? (
                         <LibraryTTSPlayer
                           lines={rec.lines || []}
                           podcastLang={rec.language || 'en'}
@@ -2723,7 +2765,10 @@ The generated content must be extremely detailed, educational, and structured, s
                         />
                       ) : (
                         <div className="flex items-center gap-3">
-                          <LibraryAudioPlayer audioFilename={rec.audioFilename} />
+                          <LibraryAudioPlayer
+                            audioFilename={rec.audioFilename}
+                            onLoadError={() => setFailedAudioIds(prev => ({ ...prev, [rec.id]: true }))}
+                          />
                           <button
                             onClick={() => downloadPodcastFromLibrary(rec.id, `podcast_${rec.id}.mp3`, rec.audioFilename)}
                             disabled={downloadingIds[rec.id]}
