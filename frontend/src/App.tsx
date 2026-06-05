@@ -971,7 +971,7 @@ const AppContent = ({
     "/planner": `Kalam — ${user.dream || "Tasks"}`,
     "/resources": `Kalam — ${user.dream || "Study"}`,
     "/revision": `Kalam — ${user.dream || "Revision"}`,
-    "/opportunities": `Kalam — ${user.dream || "Radar"}`,
+    "/opportunities": `Kalam — Jobs & Hackathons`,
     "/pivot": `Kalam — ${user.dream || "Pivot"}`,
     "/mentor": `Kalam — ${user.dream || "AI Mentor"}`,
     "/filespeaker": `Kalam — File Speaker`,
@@ -1020,7 +1020,7 @@ const AppContent = ({
             <SidebarItem id="nav-planner" to="/planner" icon={Calendar} label="Task List" active={location.pathname === "/planner"} onClick={() => setIsSidebarOpen(false)} />
             <SidebarItem id="nav-resources" to="/resources" icon={BookOpen} label="Study Center" active={location.pathname === "/resources"} onClick={() => setIsSidebarOpen(false)} />
             <SidebarItem id="nav-revision" to="/revision" icon={RotateCcw} label="Revision" active={location.pathname === "/revision"} onClick={() => setIsSidebarOpen(false)} />
-            <SidebarItem id="nav-opportunities" to="/opportunities" icon={Radio} label="Competitions" active={location.pathname === "/opportunities"} onClick={() => setIsSidebarOpen(false)} />
+            <SidebarItem id="nav-opportunities" to="/opportunities" icon={Radio} label="Jobs & Hackathons" active={location.pathname === "/opportunities"} onClick={() => setIsSidebarOpen(false)} />
             <SidebarItem id="nav-filespeaker" to="/filespeaker" icon={Volume2} label="File Speaker" active={location.pathname === "/filespeaker"} onClick={() => setIsSidebarOpen(false)} />
             <SidebarItem id="nav-mentor" to="/mentor" icon={MessageSquare} label="AI Mentor" active={location.pathname === "/mentor"} onClick={() => setIsSidebarOpen(false)} />
           </nav>

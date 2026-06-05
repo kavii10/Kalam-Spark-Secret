@@ -439,6 +439,139 @@ def clean_html_tags(text: str) -> str:
                       .replace("&#39;", "'"))
     return cleaned.strip()
 
+async def fetch_apify_jobs(keyword: str, location: str, limit: int) -> list:
+    import httpx
+    token = os.getenv("APIFY_API_TOKEN")
+    if not token or token == "YOUR_APIFY_API_TOKEN":
+        return []
+    try:
+        search_query = f"{keyword} in {location}" if location else keyword
+        run_input = {
+            "queries": search_query,
+            "maxPagesPerQuery": 1,
+            "maxResultsPerQuery": limit
+        }
+        actor_id = "apify/google-jobs-scraper"
+        async with httpx.AsyncClient(timeout=70.0) as client:
+            url = f"https://api.apify.com/v2/acts/{actor_id}/runs?token={token}&wait=60"
+            resp = await client.post(url, json=run_input)
+            if resp.status_code not in (200, 201):
+                print(f"[Apify Jobs] Actor call failed: {resp.status_code}")
+                return []
+            run_data = resp.json().get("data", {})
+            dataset_id = run_data.get("defaultDatasetId")
+            if not dataset_id:
+                print("[Apify Jobs] No defaultDatasetId found")
+                return []
+            
+            items_url = f"https://api.apify.com/v2/datasets/{dataset_id}/items?token={token}"
+            items_resp = await client.get(items_url)
+            if items_resp.status_code == 200:
+                items = items_resp.json()
+                if not isinstance(items, list):
+                    items = [items]
+                jobs = []
+                for item in items:
+                    title = item.get("title") or item.get("position") or "N/A"
+                    company = item.get("companyName") or item.get("company") or "Not Disclosed"
+                    loc = item.get("location") or item.get("formattedLocation") or location or "N/A"
+                    posted_at = item.get("postedAt") or item.get("date") or ""
+                    created_date = str(posted_at).split("T")[0] if posted_at else "Ongoing"
+                    desc = item.get("description") or item.get("jobDescription") or "No details."
+                    link = item.get("applyLink") or item.get("url") or item.get("link") or "https://google.com"
+                    salary = item.get("salary") or "Not Specified"
+                    
+                    jobs.append({
+                        "id": item.get("id") or f"apify-{uuid.uuid4().hex[:12]}",
+                        "title": clean_html_tags(title),
+                        "company": clean_html_tags(company),
+                        "location": clean_html_tags(loc),
+                        "createdDate": created_date,
+                        "salaryRange": salary,
+                        "salaryMin": None,
+                        "salaryMax": None,
+                        "description": clean_html_tags(desc),
+                        "redirectUrl": link,
+                        "source": "Apify Scraper"
+                    })
+                return jobs
+    except Exception as e:
+        print(f"[Apify Jobs] Error: {e}")
+    return []
+
+async def fetch_unstop_hackathons(limit: int = 15) -> list:
+    import httpx
+    token = os.getenv("APIFY_API_TOKEN")
+    if not token or token == "YOUR_APIFY_API_TOKEN":
+        return []
+    try:
+        run_input = {
+            "startUrls": [{"url": "https://unstop.com/competitions"}],
+            "maxRequestsPerCrawl": 3,
+            "pageFunction": """async function pageFunction(context) {
+                const { $ } = context;
+                const results = [];
+                $('div.opportunity_list, div.card, a.opportunity-card, .opp-card-container').each((i, el) => {
+                    const title = $(el).find('h2, .title, .opp-title, .opportunity-title').text().trim();
+                    const host = $(el).find('.host, .company-name, .university-name, .sub-heading').text().trim();
+                    const deadline = $(el).find('.reg-date, .deadline, .days-left, .closing-in').text().trim();
+                    const link = $(el).attr('href') || $(el).find('a').attr('href') || '/competitions';
+                    if (title) {
+                        results.push({ title, host, deadline, link });
+                    }
+                });
+                return results;
+            }"""
+        }
+        actor_id = "apify/cheerio-scraper"
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            url = f"https://api.apify.com/v2/acts/{actor_id}/runs?token={token}&wait=50"
+            resp = await client.post(url, json=run_input)
+            if resp.status_code not in (200, 201):
+                print(f"[Apify Unstop] Actor call failed: {resp.status_code}")
+                return []
+            run_data = resp.json().get("data", {})
+            dataset_id = run_data.get("defaultDatasetId")
+            if not dataset_id:
+                print("[Apify Unstop] No defaultDatasetId found")
+                return []
+            
+            items_url = f"https://api.apify.com/v2/datasets/{dataset_id}/items?token={token}"
+            items_resp = await client.get(items_url)
+            if items_resp.status_code == 200:
+                items = items_resp.json()
+                if not isinstance(items, list):
+                    items = [items]
+                
+                unstop_events = []
+                for row in items:
+                    results = row.get("pageFunctionResult") or [row]
+                    if not isinstance(results, list):
+                        results = [results]
+                    for item in results:
+                        title = item.get("title") or item.get("eventName") or "Unstop Competition"
+                        host = item.get("host") or item.get("institution") or "Unstop Host"
+                        deadline = item.get("deadline") or item.get("endDate") or "Ongoing"
+                        link = item.get("link") or "https://unstop.com/competitions"
+                        
+                        if link.startswith("/"):
+                            link = f"https://unstop.com{link}"
+                        elif not link.startswith("http"):
+                            link = f"https://unstop.com/{link}"
+                            
+                        unstop_events.append({
+                            "id": f"unstop-{uuid.uuid4().hex[:12]}",
+                            "title": f"{clean_html_tags(title)} (Hosted by {clean_html_tags(host)})",
+                            "link": link,
+                            "timeline": deadline,
+                            "source": "Unstop",
+                            "type": "Competition"
+                        })
+                return unstop_events[:limit]
+    except Exception as e:
+        print(f"[Apify Unstop] Error: {e}")
+    return []
+
 @app.get("/api/opportunities/jobs")
 async def get_realtime_jobs(
     country: str = "us",
@@ -474,6 +607,7 @@ async def get_realtime_jobs(
     if final_location:
         params["where"] = final_location
         
+    adzuna_jobs = []
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(api_url, params=params)
@@ -481,7 +615,6 @@ async def get_realtime_jobs(
                 data = resp.json()
                 raw_results = data.get("results", [])
                 
-                jobs = []
                 for job in raw_results:
                     title = clean_html_tags(job.get("title", "Untitled Job"))
                     company = clean_html_tags(job.get("company", {}).get("display_name", "Not Disclosed"))
@@ -506,8 +639,8 @@ async def get_realtime_jobs(
                     description = clean_html_tags(job.get("description", "No description details provided."))
                     redirect_url = job.get("redirect_url", "#")
                     
-                    jobs.append({
-                        "id": job.get("id", str(uuid.uuid4())),
+                    adzuna_jobs.append({
+                        "id": job.get("id") or str(uuid.uuid4()),
                         "title": title,
                         "company": company,
                         "location": display_location,
@@ -519,11 +652,34 @@ async def get_realtime_jobs(
                         "redirectUrl": redirect_url,
                         "source": "Adzuna"
                     })
-                return {"success": True, "jobs": jobs}
-            else:
-                return {"success": False, "error": f"Adzuna API status code: {resp.status_code}"}
     except Exception as e:
-        return {"success": False, "error": f"Adzuna fetch error: {str(e)}"}
+        print(f"[Adzuna fetch error] {e}")
+
+    # Fetch supplemental jobs via Apify Scraper
+    apify_jobs = []
+    if os.getenv("APIFY_API_TOKEN"):
+        try:
+            apify_jobs = await fetch_apify_jobs(keyword, location, limit)
+        except Exception as e:
+            print(f"[Apify supplement error] {e}")
+
+    # Merge and deduplicate
+    seen = set()
+    merged_jobs = []
+    
+    for job in adzuna_jobs:
+        key = f"{job['title'].lower().strip()}::{job['company'].lower().strip()}"
+        if key not in seen:
+            seen.add(key)
+            merged_jobs.append(job)
+            
+    for job in apify_jobs:
+        key = f"{job['title'].lower().strip()}::{job['company'].lower().strip()}"
+        if key not in seen:
+            seen.add(key)
+            merged_jobs.append(job)
+
+    return {"success": True, "jobs": merged_jobs}
 
 @app.get("/api/opportunities/hackathons")
 async def get_realtime_hackathons():
@@ -635,42 +791,107 @@ async def get_realtime_hackathons():
     except Exception as e:
         print(f"[Hackathons] Devpost fetch error: {e}")
         
-    # 2. Fetch HackerEarth public challenges fallback
+    # 2. Fetch HackerEarth Partner API or Fallback Public JSON
+    client_secret = os.getenv("HACKEREARTH_API_KEY")
+    client_id = os.getenv("HACKEREARTH_CLIENT_ID")
+    
+    api_succeeded = False
+    has_keys = bool(client_secret)
+    
+    if client_secret:
+        try:
+            url = "https://api.hackerearth.com/v4/partner/challenges/"
+            headers = {
+                "client-secret": client_secret,
+                "Content-Type": "application/json",
+                "User-Agent": browser_headers["User-Agent"]
+            }
+            if client_id:
+                headers["client-id"] = client_id
+                
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                resp = await client.get(url, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    results = data.get("challenges", []) or data.get("results", []) or []
+                    for item in results:
+                        title = item.get("title") or item.get("name") or "HackerEarth Challenge"
+                        url_val = item.get("url") or item.get("challenge_link") or "https://hackerearth.com/challenges/"
+                        start_ts = item.get("start_timestamp", "")
+                        end_ts = item.get("end_timestamp", "")
+                        
+                        start_clean = start_ts.split(" ")[0] if start_ts else "Start"
+                        end_clean = end_ts.split(" ")[0] if end_ts else "End"
+                        timeline = f"{start_clean} to {end_clean}"
+                        
+                        hackathons.append({
+                            "id": item.get("id") or f"he-{uuid.uuid4().hex[:8]}",
+                            "title": title,
+                            "link": url_val,
+                            "timeline": timeline,
+                            "source": "HackerEarth",
+                            "type": item.get("challenge_type") or "Programming Contest"
+                        })
+                    if results:
+                        api_succeeded = True
+        except Exception as e:
+            print(f"[Hackathons] HackerEarth partner API lookup error: {e}")
+
+    if not api_succeeded:
+        if not has_keys:
+            warning_banner = "🔌 Note: HackerEarth API credentials was missing or returned 0 items. Displaying global public online challenges."
+        try:
+            fallback_url = "https://www.hackerearth.com/api/challenges/"
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                resp = await client.get(fallback_url, headers=browser_headers)
+                if resp.status_code == 200:
+                    raw_data = resp.json()
+                    raw_challenges = raw_data.get("response", [])
+                    for item in raw_challenges:
+                        title = item.get("title", "HackerEarth Challenge")
+                        url_val = item.get("url", "https://www.hackerearth.com/challenges/")
+                        if url_val.startswith("/"):
+                            url_val = f"https://www.hackerearth.com{url_val}"
+                            
+                        type_event = item.get("challenge_type", "Hackathon")
+                        start_str = item.get("start_timestamp", "")
+                        end_str = item.get("end_timestamp", "")
+                        
+                        date_display = "Active"
+                        if start_str or end_str:
+                            start_clean = start_str.split(" ")[0] if start_str else ""
+                            end_clean = end_str.split(" ")[0] if end_str else ""
+                            date_display = f"{start_clean} to {end_clean}" if (start_clean and end_clean) else "Active"
+                        else:
+                            date_display = item.get("status", "Active")
+                            
+                        hackathons.append({
+                            "id": item.get("id") or f"he-fallback-{uuid.uuid4().hex[:8]}",
+                            "title": title,
+                            "link": url_val,
+                            "timeline": date_display,
+                            "source": "HackerEarth",
+                            "type": type_event
+                        })
+        except Exception as e:
+            print(f"[Hackathons] HackerEarth public challenges backup stream error: {e}")
+
+    # 3. Fetch Unstop Hackathons via Apify Scraper
     try:
-        async with httpx.AsyncClient(timeout=8.0) as client:
-            resp = await client.get("https://www.hackerearth.com/api/challenges/", headers=browser_headers)
-            if resp.status_code == 200:
-                raw_data = resp.json()
-                raw_challenges = raw_data.get("response", [])
-                for item in raw_challenges:
-                    title = item.get("title", "HackerEarth Challenge")
-                    url = item.get("url", "https://www.hackerearth.com/challenges/")
-                    if url.startswith("/"):
-                        url = f"https://www.hackerearth.com{url}"
-                        
-                    type_event = item.get("challenge_type", "Hackathon")
-                    start_str = item.get("start_timestamp", "")
-                    end_str = item.get("end_timestamp", "")
-                    
-                    date_display = "Active"
-                    if start_str or end_str:
-                        start_clean = start_str.split(" ")[0] if start_str else ""
-                        end_clean = end_str.split(" ")[0] if end_str else ""
-                        date_display = f"{start_clean} to {end_clean}" if (start_clean and end_clean) else "Active"
-                    else:
-                        date_display = item.get("status", "Active")
-                        
-                    hackathons.append({
-                        "id": item.get("id", f"he-{str(uuid.uuid4())[:8]}"),
-                        "title": title,
-                        "link": url,
-                        "timeline": date_display,
-                        "source": "HackerEarth",
-                        "type": type_event
-                    })
-    except Exception as e:
-        print(f"[Hackathons] HackerEarth fetch error: {e}")
-        
+        is_apify_configured = bool(os.getenv("APIFY_API_TOKEN"))
+        if is_apify_configured:
+            unstop_events = await fetch_unstop_hackathons(15)
+            if unstop_events:
+                hackathons.extend(unstop_events)
+        else:
+            unstop_warning = "🔌 Note: `APIFY_API_TOKEN` is missing or empty. Serving primary Devpost + HackerEarth challenges."
+            if warning_banner:
+                warning_banner = f"{warning_banner} | {unstop_warning}"
+            else:
+                warning_banner = unstop_warning
+    except Exception as unstop_err:
+        print(f"[Hackathons] Unstop fetch error: {unstop_err}")
+
     return {
         "success": True,
         "hackathons": hackathons,
