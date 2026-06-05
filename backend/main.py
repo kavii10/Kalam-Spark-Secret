@@ -422,27 +422,260 @@ async def analyze_pivot(req: PivotRequest):
 
 
 # ──────────────────────────────────────────────
-# Opportunity Radar Endpoint
+# Opportunity Radar Real-time Endpoints
 # ──────────────────────────────────────────────
-class OpportunityRequest(BaseModel):
-    dream: str
-    branch: str = ""
-    year: str = ""
-    current_skills: str = ""
-    stage_index: int = 0
 
-@app.post("/api/opportunities")
-async def scan_opportunities(req: OpportunityRequest):
-    """Generate relevant career opportunities using local Gemma4 LLM"""
-    from llm_service import generate_opportunities
+def clean_html_tags(text: str) -> str:
+    if not text:
+        return ""
+    import re
+    # Remove HTML tags
+    cleaned = re.sub(r'<[^>]*>', '', text)
+    # Decode basic entities
+    cleaned = (cleaned.replace("&amp;", "&")
+                      .replace("&lt;", "<")
+                      .replace("&gt;", ">")
+                      .replace("&quot;", '"')
+                      .replace("&#39;", "'"))
+    return cleaned.strip()
+
+@app.get("/api/opportunities/jobs")
+async def get_realtime_jobs(
+    country: str = "us",
+    keyword: str = "",
+    location: str = "",
+    limit: int = 20
+):
+    import re
+    import httpx
+    app_id = os.getenv("ADZUNA_APP_ID", "61e33034")
+    app_key = os.getenv("ADZUNA_APP_KEY", "f863f17df97ef2a2963c4b9f49083b1f")
+    
+    country_code = country.lower().strip()
+    api_url = f"https://api.adzuna.com/v1/api/jobs/{country_code}/search/1"
+    
+    final_keyword = keyword.replace('"', '').replace("'", "").strip()
+    final_location = location.strip()
+    
+    # Remote optimization
+    has_remote = bool(re.search(r'remote', final_location, re.IGNORECASE))
+    if has_remote:
+        if not re.search(r'remote', final_keyword, re.IGNORECASE):
+            final_keyword = f"{final_keyword} remote".strip()
+        final_location = re.sub(r'(?i)remote', '', final_location)
+        final_location = re.sub(r'^[,\s/]+|[,\s/]+$', '', final_location).strip()
+
+    params = {
+        "app_id": app_id,
+        "app_key": app_key,
+        "results_per_page": limit,
+        "what": final_keyword
+    }
+    if final_location:
+        params["where"] = final_location
+        
     try:
-        result = await generate_opportunities(
-            req.dream, req.branch, req.year,
-            req.current_skills, req.stage_index
-        )
-        return result
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(api_url, params=params)
+            if resp.status_code == 200:
+                data = resp.json()
+                raw_results = data.get("results", [])
+                
+                jobs = []
+                for job in raw_results:
+                    title = clean_html_tags(job.get("title", "Untitled Job"))
+                    company = clean_html_tags(job.get("company", {}).get("display_name", "Not Disclosed"))
+                    
+                    loc_areas = job.get("location", {}).get("area", [])
+                    loc_str = ", ".join(loc_areas) if loc_areas else "Not Disclosed"
+                    display_location = clean_html_tags(loc_str)
+                    if location.lower() == "remote" and "remote" not in display_location.lower():
+                        display_location = f"Remote ({display_location})"
+                        
+                    created = job.get("created", "")
+                    created_date = created.split("T")[0] if created else ""
+                    
+                    salary_min = job.get("salary_min")
+                    salary_max = job.get("salary_max")
+                    salary_range = "Not Specified"
+                    if salary_min and salary_max:
+                        salary_range = f"{int(salary_min):,} - {int(salary_max):,}"
+                    elif salary_min:
+                        salary_range = f"From {int(salary_min):,}"
+                        
+                    description = clean_html_tags(job.get("description", "No description details provided."))
+                    redirect_url = job.get("redirect_url", "#")
+                    
+                    jobs.append({
+                        "id": job.get("id", str(uuid.uuid4())),
+                        "title": title,
+                        "company": company,
+                        "location": display_location,
+                        "createdDate": created_date,
+                        "salaryRange": salary_range,
+                        "salaryMin": salary_min,
+                        "salaryMax": salary_max,
+                        "description": description,
+                        "redirectUrl": redirect_url,
+                        "source": "Adzuna"
+                    })
+                return {"success": True, "jobs": jobs}
+            else:
+                return {"success": False, "error": f"Adzuna API status code: {resp.status_code}"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"success": False, "error": f"Adzuna fetch error: {str(e)}"}
+
+@app.get("/api/opportunities/hackathons")
+async def get_realtime_hackathons():
+    import httpx
+    from bs4 import BeautifulSoup
+    curated_hackathons = [
+      {
+        "id": "curated-gemini-2026",
+        "title": "Google Gemini Frontier AI Challenge",
+        "link": "https://devpost.com/challenges",
+        "timeline": "Ongoing to Jul 31, 2026",
+        "source": "Devpost",
+        "type": "Generative AI"
+      },
+      {
+        "id": "curated-llama3-2026",
+        "title": "Meta LLaMA Open Source Integration Challenge",
+        "link": "https://devpost.com/challenges",
+        "timeline": "Ongoing to Aug 15, 2026",
+        "source": "Devpost",
+        "type": "Artificial Intelligence"
+      },
+      {
+        "id": "curated-openai-25",
+        "title": "OpenAI GPT-4o Developers Enterprise Hackathon",
+        "link": "https://www.hackerearth.com/challenges/",
+        "timeline": "Jun 10 to Jul 25, 2026",
+        "source": "HackerEarth",
+        "type": "Hackathon"
+      },
+      {
+        "id": "curated-claude-agents",
+        "title": "Anthropic Claude 3.5 AI Agents Builders Hackathon",
+        "link": "https://devpost.com/challenges",
+        "timeline": "Ongoing to Jul 10, 2026",
+        "source": "Devpost",
+        "type": "AI Agents"
+      },
+      {
+        "id": "curated-microsoft-copilot",
+        "title": "Microsoft Azure Copilot Studio Hackathon",
+        "link": "https://www.hackerearth.com/challenges/",
+        "timeline": "Ongoing to Jun 28, 2026",
+        "source": "HackerEarth",
+        "type": "Programming Contest"
+      },
+      {
+        "id": "curated-nvidia-cuda",
+        "title": "NVIDIA CUDA-X AI Acceleration Global Challenge",
+        "link": "https://devpost.com/challenges",
+        "timeline": "Ongoing to Aug 20, 2026",
+        "source": "Devpost",
+        "type": "Deep Learning"
+      },
+      {
+        "id": "curated-hacker-ai",
+        "title": "HackerEarth AI Developer Cup",
+        "link": "https://www.hackerearth.com/challenges/",
+        "timeline": "Ongoing to Aug 05, 2026",
+        "source": "HackerEarth",
+        "type": "AI & Data Science"
+      },
+      {
+        "id": "curated-ai-healthcare",
+        "title": "AI in Healthcare Global Hackathon",
+        "link": "https://devpost.com/challenges",
+        "timeline": "Ongoing to Jun 22, 2026",
+        "source": "Devpost",
+        "type": "Hackathon"
+      }
+    ]
+    
+    hackathons = list(curated_hackathons)
+    warning_banner = None
+    
+    browser_headers = {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+      "Accept": "application/rss+xml, application/xml, text/xml, application/json, text/plain, */*",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Cache-Control": "no-cache"
+    }
+    
+    # 1. Fetch Devpost RSS feed
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.get("https://devpost.com/feed", headers=browser_headers)
+            if resp.status_code == 200:
+                soup = BeautifulSoup(resp.text, "xml")
+                items = soup.find_all("item")
+                for item in items:
+                    title_elem = item.find("title")
+                    link_elem = item.find("link")
+                    pub_date_elem = item.find("pubDate")
+                    guid_elem = item.find("guid")
+                    
+                    title = title_elem.text if title_elem else "Unnamed Hackathon"
+                    link = link_elem.text if link_elem else "https://devpost.com"
+                    pub_date = pub_date_elem.text if pub_date_elem else "Ongoing"
+                    guid = guid_elem.text if guid_elem else f"devpost-{str(uuid.uuid4())[:8]}"
+                    
+                    hackathons.append({
+                        "id": guid,
+                        "title": title,
+                        "link": link,
+                        "timeline": pub_date,
+                        "source": "Devpost",
+                        "type": "Hackathon"
+                    })
+    except Exception as e:
+        print(f"[Hackathons] Devpost fetch error: {e}")
+        
+    # 2. Fetch HackerEarth public challenges fallback
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.get("https://www.hackerearth.com/api/challenges/", headers=browser_headers)
+            if resp.status_code == 200:
+                raw_data = resp.json()
+                raw_challenges = raw_data.get("response", [])
+                for item in raw_challenges:
+                    title = item.get("title", "HackerEarth Challenge")
+                    url = item.get("url", "https://www.hackerearth.com/challenges/")
+                    if url.startswith("/"):
+                        url = f"https://www.hackerearth.com{url}"
+                        
+                    type_event = item.get("challenge_type", "Hackathon")
+                    start_str = item.get("start_timestamp", "")
+                    end_str = item.get("end_timestamp", "")
+                    
+                    date_display = "Active"
+                    if start_str or end_str:
+                        start_clean = start_str.split(" ")[0] if start_str else ""
+                        end_clean = end_str.split(" ")[0] if end_str else ""
+                        date_display = f"{start_clean} to {end_clean}" if (start_clean and end_clean) else "Active"
+                    else:
+                        date_display = item.get("status", "Active")
+                        
+                    hackathons.append({
+                        "id": item.get("id", f"he-{str(uuid.uuid4())[:8]}"),
+                        "title": title,
+                        "link": url,
+                        "timeline": date_display,
+                        "source": "HackerEarth",
+                        "type": type_event
+                    })
+    except Exception as e:
+        print(f"[Hackathons] HackerEarth fetch error: {e}")
+        
+    return {
+        "success": True,
+        "hackathons": hackathons,
+        "warningBanner": warning_banner
+    }
 
 
 # ──────────────────────────────────────────────
