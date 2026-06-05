@@ -601,6 +601,25 @@ export default function Resources({ user }: { user: UserProfile }) {
   const [searchResults, setSearchResults] = useState<ResourceData>({ books: [], videos: [], papers: [], news: [] });
   const searchRef = useRef<HTMLInputElement>(null);
 
+  // ── Helper: Extract clean, search-ready subjects from a stage ────────────────
+  // Prefers stage.subjects (e.g. "Linear Algebra", "Calculus", "Python Programming")
+  // Falls back to stage.concepts ONLY if they look like subject names (not checklist items
+  // that start with action verbs like "Learn", "Understand", "Build", "Study").
+  // This prevents bad queries like "Learn vector spaces" being sent to book/video APIs.
+  const getStageSubjects = (stage: any): string[] => {
+    if (stage?.subjects && stage.subjects.length > 0) {
+      return stage.subjects.filter((s: string) => s && s.trim().length > 0);
+    }
+    // Fallback: use concepts that look like subject names (not action-verb checklist items)
+    const actionVerbs = /^(learn|understand|study|build|implement|practice|explore|read|write|create|develop|master|apply|use|complete|finish|do|make|watch|review)/i;
+    const subjectLikeConcepts = (stage?.concepts || []).filter(
+      (c: string) => c && c.trim().length > 0 && !actionVerbs.test(c.trim())
+    );
+    if (subjectLikeConcepts.length > 0) return subjectLikeConcepts;
+    // Last resort: return concepts as-is (better than nothing)
+    return (stage?.concepts || []).filter((c: string) => c && c.trim().length > 0);
+  };
+
   // ── Fetch curriculum resources ───────────────────────────────────────────────
   const fetchCurriculum = useCallback(async () => {
     setLoading(true);
@@ -633,19 +652,21 @@ export default function Resources({ user }: { user: UserProfile }) {
       //   1. No cache exists
       //   2. The user has pivoted careers (dream mismatch)
       //   3. The user has moved to a new stage in the roadmap
-      //   4. The stage subjects changed (e.g. old cache was built from stage title)
-      // Use stage.subjects (like "Linear Algebra", "Calculus", "Python") first, then stage.concepts as fallback.
-      // This ensures resources are loaded for specific subjects/topics instead of checklist items or generic stage titles.
-      const stageSubjects: string[] = (stage?.subjects && stage.subjects.length > 0) 
-        ? stage.subjects 
-        : (stage?.concepts || []);
+      //   4. The stage subjects changed (old cache built from stage title or wrong subjects)
+      //
+      // IMPORTANT: Use stage.subjects ("Linear Algebra", "Calculus", "Python") as the
+      // primary source. Do NOT use stage.title ("Foundations of Math") or raw concepts
+      // ("Learn vector spaces") for resource queries — they produce wrong search results.
+      const stageSubjects: string[] = getStageSubjects(stage);
       const dreamMismatch = cached?.cachedForDream && cached.cachedForDream !== currentUser.dream;
       const stageMismatch = cached?.cachedForStage !== undefined && cached.cachedForStage !== stageIdx;
-      // Concepts/Subjects mismatch: old cache was built from generic stage title instead of specific concepts
+      // Subjects mismatch: old cache built from stage title or different/no subjects
       const cachedSubs: string[] = (cached as any)?.cachedSubjects || [];
+      // Use a set-based comparison so subject order doesn't falsely trigger a refetch
       const subjectsMismatch = stageSubjects.length > 0 && (
         cachedSubs.length === 0 ||
-        !stageSubjects.every((s, i) => s === cachedSubs[i])
+        cachedSubs.length !== stageSubjects.length ||
+        stageSubjects.some(s => !cachedSubs.includes(s))
       );
       const loadCount = (rm as any)._loadMoreCount || 0;
       const sparseCache = cached && loadCount === 0 && (
@@ -698,7 +719,8 @@ export default function Resources({ user }: { user: UserProfile }) {
               return;
             } else {
               // Use first subject as placeholder label; fall back to stage title
-              const placeholderLabel = stageSubjects[0] || stage.title || 'Foundations';
+              // Use the most specific subject name available (not a checklist item)
+              const placeholderLabel = stageSubjects.find(s => s.length < 30) || stageSubjects[0] || stage.title || 'Foundations';
               cached = getLocalResourcesPlaceholder(currentUser.dream || 'Professional', placeholderLabel);
               rm = { ...rm, cachedResources: cached };
               await dbService.saveRoadmap(currentUser, rm);
@@ -750,7 +772,8 @@ export default function Resources({ user }: { user: UserProfile }) {
     }
 
     // Use all stage subjects for context; rotate through subjects for variety on each Load More click
-    const subjects = stage.subjects?.length ? stage.subjects : (stage.concepts?.length ? stage.concepts : []);
+    // getStageSubjects prefers stage.subjects (clean topic names) over checklist-style concepts
+    const subjects = getStageSubjects(stage);
     const loadCount = (roadmap as any)._loadMoreCount || 0;
     // Rotate which subject is in position 0 so each Load More click surfaces different subjects first
     const rotatedSubjects = subjects.length > 1

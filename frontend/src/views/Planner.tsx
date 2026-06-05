@@ -105,21 +105,38 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
   // Ref for the midnight interval
   const midnightRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // ── Helper: Extract clean, search-ready subjects from a stage ────────────────
+  // Prefers stage.subjects (e.g. "Linear Algebra", "Calculus", "Python Programming")
+  // Falls back to stage.concepts ONLY if they look like subject names (not checklist items
+  // that start with action verbs like "Learn", "Understand", "Build", "Study").
+  // This prevents bad queries like "Learn vector spaces" being sent to APIs.
+  const getStageSubjects = (stage: any): string[] => {
+    if (stage?.subjects && stage.subjects.length > 0) {
+      return stage.subjects.filter((s: string) => s && s.trim().length > 0);
+    }
+    const actionVerbs = /^(learn|understand|study|build|implement|practice|explore|read|write|create|develop|master|apply|use|complete|finish|do|make|watch|review)/i;
+    const subjectLikeConcepts = (stage?.concepts || []).filter(
+      (c: string) => c && c.trim().length > 0 && !actionVerbs.test(c.trim())
+    );
+    if (subjectLikeConcepts.length > 0) return subjectLikeConcepts;
+    return (stage?.concepts || []).filter((c: string) => c && c.trim().length > 0);
+  };
+
   // ── Unified Study Center Resource Helper ───────────────────────────────────
   const getUnifiedResources = useCallback(async (rm: any, stageIdx: number, stage: any) => {
     let cached = rm.cachedResources;
-    // Use stage.subjects (like "Linear Algebra", "Calculus", "Python") first, then stage.concepts as fallback.
-    // This ensures resources are loaded for specific subjects/topics instead of checklist items or generic stage titles.
-    const stageSubjects: string[] = (stage?.subjects && stage.subjects.length > 0)
-      ? stage.subjects
-      : (stage?.concepts || []);
+    // Use stage.subjects ("Linear Algebra", "Calculus", "Python") first — never use
+    // stage.concepts (checklist items like "Learn vector spaces") for resource queries.
+    const stageSubjects: string[] = getStageSubjects(stage);
     const dreamMismatch = cached?.cachedForDream && cached.cachedForDream !== user.dream;
     const stageMismatch = cached?.cachedForStage !== undefined && cached.cachedForStage !== stageIdx;
-    // Concepts/Subjects mismatch: old cache was built from generic stage title instead of specific concepts
+    // Subjects mismatch: old cache built from stage title or different/no subjects.
+    // Use set-based comparison so subject order doesn't falsely trigger a refetch.
     const cachedSubs: string[] = (cached as any)?.cachedSubjects || [];
     const subjectsMismatch = stageSubjects.length > 0 && (
       cachedSubs.length === 0 ||
-      !stageSubjects.every((s: string, i: number) => s === cachedSubs[i])
+      cachedSubs.length !== stageSubjects.length ||
+      stageSubjects.some((s: string) => !cachedSubs.includes(s))
     );
 
     const sparseCache = cached && (
@@ -338,12 +355,8 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
 
         const stageIdx = user.currentStageIndex || 0;
         const stage = rm.stages ? (rm.stages[stageIdx] || rm.stages[0]) : null;
-        // Use stage.subjects (like "Linear Algebra", "Calculus", "Python") first, then stage.concepts as fallback.
-        // This ensures resources are loaded for specific subjects/topics instead of checklist items or generic stage titles.
-        const stageSubjects: string[] = (stage?.subjects && stage.subjects.length > 0)
-          ? stage.subjects
-          : (stage?.concepts?.length ? stage.concepts : [user.dream]);
-        // Use first subject/concept as topic for task generation (not the generic stage title)
+        const stageSubjects: string[] = getStageSubjects(stage);
+        // Use first clean subject name as topic for task generation (not the generic stage title).
         const topic = stageSubjects[0] || (stage ? stage.title : user.dream);
 
         const cached = await getUnifiedResources(rm, stageIdx, stage);
