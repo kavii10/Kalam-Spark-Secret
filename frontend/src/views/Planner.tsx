@@ -402,49 +402,19 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
         }
 
         if (pool.length === 0) {
-          const getBackendUrl = () => {
-            const envUrl = import.meta.env.VITE_BACKEND_URL;
-            if (envUrl) return envUrl.replace(/\/$/, '');
-            if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
-              return window.location.origin;
-            }
-            return "http://localhost:8000";
-          };
-          const backendUrl = getBackendUrl();
           const isOnline = networkService.isOnline();
 
           if (isOnline) {
             try {
-              const res = await fetch(`${backendUrl}/api/tasks`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ dream: user.dream, current_stage: topic, subjects: stageSubjects, count: target })
-              });
-              if (res.ok) {
-                const data = await res.json();
-                if (Array.isArray(data) && data.length > 0) {
-                  pool = data.map((t: any) => ({
-                    title: (t.title || '').trim(),
-                    type: normalizeTaskType(t.type)
-                  })).filter((t: any) => t.title && t.title.length > 5);
-                }
+              const data = await generatePlannerTasks(user.dream, topic, stageSubjects, neededTasks);
+              if (Array.isArray(data)) {
+                pool = data.map((t: any) => ({
+                  title: (t.title || '').trim(),
+                  type: normalizeTaskType(t.type)
+                })).filter((t: any) => t.title && t.title.length > 5);
               }
-            } catch (e) {
-              console.warn('Backend tasks failed, trying direct Gemini API...', e);
-            }
-
-            if (pool.length === 0) {
-              try {
-                const data = await generatePlannerTasks(user.dream, topic, stageSubjects, neededTasks);
-                if (Array.isArray(data)) {
-                  pool = data.map((t: any) => ({
-                    title: (t.title || '').trim(),
-                    type: normalizeTaskType(t.type)
-                  })).filter((t: any) => t.title && t.title.length > 5);
-                }
-              } catch (err) {
-                console.error("Task generation service call failed:", err);
-              }
+            } catch (err) {
+              console.error("Task generation service call failed:", err);
             }
           } else {
             if (llamaPlugin.isSupported()) {

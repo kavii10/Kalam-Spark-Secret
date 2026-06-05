@@ -541,104 +541,34 @@ export default function RoadmapView({
           return;
         }
 
-        // WebSockets generation - Reset progress for new dream
+        // Direct Client-Side Generation
         if (!networkService.isOnline()) {
           setError("📡 No Internet Connection — Connect to the internet to generate your personalized roadmap.");
           setLoading(false);
           return null;
         }
 
-        setLoadingMsg('Connecting to AI Career Architect...');
+        setLoadingMsg('Generating roadmap on-device...');
         setCompletedStages([]);
         setConceptProgress({});
         localStorage.removeItem('kalamspark_concept_progress');
         await dbService.clearCompletedStages(user.id);
 
-        const getBackendUrl = () => {
-          const envUrl = import.meta.env.VITE_BACKEND_URL;
-          if (envUrl) return envUrl.replace(/\/$/, '');
-          if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
-            return window.location.origin;
+        try {
+          const fallback = await generateRoadmapWithProgress(user, setLoadingMsg);
+          const clean = sanitizeRoadmap(fallback, user.dream, user.branch);
+          if (existing) {
+            clean.playlists = existing.playlists || [];
+            clean.watchLater = existing.watchLater || [];
           }
-          return "http://localhost:8000";
-        };
-        let backendUrl = getBackendUrl();
-        const currentLang = localStorage.getItem('kalam_spark_lang') || 'en';
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-        let wsUrl = backendUrl.replace(/^https?/, wsProtocol) + `/ws/roadmap?dream=${encodeURIComponent(user.dream)}&year=${encodeURIComponent(user.year)}&branch=${encodeURIComponent(user.branch)}&language=${currentLang}`;
-        if (forceRefresh) {
-          wsUrl += "&force_refresh=true";
-          localStorage.removeItem("kalamspark_force_refresh");
+          setRoadmap(clean);
+          await dbService.saveRoadmap(user, clean);
+          setLoading(false);
+        } catch (fallbackErr: any) {
+          setError("Error generating roadmap: " + (fallbackErr.message || 'Unexpected error.'));
+          setLoading(false);
         }
-
-        const ws = new WebSocket(wsUrl);
-        
-        ws.onmessage = async (event) => {
-          const res = JSON.parse(event.data || '{}');
-          if (res.type === 'progress') {
-             setLoadingMsg(res.msg || 'Generating your roadmap...');
-          } else if (res.type === 'result') {
-             const clean = sanitizeRoadmap(res.data, user.dream, user.branch);
-             if (existing) {
-               clean.playlists = existing.playlists || [];
-               clean.watchLater = existing.watchLater || [];
-             }
-             setRoadmap(clean);
-             await dbService.saveRoadmap(user, clean);
-             setLoading(false);
-             if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close();
-          } else if (res.type === 'error') {
-             console.error('WS Error:', res.data);
-             try {
-                const fallback = await generateRoadmapWithProgress(user, setLoadingMsg);
-                const clean = sanitizeRoadmap(fallback, user.dream, user.branch);
-                if (existing) {
-                  clean.playlists = existing.playlists || [];
-                  clean.watchLater = existing.watchLater || [];
-                }
-                setRoadmap(clean);
-                await dbService.saveRoadmap(user, clean);
-                setLoading(false);
-             } catch (fallbackErr: any) {
-                if (!networkService.isOnline()) {
-                  setError("📡 No Internet Connection — Connect to the internet to generate your personalized roadmap.");
-                } else {
-                  setError("Error generating roadmap: " + (res.data || 'Unexpected response from server.'));
-                }
-                setLoading(false);
-             }
-             if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close();
-          }
-        };
-
-        ws.onerror = async (err) => {
-           console.error("WS connection error", err);
-           try {
-              const fallback = await generateRoadmapWithProgress(user, setLoadingMsg);
-              const clean = sanitizeRoadmap(fallback, user.dream, user.branch);
-              if (existing) {
-                clean.playlists = existing.playlists || [];
-                clean.watchLater = existing.watchLater || [];
-              }
-              setRoadmap(clean);
-              await dbService.saveRoadmap(user, clean);
-              setLoading(false);
-           } catch (fallbackErr: any) {
-              if (!networkService.isOnline()) {
-                setError("📡 No Internet Connection — Connect to the internet to generate your personalized roadmap.");
-              } else {
-                setError("Connection error. Please check your internet or if the backend is running.");
-              }
-              setLoading(false);
-           }
-           if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close();
-        };
-
-        ws.onclose = () => {
-          if (loading) setLoading(false);
-        };
-
-        return ws;
+        return null;
       } catch (error: any) {
         console.error("Failed to sync roadmap", error);
         setError(error.message || "An unexpected error occurred while loading your roadmap.");

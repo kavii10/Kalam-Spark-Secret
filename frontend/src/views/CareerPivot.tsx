@@ -109,15 +109,7 @@ function ConfirmModal({
   );
 }
 
-const getBackendUrl = () => {
-  const envUrl = import.meta.env.VITE_BACKEND_URL;
-  if (envUrl) return envUrl.replace(/\/$/, '');
-  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
-    return window.location.origin;
-  }
-  return "http://localhost:8000";
-};
-const BACKEND_URL = getBackendUrl();
+
 
 export default function CareerPivot({ user, setUser }: Props) {
   const [newDream, setNewDream] = useState("");
@@ -159,38 +151,12 @@ export default function CareerPivot({ user, setUser }: Props) {
         .filter(Boolean)
         .join(", ") || user.branch || "General academic knowledge";
 
-      const isOnline = networkService.isOnline();
-      let data: PivotResult | null = null;
-
       if (isOnline) {
-        // Route 1: Try FastAPI backend first
+        // Route 1: Centralized LLM Router API
         try {
-          const res = await fetch(`${BACKEND_URL}/api/pivot`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              current_dream: user.dream,
-              new_dream: newDream.trim(),
-              branch: user.branch || "",
-              year: user.year || "",
-              current_skills: currentSkills,
-            }),
-          });
-
-          if (res.ok) {
-            data = await res.json();
-          }
+          data = await analyzeCareerPivot(user.dream || "", newDream.trim(), user.branch || "", user.year || "", currentSkills);
         } catch (err) {
-          console.warn('[CareerPivot] Backend failed, trying direct Gemini API...', err);
-        }
-
-        // Route 2: Centralized LLM Router API fallback
-        if (!data) {
-          try {
-            data = await analyzeCareerPivot(user.dream || "", newDream.trim(), user.branch || "", user.year || "", currentSkills);
-          } catch (err) {
-            console.error('[CareerPivot] Centralized analyze failed:', err);
-          }
+          console.error('[CareerPivot] Analyze failed:', err);
         }
       } else {
         // Route 3: Offline local LLM

@@ -451,7 +451,7 @@ async def fetch_apify_jobs(keyword: str, location: str, limit: int) -> list:
             "maxPagesPerQuery": 1,
             "maxResultsPerQuery": limit
         }
-        actor_id = "apify/google-jobs-scraper"
+        actor_id = "orgupdate~google-jobs-scraper"
         async with httpx.AsyncClient(timeout=70.0) as client:
             url = f"https://api.apify.com/v2/acts/{actor_id}/runs?token={token}&wait=60"
             resp = await client.post(url, json=run_input)
@@ -523,7 +523,7 @@ async def fetch_unstop_hackathons(limit: int = 15) -> list:
                 return results;
             }"""
         }
-        actor_id = "apify/cheerio-scraper"
+        actor_id = "apify~cheerio-scraper"
         async with httpx.AsyncClient(timeout=60.0) as client:
             url = f"https://api.apify.com/v2/acts/{actor_id}/runs?token={token}&wait=50"
             resp = await client.post(url, json=run_input)

@@ -16,12 +16,7 @@ import { Capacitor } from '@capacitor/core';
 // On native mobile, the backend at 127.0.0.1:8000 is NOT reachable
 const IS_NATIVE_MOBILE = Capacitor.isNativePlatform();
 
-const getBackendUrl = () => {
-  const envUrl = import.meta.env.VITE_BACKEND_URL;
-  if (envUrl) return envUrl.replace(/\/$/, '');
-  return "http://localhost:8000";
-};
-const BACKEND = getBackendUrl();
+const BACKEND = "";
 
 /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Types Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 interface Source {
@@ -1759,27 +1754,121 @@ Each line: 1-3 natural sentences. Conversational and educational.`;
     setInteractQ('');
     try {
       const script = podcast.lines?.map((l: any) => `${l.speaker}: ${l.text}`).join('\n') || '';
-      const res = await fetch(`${BACKEND}/api/filespeaker/podcast/interact`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          podcast_script: script, question: q,
-          host_name: host1Name, host_voice: host1Voice,
-          language: podcastLang,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Interaction failed');
+      let replyText = '';
+      let replyAudioUrl = '';
 
-      const newInteractions = [...(podcast.interactions || []), { q, a: data.text, audio: data.audio_url }];
+      const isOnline = networkService.isOnline();
+
+      // Route 1: Try backend first if available and online
+      if (BACKEND && isOnline) {
+        try {
+          const res = await fetch(`${BACKEND}/api/filespeaker/podcast/interact`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              podcast_script: script, question: q,
+              host_name: host1Name, host_voice: host1Voice,
+              language: podcastLang,
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            replyText = data.text;
+            replyAudioUrl = data.audio_url;
+          }
+        } catch (e) {
+          console.warn('[FileSpeaker] Backend podcast interaction failed, falling back to client-side...', e);
+        }
+      }
+
+      // Route 2: Standalone client-side Gemini fallback
+      if (!replyText && isOnline) {
+        try {
+          const langNames: Record<string, string> = {
+            en: 'English', ta: 'Tamil', hi: 'Hindi', te: 'Telugu',
+            kn: 'Kannada', ml: 'Malayalam', bn: 'Bengali', mr: 'Marathi',
+            es: 'Spanish', fr: 'French', de: 'German', zh: 'Chinese',
+            ja: 'Japanese', ko: 'Korean', ar: 'Arabic', ru: 'Russian',
+            pt: 'Portuguese', it: 'Italian', id: 'Indonesian', tr: 'Turkish', vi: 'Vietnamese',
+          };
+          const langName = langNames[podcastLang] || 'English';
+          let langInstruction = '';
+          if (podcastLang === 'ta') {
+            langInstruction = 'Answer ONLY in Tamil (தமிழ்). Every word must be in Tamil. No English allowed.';
+          } else if (podcastLang !== 'en') {
+            langInstruction = `Answer ONLY in ${langName}. Translate everything to ${langName}. Do NOT use English.`;
+          }
+          const systemInstruction = `You are ${host1Name}, a friendly podcast host speaking in ${langName}. ${langInstruction}`;
+          const prompt = `A listener just paused the podcast and asked a question.\n\nSCRIPT CONTEXT:\n${script.substring(script.length - 2000)}\n\nQUESTION: "${q}"\n\nAnswer briefly (1-3 sentences) in ${langName}. Provide ONLY dialogue text. Do NOT include your name or quotes.`;
+
+          const ansText = await generateText({ prompt, systemInstruction, temperature: 0.5 });
+          if (ansText) {
+            // Strip speaker name formatting if LLM includes it
+            const cleanRegex = new RegExp(`^\\*?\\*?${host1Name}\\*?\\*?\\s*:\\s*`, 'i');
+            replyText = ansText.replace(cleanRegex, '').trim();
+            replyAudioUrl = 'local_tts';
+          }
+        } catch (geminiErr) {
+          console.warn('[FileSpeaker] Client-side Gemini podcast interaction failed, trying offline model...', geminiErr);
+        }
+      }
+
+      // Route 3: Offline local model fallback
+      if (!replyText && llamaPlugin.isSupported()) {
+        try {
+          const langNames: Record<string, string> = {
+            en: 'English', ta: 'Tamil', hi: 'Hindi', te: 'Telugu',
+            kn: 'Kannada', ml: 'Malayalam', bn: 'Bengali', mr: 'Marathi',
+          };
+          const langName = langNames[podcastLang] || 'English';
+          const systemInstruction = `You are ${host1Name}, a friendly podcast host speaking in ${langName}.`;
+          const prompt = `A listener just paused the podcast and asked a question.\n\nSCRIPT CONTEXT:\n${script.substring(script.length - 1500)}\n\nQUESTION: "${q}"\n\nAnswer briefly (1-3 sentences) in ${langName}.`;
+          const ansText = await llamaPlugin.getCompletion(prompt, systemInstruction);
+          if (ansText) {
+            const cleanRegex = new RegExp(`^\\*?\\*?${host1Name}\\*?\\*?\\s*:\\s*`, 'i');
+            replyText = ansText.replace(cleanRegex, '').trim();
+            replyAudioUrl = 'local_tts';
+          }
+        } catch (localErr) {
+          console.error('[FileSpeaker] Offline local model interaction failed:', localErr);
+        }
+      }
+
+      if (!replyText) {
+        replyText = podcastLang === 'ta' ? 'மன்னிக்கவும், என்னால் புரிந்து கொள்ள முடியவில்லை. மீண்டும் கேட்க முடியுமா?' : "I'm sorry, I didn't quite catch that. Could you ask again?";
+        replyAudioUrl = 'local_tts';
+      }
+
+      const newInteractions = [...(podcast.interactions || []), { q, a: replyText, audio: replyAudioUrl }];
       patchState(sid, { podcast: { ...podcast, interactions: newInteractions } });
 
-      // Play answer audio —  BUG FIX 5: assign to ref as plain Audio object (correct)
-      const answerAudio = new Audio(`${BACKEND}/api/filespeaker/audio/${data.audio_url}`);
-      interactionAudioRef.current = answerAudio;
-      answerAudio.onended = () => {
-        if (podcastAudioRef.current) podcastAudioRef.current.play();
-      };
-      answerAudio.play();
+      // Play answer audio
+      if (replyAudioUrl === 'local_tts') {
+        if (typeof window !== 'undefined' && window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+          const ut = new SpeechSynthesisUtterance(replyText);
+          const langMap: Record<string, string> = {
+            en: 'en-US', ta: 'ta-IN', hi: 'hi-IN', te: 'te-IN',
+            kn: 'kn-IN', ml: 'ml-IN', bn: 'bn-IN', mr: 'mr-IN',
+            es: 'es-ES', fr: 'fr-FR', de: 'de-DE', zh: 'zh-CN',
+            ja: 'ja-JP', ko: 'ko-KR', ar: 'ar-SA', ru: 'ru-RU',
+            pt: 'pt-BR', it: 'it-IT', id: 'id-ID', tr: 'tr-TR', vi: 'vi-VN',
+          };
+          ut.lang = langMap[podcastLang] || 'en-US';
+          const voices = window.speechSynthesis.getVoices();
+          const lv = voices.filter(v => v.lang.startsWith(ut.lang.split('-')[0]));
+          if (lv.length > 0) ut.voice = lv[0];
+          ut.pitch = 0.9;
+          ut.rate = 1.0;
+          window.speechSynthesis.speak(ut);
+        }
+      } else {
+        const answerAudio = new Audio(`${BACKEND}/api/filespeaker/audio/${replyAudioUrl}`);
+        interactionAudioRef.current = answerAudio;
+        answerAudio.onended = () => {
+          if (podcastAudioRef.current) podcastAudioRef.current.play();
+        };
+        answerAudio.play();
+      }
     } catch (e: any) { alert(`Interact failed: ${e.message}`); }
     finally { setInteractLoading(false); }
   };
@@ -1830,14 +1919,55 @@ Each line: 1-3 natural sentences. Conversational and educational.`;
     if (!quickUrl.trim()) return;
     setQuickLoading(true);
     try {
-      const res  = await fetch(`${BACKEND}/api/filespeaker/url`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: quickUrl.trim(), deep: deepCrawl }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'URL extraction failed');
-      registerSource({ ...data, text: data.preview, addedAt: Date.now() });
-      setQuickUrl('');
+      await networkService.ready();
+      const isOnline = networkService.isOnline();
+
+      if (BACKEND && isOnline) {
+        try {
+          const res  = await fetch(`${BACKEND}/api/filespeaker/url`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: quickUrl.trim(), deep: deepCrawl }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            registerSource({ ...data, text: data.preview, addedAt: Date.now() });
+            setQuickUrl('');
+            setQuickLoading(false);
+            return;
+          }
+        } catch (e) {
+          console.warn('[FileSpeaker] Backend quick URL import failed, trying client-side...', e);
+        }
+      }
+
+      // Client-side extraction fallback
+      let urlContent = '';
+      if (isOnline) {
+        try {
+          const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(quickUrl.trim())}`;
+          const resp = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
+          const proxyData = await resp.json();
+          urlContent = proxyData.contents?.substring(0, 8000) || '';
+        } catch (_) {}
+      }
+      const extractedText = await summarizeWebpage(quickUrl.trim(), urlContent);
+      if (extractedText.trim()) {
+        const title = quickUrl.trim().replace(/https?:\/\//, '').split('/')[0];
+        const source: Source = {
+          source_id: `url_${Date.now()}`,
+          title,
+          char_count: extractedText.length,
+          chunk_count: Math.ceil(extractedText.length / 1000),
+          preview: extractedText.substring(0, 250) + '...',
+          text: extractedText,
+          addedAt: Date.now(),
+          detectedLang: 'en',
+        };
+        registerSource(source);
+        setQuickUrl('');
+      } else {
+        throw new Error('Could not extract URL content.');
+      }
     } catch (e: any) { alert(`Failed: ${(e as any).message}`); }
     finally { setQuickLoading(false); }
   };
@@ -2669,7 +2799,36 @@ The generated content must be extremely detailed, educational, and structured, s
                               <div key={i} className={`border rounded-xl p-3 ${isLight ? 'bg-white border-zinc-200 shadow-sm' : 'bg-zinc-900/60 border-zinc-800'}`}>
                                 <p className={`text-xs font-semibold mb-2 ${isLight ? 'text-zinc-700' : 'text-zinc-300'}`}>Q: {interaction.q}</p>
                                 <div className="flex items-start gap-3">
-                                  <audio src={`${BACKEND}/api/filespeaker/audio/${interaction.audio}`} controls className="h-8 max-w-[120px]" />
+                                  {interaction.audio === 'local_tts' || !BACKEND ? (
+                                    <button
+                                      onClick={() => {
+                                        if (typeof window !== 'undefined' && window.speechSynthesis) {
+                                          window.speechSynthesis.cancel();
+                                          const ut = new SpeechSynthesisUtterance(interaction.a);
+                                          const langMap: Record<string, string> = {
+                                            en: 'en-US', ta: 'ta-IN', hi: 'hi-IN', te: 'te-IN',
+                                            kn: 'kn-IN', ml: 'ml-IN', bn: 'bn-IN', mr: 'mr-IN',
+                                            es: 'es-ES', fr: 'fr-FR', de: 'de-DE', zh: 'zh-CN',
+                                            ja: 'ja-JP', ko: 'ko-KR', ar: 'ar-SA', ru: 'ru-RU',
+                                            pt: 'pt-BR', it: 'it-IT', id: 'id-ID', tr: 'tr-TR', vi: 'vi-VN',
+                                          };
+                                          ut.lang = langMap[podcastLang] || 'en-US';
+                                          const voices = window.speechSynthesis.getVoices();
+                                          const lv = voices.filter(v => v.lang.startsWith(ut.lang.split('-')[0]));
+                                          if (lv.length > 0) ut.voice = lv[0];
+                                          ut.pitch = 0.9;
+                                          ut.rate = 1.0;
+                                          window.speechSynthesis.speak(ut);
+                                        }
+                                      }}
+                                      className={`p-1.5 rounded-lg flex items-center justify-center transition-all ${isLight ? 'bg-zinc-100 hover:bg-zinc-200 text-zinc-600' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300'}`}
+                                      title="Listen to response"
+                                    >
+                                      <Volume2 size={14} />
+                                    </button>
+                                  ) : (
+                                    <audio src={`${BACKEND}/api/filespeaker/audio/${interaction.audio}`} controls className="h-8 max-w-[120px]" />
+                                  )}
                                   <p className={`text-[11px] ${isLight ? 'text-zinc-600' : 'text-zinc-400'}`}>
                                     <strong className="text-violet-500">{host1Name}:</strong> {interaction.a}
                                   </p>

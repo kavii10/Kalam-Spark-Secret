@@ -1252,6 +1252,7 @@ const AppContent = ({
 
             {/* App Settings Toggles */}
             <div className="flex flex-col gap-3 mb-5">
+
               <label className="flex items-center justify-between p-3 rounded-lg bg-black/40 border border-gold-500/20 cursor-pointer hover:bg-black/60 transition-colors">
                 <span className="text-sm font-medium text-gold-200">Follow System Theme</span>
                 <input 
@@ -1804,20 +1805,7 @@ export default function App() {
     };
   }, []);
 
-  // ── Wake Up Backend (Prevents Render Free Tier Cold Start) ──
-  useEffect(() => {
-    const getBackendUrl = () => {
-      const envUrl = import.meta.env.VITE_BACKEND_URL;
-      if (envUrl) return envUrl.replace(/\/$/, '');
-      if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
-        return window.location.origin;
-      }
-      return "http://localhost:8000";
-    };
-    const backendUrl = getBackendUrl();
-    // Background ping — we don't need to await it
-    fetch(`${backendUrl}/health`).catch(() => {});
-  }, []);
+
 
   // ── Sync theme class on HTML element ──
   useEffect(() => {
