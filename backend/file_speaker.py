@@ -438,47 +438,15 @@ def get_full_source_text(source_id: str) -> str:
 
 
 def retrieve_context(source_ids: list[str], query: str, top_k: int = 5) -> str:
-    # Use global genai or import it
-    import google.generativeai as g
-    
-    models_to_try = [
-        "models/gemini-embedding-001",
-        "models/text-embedding-004", 
-        "text-embedding-004",
-        "models/embedding-001",
-        "embedding-001"
-    ]
-    
-    q_embed = None
-    for mname in models_to_try:
-        try:
-            res = g.embed_content(
-                model=mname,
-                content=query,
-                task_type="retrieval_query"
-            )
-            q_embed = res['embedding']
-            break
-        except:
-            continue
-            
-    if q_embed is None:
-        # Try OpenRouter
-        or_key = os.getenv("OPENROUTER_API_KEY")
-        if or_key:
-            try:
-                from openai import OpenAI
-                client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=or_key)
-                res = client.embeddings.create(
-                    model="google/gemini-embedding-001",
-                    input=query
-                )
-                q_embed = res.data[0].embedding
-            except:
-                pass
-
-    if q_embed is None:
-        print("[FileSpeaker] All embedding models failed for query")
+    try:
+        model = _get_embed_model()
+        embeddings = model.encode([query])
+        if not embeddings or len(embeddings) == 0:
+            print("[FileSpeaker] No query embedding generated")
+            return ""
+        q_embed = embeddings[0]
+    except Exception as e:
+        print(f"[FileSpeaker] Query embedding failed: {e}")
         return ""
 
     results = []
@@ -522,7 +490,8 @@ async def chat_with_source(source_ids: list[str], source_titles: list[str], hist
     system_prompt = (
         "You are a helpful AI tutor. A student has uploaded documents and is asking questions about them. "
         "Answer ONLY from the provided source documents. If the answer is not there, say so clearly. "
-        "Be concise and cite page numbers like [Page 3] when you use content from a specific page."
+        "Be concise and cite page numbers like [Page 3] when you use content from a specific page. "
+        "IMPORTANT: You MUST respond in the same language as the student's question. If they ask in Tamil, respond in Tamil. If they ask in Hindi, respond in Hindi."
         f"\n\n{context_note}"
     )
 
