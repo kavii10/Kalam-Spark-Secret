@@ -350,6 +350,7 @@ class QuizRequest(BaseModel):
     stage_concepts: Optional[list[str]] = []
     difficulty: Optional[str] = "beginner/foundational"
     quiz_number: Optional[int] = 1
+    previous_questions: Optional[list[str]] = []  # questions already shown — must not be repeated
 
 @app.post("/api/quiz")
 async def get_quiz(req: QuizRequest):
@@ -361,7 +362,8 @@ async def get_quiz(req: QuizRequest):
             req.stage_description,
             req.stage_concepts,
             req.difficulty,
-            req.quiz_number
+            req.quiz_number,
+            req.previous_questions or []
         )
         return quiz
     except Exception as e:

@@ -101,6 +101,8 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [showResults, setShowResults] = useState(false);
   const [quizNumber, setQuizNumber] = useState(1);
+  // Tracks ALL question strings asked so far today — passed to LLM to prevent repeats
+  const [quizHistory, setQuizHistory] = useState<string[]>([]);
 
   // Ref for the midnight interval
   const midnightRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -587,6 +589,7 @@ Return a JSON array of exactly ${neededTasks} tasks.`;
   const efficiency = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   const handleStartQuiz = async () => {
+    // Quiz is based STRICTLY on today's completed tasks
     const completedTaskTitles = tasks.filter(t => t.completed).map(t => t.title);
     if (completedTaskTitles.length === 0) {
       alert("Please complete at least one task today before generating a quiz.");
@@ -600,17 +603,24 @@ Return a JSON array of exactly ${neededTasks} tasks.`;
       }
       const stageIndex = Math.min(user.currentStageIndex, rm.stages.length - 1);
       const currentStage = rm.stages[stageIndex];
-      const allTaskTitles = tasks.map(t => t.title);
+
+      // Use the specific subject name (e.g. "Calculus"), NOT the generic stage title
+      const stageSubjects = getStageSubjects(currentStage);
+      const quizSubject = stageSubjects[0] || currentStage?.title || user.dream;
+
       const quiz = await generateMicroQuiz(
-        currentStage?.title || currentStage?.subjects?.[0] || user.dream, 
-        allTaskTitles,
-        { description: currentStage?.description, concepts: currentStage?.subjects },
+        quizSubject,
+        completedTaskTitles,   // only completed tasks are passed — used as both tasks & quizSource
+        { description: currentStage?.description, concepts: stageSubjects },
         completedTaskTitles,
-        quizNumber
+        quizNumber,
+        quizHistory           // pass previously asked questions so LLM can avoid repeating them
       );
       if (quiz && Array.isArray(quiz) && quiz.length > 0) {
         setCurrentQuiz(quiz);
         setQuizNumber(prev => prev + 1);
+        // Accumulate history: add all new question strings so next quiz avoids them
+        setQuizHistory(prev => [...prev, ...quiz.map((q: QuizQuestion) => q.question)]);
       } else {
         throw new Error('Invalid quiz data received');
       }
@@ -836,9 +846,15 @@ Return a JSON array of exactly ${neededTasks} tasks.`;
                     Complete at least one task today to unlock today's quiz!
                   </p>
                 ) : (
-                  <p className={`${isLight ? 'text-orange-600' : 'text-gold-400'} font-semibold text-sm`}>
-                    Test your knowledge on {user.dream}
-                  </p>
+                  <div className="space-y-2">
+                    <p className={`${isLight ? 'text-orange-600' : 'text-gold-400'} font-semibold text-sm`}>
+                      Based on your {completedCount} completed task{completedCount !== 1 ? 's' : ''} today
+                    </p>
+                    <p className="text-xs" style={{ color: 'rgba(255,160,100,0.50)' }}>
+                      {quizNumber === 1 ? '🟢 Difficulty: Foundational' : quizNumber === 2 ? '🟡 Difficulty: Intermediate' : quizNumber === 3 ? '🟠 Difficulty: Advanced' : '🔴 Difficulty: Expert'}
+                      {quizHistory.length > 0 && ` · ${quizHistory.length} questions already asked`}
+                    </p>
+                  </div>
                 )}
               </div>
               <button 
@@ -846,7 +862,7 @@ Return a JSON array of exactly ${neededTasks} tasks.`;
                 disabled={quizLoading || completedCount === 0} 
                 className="btn-primary px-8 py-3 rounded-xl font-semibold text-sm disabled:opacity-30 disabled:cursor-not-allowed"
               >
-                {quizLoading ? 'Generating...' : 'Start Quiz'}
+                {quizLoading ? 'Generating fresh questions...' : quizNumber === 1 ? 'Start Quiz' : 'Next Quiz'}
               </button>
             </div>
           ) : (
@@ -915,13 +931,16 @@ Return a JSON array of exactly ${neededTasks} tasks.`;
                   </div>
                   <p className={`text-sm ${isLight ? 'text-zinc-600' : 'text-gold-500/50'}`}>{calculateScore() === currentQuiz.length ? '🎉 Perfect score!' : calculateScore() >= currentQuiz.length / 2 ? '👍 Good job! Keep practicing.' : '📚 Keep studying and try again!'}</p>
                   <div className="flex items-center gap-3">
-                    <button onClick={() => { setCurrentQuiz(null); setAnswers({}); setShowResults(false); setQuizNumber(1); }}
+                    {/* Try Again: reset history + number so user can start fresh from scratch */}
+                    <button onClick={() => { setCurrentQuiz(null); setAnswers({}); setShowResults(false); setQuizNumber(1); setQuizHistory([]); }}
                       className="btn-secondary flex-1 py-3 rounded-xl font-medium text-sm">
                       Try Again
                     </button>
-                    <button onClick={handleStartQuiz} disabled={quizLoading}
+                    {/* Next Quiz: keep quizNumber (increases difficulty) and history (avoids repeats) */}
+                    <button onClick={() => { setCurrentQuiz(null); setAnswers({}); setShowResults(false); }}
+                      disabled={quizLoading}
                       className="btn-primary flex-1 py-3 rounded-xl font-medium text-sm disabled:opacity-30">
-                      {quizLoading ? 'Loading...' : 'Next Quiz'}
+                      {quizLoading ? 'Loading...' : 'Next Quiz ↑'}
                     </button>
                   </div>
                 </div>

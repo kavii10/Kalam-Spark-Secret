@@ -547,21 +547,36 @@ async def generate_tasks(dream: str, current_stage: str, subjects: list[str], co
 # Smart Quiz Generation
 # ──────────────────────────────────────────────
 async def generate_quiz(subject: str, tasks: list[str], stage_desc: str = "", stage_concepts: list[str] = [],
-                         difficulty: str = "beginner/foundational", quiz_number: int = 1) -> list[dict]:
+                         difficulty: str = "beginner/foundational", quiz_number: int = 1,
+                         previous_questions: list[str] = []) -> list[dict]:
     tasks_bullet = "\n".join(f"- {t}" for t in tasks) if tasks else f"- {subject} fundamentals"
     concepts_str = ", ".join(stage_concepts) if stage_concepts else ""
-    
+
+    # Build an explicit exclusion block to prevent repeat questions
+    exclusion_block = ""
+    if previous_questions:
+        numbered = "\n".join(f"{i+1}. {q}" for i, q in enumerate(previous_questions))
+        exclusion_block = (
+            f"\n\nCRITICAL — NEVER repeat any of these questions already shown to the student:\n"
+            f"{numbered}\n"
+            f"You MUST generate COMPLETELY DIFFERENT questions that test DIFFERENT aspects of the tasks above."
+        )
+
     advanced_note = (
-        f"This is Quiz #{quiz_number}. IMPORTANT: Do NOT repeat questions from previous quizzes. "
-        f"Make questions significantly more {difficulty} — go deeper and test real-world application."
+        f"This is Quiz Round #{quiz_number}. IMPORTANT: Do NOT repeat questions from previous rounds. "
+        f"Make questions significantly more {difficulty} — go deeper, test real-world application and edge cases."
         if quiz_number > 1 else ""
     )
-    
+
+    # Higher temperature on subsequent rounds injects more lexical variety
+    quiz_temperature = 0.7 if quiz_number == 1 else min(0.95, 0.7 + (quiz_number - 1) * 0.08)
+
     try:
         system_prompt = (
             "You are an expert academic examiner. "
             "Create quiz questions STRICTLY based on the provided completed tasks list. "
             "Do NOT add questions about topics not mentioned in those tasks. "
+            "Each question must be unique — never repeat a question that was already shown. "
             "Return ONLY a valid JSON array."
         )
         user_prompt = (
@@ -571,7 +586,8 @@ async def generate_quiz(subject: str, tasks: list[str], stage_desc: str = "", st
             f"Stage context: {stage_desc[:500]}\n"
             f"Key concepts: {concepts_str}\n"
             f"Difficulty level: {difficulty}\n"
-            f"{advanced_note}\n\n"
+            f"{advanced_note}\n"
+            f"{exclusion_block}\n\n"
             f"Rules:\n"
             f"- Every question MUST test knowledge from the completed tasks listed above\n"
             f"- Do NOT ask about topics not covered in those tasks\n"
@@ -583,7 +599,7 @@ async def generate_quiz(subject: str, tasks: list[str], stage_desc: str = "", st
             f"[{{\"question\": \"...\", \"options\": [\"...\"], \"correctAnswer\": 0, \"explanation\": \"...\"}}]"
         )
         messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
-        raw = await _call_llm_chat(messages, max_tokens=2500, temperature=0.7, json_mode=True)
+        raw = await _call_llm_chat(messages, max_tokens=2500, temperature=quiz_temperature, json_mode=True)
         raw = raw.strip()
         if raw.startswith('```'):
             raw = re.sub(r'^```[a-zA-Z]*\n', '', raw)
@@ -594,7 +610,7 @@ async def generate_quiz(subject: str, tasks: list[str], stage_desc: str = "", st
             match = re.search(r'\[[\s\S]*\]', raw)
             parsed = json.loads(match.group(0)) if match else []
         if isinstance(parsed, list) and len(parsed) >= 1:
-            print(f"[LLM] Generated {len(parsed)} quiz questions at difficulty: {difficulty}")
+            print(f"[LLM] Generated {len(parsed)} quiz questions at difficulty: {difficulty} (round {quiz_number}, temp={quiz_temperature:.2f})")
             return parsed[:10]
     except Exception as e:
         print(f"[LLM] Failed to generate quiz: {e}")
