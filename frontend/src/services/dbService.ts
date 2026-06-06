@@ -68,6 +68,7 @@ function mapRow(data: any): UserProfile {
     fileSpeakerData: data.file_speaker_data || data.fileSpeakerData || {
       sources: [], activeId: null, states: {}, checked: [],
     },
+    podcasts: data.podcasts ?? [],
   };
 }
 
@@ -95,6 +96,7 @@ function userToPayload(user: UserProfile): Record<string, any> {
     motivation: user.motivation || '',
     rewards: user.rewards ?? [],
     file_speaker_data: user.fileSpeakerData || null,
+    podcasts: user.podcasts ?? [],
     settings: user.settings || null,
   };
 }
@@ -276,6 +278,12 @@ export const dbService = {
     await localDB.deleteByIndex('completed_stages', 'user_id', userId);
     await localDB.invalidateComputed(userId, 'stage_progress');
     await syncToSupabase('clear_stages', { user_id: userId });
+  },
+
+  async removeCompletedStage(userId: string, stageId: string): Promise<void> {
+    await localDB.delete('completed_stages', `${userId}__${stageId}`);
+    await localDB.invalidateComputed(userId, 'stage_progress');
+    await syncToSupabase('delete_stage', { user_id: userId, stage_id: stageId });
   },
 
   // ── TASKS ─────────────────────────────────────────────────────────────────────

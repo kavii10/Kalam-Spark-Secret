@@ -162,7 +162,7 @@ export default function AppTour({ onComplete }: AppTourProps) {
         break;
       case 'bottom':
         x1 = tr.left + tr.width / 2; y1 = tr.top;
-        x2 = targetRect.left + targetRect.width / 2; y2 = targetRect.bottom;
+        x2 = targetRect.left + targetRect.width / 2; y2 = targetRect.top + targetRect.height;
         break;
       default: return null;
     }

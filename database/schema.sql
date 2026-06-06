@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS users (
   rewards              JSONB DEFAULT '[]'::jsonb,
   settings             JSONB,
   file_speaker_data    JSONB,
+  podcasts             JSONB DEFAULT '[]'::jsonb,
   last_sync            TIMESTAMPTZ,
   created_at           TIMESTAMPTZ DEFAULT NOW()
 );

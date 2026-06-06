@@ -121,7 +121,7 @@ function BookCard({ item }: { item: BookResource }) {
     e.preventDefault(); e.stopPropagation();
     sessionStorage.setItem('fs_import_url', item.link);
     sessionStorage.setItem('fs_import_title', item.title);
-    sessionStorage.setItem('fs_import_desc', `${item.authors || ''} · ${item.description || ''}`);
+    sessionStorage.setItem('fs_import_desc', `${item.authors || ''} · ${item.summary || ''}`);
     navigate('/filespeaker');
   };
 
@@ -200,7 +200,7 @@ function VideoCard({ item }: { item: VideoResource }) {
     e.preventDefault(); e.stopPropagation();
     sessionStorage.setItem('fs_import_url', item.link);
     sessionStorage.setItem('fs_import_title', item.title);
-    sessionStorage.setItem('fs_import_desc', `${item.publisher || ''} · ${item.description || ''}`);
+    sessionStorage.setItem('fs_import_desc', `${item.channel || ''} · ${item.summary || ''}`);
     navigate('/filespeaker');
   };
 
@@ -322,7 +322,7 @@ function NewsCard({ item }: { item: NewsResource }) {
     e.preventDefault(); e.stopPropagation();
     sessionStorage.setItem('fs_import_url', item.link);
     sessionStorage.setItem('fs_import_title', item.title);
-    sessionStorage.setItem('fs_import_desc', `${item.source || ''} · ${item.description || ''}`);
+    sessionStorage.setItem('fs_import_desc', `${item.source || ''} · ${item.summary || ''}`);
     navigate('/filespeaker');
   };
 

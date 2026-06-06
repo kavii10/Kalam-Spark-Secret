@@ -340,7 +340,7 @@ def _get_embed_model():
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise ValueError("GEMINI_API_KEY not found in environment. Required for cloud embeddings.")
-        genai.configure(api_key=api_key)
+        genai.configure(api_key=api_key, transport="rest")
         
         class GeminiEmbedder:
             def encode(self, texts: list[str]):
@@ -363,7 +363,16 @@ def _get_embed_model():
                             task_type="retrieval_document"
                         )
                         print(f"[FileSpeaker] Embedding success with model: {mname}")
-                        return res['embeddings']
+                        if isinstance(res, dict) and 'embedding' in res:
+                            return res['embedding']
+                        elif hasattr(res, 'embedding'):
+                            return res.embedding
+                        elif isinstance(res, dict) and 'embeddings' in res:
+                            return res['embeddings']
+                        elif hasattr(res, 'embeddings'):
+                            return res.embeddings
+                        return res
+
                     except Exception as e:
                         print(f"[FileSpeaker] Embedding failed with {mname}: {e}")
                         last_err = e
@@ -711,7 +720,8 @@ async def synthesize_audio(
     host1: str, host1_voice: str,
     host2: str, host2_voice: str,
     output_file: str,
-    language: str = "en" # Added language for fallback gTTS
+    language: str = "en", # Added language for fallback gTTS
+    request: Any = None
 ) -> bool:
     """Convert script lines to audio using edge-tts and merge with pydub."""
     try:
@@ -728,6 +738,9 @@ async def synthesize_audio(
     silence_medium = AudioSegment.silent(duration=700)
 
     for i, line in enumerate(script_lines):
+        if request and await request.is_disconnected():
+            print("[FileSpeaker] Audio synthesis aborted because client disconnected.")
+            return False
         voice   = host1_voice if line["speaker"] == host1 else host2_voice
         tmp_mp3 = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
         tmp_mp3.close()
@@ -815,6 +828,7 @@ async def generate_full_podcast(
     tone: str = "educational and engaging",
     length: str = "medium",
     language: str = "en",
+    request: Any = None,
 ) -> dict:
     """Full pipeline: script → parse → TTS → merge. Returns {audio_url, script, duration_est, language}"""
 
@@ -822,6 +836,10 @@ async def generate_full_podcast(
     script = await generate_podcast_script(
         source_text, topic, host1_name, host2_name, tone, length, language
     )
+
+    if request and await request.is_disconnected():
+        print("[FileSpeaker] Client disconnected after script generation. Aborting podcast generation.")
+        return {}
 
     lines = _parse_script_lines(script, host1_name, host2_name)
     if not lines:
@@ -831,9 +849,14 @@ async def generate_full_podcast(
     audio_path  = AUDIO_DIR / f"podcast_{podcast_id}.mp3"
 
     print(f"[FileSpeaker] Synthesizing {len(lines)} dialogue lines to audio...")
-    success = await synthesize_audio(lines, host1_name, host1_voice, host2_name, host2_voice, str(audio_path), language)
+    success = await synthesize_audio(
+        lines, host1_name, host1_voice, host2_name, host2_voice, str(audio_path), language, request=request
+    )
 
     if not success:
+        if request and await request.is_disconnected():
+            print("[FileSpeaker] Podcast generation gracefully stopped due to client disconnect.")
+            return {}
         raise RuntimeError("Audio synthesis failed.")
 
     word_count = sum(len(l["text"].split()) for l in lines)

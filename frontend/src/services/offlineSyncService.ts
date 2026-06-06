@@ -22,6 +22,7 @@ import { localDB } from './localDB';
 import { Toast } from '@capacitor/toast';
 import { Capacitor } from '@capacitor/core';
 import { Network } from '@capacitor/network';
+import { networkService } from './networkService';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export type SyncOpType =
@@ -29,6 +30,7 @@ export type SyncOpType =
   | 'save_task'
   | 'delete_task'
   | 'save_stage'
+  | 'delete_stage'
   | 'clear_stages'
   | 'save_roadmap'
   | 'save_mentor_msg'
@@ -124,6 +126,10 @@ class OfflineSyncService {
     await localDB.enqueueSync(op);
     await this._emit();
     console.log(`[OfflineSync] Queued "${type}" — pending: ${await localDB.getSyncQueueCount()}`);
+
+    if (networkService.isOnline()) {
+      this.flush().catch(err => console.error("[OfflineSync] Auto-flush failed:", err));
+    }
   }
 
   // ── Execute One (called by dbService for immediate background sync) ──────────
@@ -235,6 +241,15 @@ class OfflineSyncService {
 
       case 'clear_stages': {
         const { error } = await supabase.from('completed_stages').delete().eq('user_id', dbPayload.user_id);
+        if (error) throw error;
+        break;
+      }
+
+      case 'delete_stage': {
+        const { error } = await supabase.from('completed_stages')
+          .delete()
+          .eq('user_id', dbPayload.user_id)
+          .eq('stage_id', dbPayload.stage_id);
         if (error) throw error;
         break;
       }

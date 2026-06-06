@@ -79,7 +79,7 @@ function CelebrationOverlay({ onClose, isLight }: { onClose: () => void; isLight
   const [xpCount, setXpCount] = useState(0);
 
   useEffect(() => {
-    const timer = setTimeout(onClose, 5500);
+    const timer = setTimeout(onClose, 3000);
     // Animate XP counter
     let current = 0;
     const interval = setInterval(() => {
@@ -113,7 +113,10 @@ function CelebrationOverlay({ onClose, isLight }: { onClose: () => void; isLight
   }));
 
   return (
-    <div className="fixed inset-0 z-[300] flex flex-col items-center justify-center pointer-events-none overflow-hidden">
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-[300] flex flex-col items-center justify-center pointer-events-auto overflow-hidden cursor-pointer"
+    >
       {/* Backdrop with glow */}
       <div className={`absolute inset-0 backdrop-blur-sm ${isLight ? 'bg-white/70' : 'bg-black/70'}`} />
 
@@ -623,6 +626,9 @@ export default function RoadmapView({
       setError(null);
       try {
         const forceRefresh = localStorage.getItem("kalamspark_force_refresh") === "true";
+        if (forceRefresh) {
+          localStorage.removeItem("kalamspark_force_refresh");
+        }
         const existing = await dbService.getRoadmap(user.id);
         
         if (!forceRefresh && existing && existing.stages && existing.stages.length > 0 && existing.stages[0].id !== 'fallback-stage-1' && existing.dream?.toLowerCase() === user.dream.trim().toLowerCase()) {
@@ -725,6 +731,21 @@ export default function RoadmapView({
     }
   };
 
+  const checkStageCompletion = (stageId: string, stageIndex: number, updatedConcepts?: string[], updatedProjects?: string[]) => {
+    const targetStage = roadmap?.stages?.[stageIndex];
+    if (!targetStage) return;
+
+    const totalConcepts = (targetStage.subjects || []).length;
+    const totalProjects = (targetStage.projects || []).length;
+
+    const currentConcepts = updatedConcepts !== undefined ? updatedConcepts : (conceptProgress[stageId] || []);
+    const currentProjects = updatedProjects !== undefined ? updatedProjects : (projectProgress[stageId] || []);
+
+    if (currentConcepts.length === totalConcepts && currentProjects.length === totalProjects && !completedStages.includes(stageId)) {
+      setTimeout(() => toggleStage(stageId, stageIndex), 50);
+    }
+  };
+
   const toggleConcept = (stageId: string, stageIndex: number, concept: string, totalConcepts: number) => {
     if (stageIndex > completedStages.length) {
       showToast("Please complete the previous stages first!");
@@ -740,9 +761,7 @@ export default function RoadmapView({
         next = [...current, concept];
       }
 
-      if (next.length === totalConcepts && !completedStages.includes(stageId)) {
-        setTimeout(() => toggleStage(stageId, stageIndex), 50);
-      }
+      checkStageCompletion(stageId, stageIndex, next, undefined);
 
       return { ...prev, [stageId]: next };
     });
@@ -762,8 +781,51 @@ export default function RoadmapView({
       } else {
         next = [...current, project];
       }
+
+      checkStageCompletion(stageId, stageIndex, undefined, next);
+
       return { ...prev, [stageId]: next };
     });
+  };
+
+  const handleMarkIncomplete = async (stageId: string, stageIndex: number) => {
+    try {
+      // 1. Remove this stage from completedStages state and db
+      const updatedStages = completedStages.filter(id => id !== stageId);
+      setCompletedStages(updatedStages);
+      await dbService.removeCompletedStage(user.id, stageId);
+
+      // 2. Clear progress for both concepts and projects of this stage in state and localStorage
+      setConceptProgress(prev => {
+        const next = { ...prev };
+        delete next[stageId];
+        localStorage.setItem('kalamspark_concept_progress', JSON.stringify(next));
+        return next;
+      });
+
+      setProjectProgress(prev => {
+        const next = { ...prev };
+        delete next[stageId];
+        localStorage.setItem('kalamspark_project_progress', JSON.stringify(next));
+        return next;
+      });
+
+      // 3. Revert user.currentStageIndex if the reverted stage index is lower or equal
+      if (user.currentStageIndex > stageIndex) {
+        const updatedUser = { ...user, currentStageIndex: stageIndex };
+        setUser(updatedUser);
+        await dbService.saveUser(updatedUser);
+      }
+
+      // 4. Reset active stage index to this one so it opens
+      setActiveStageIndex(stageIndex);
+      if (onStageAdvance) onStageAdvance(stageIndex);
+
+      showToast("Stage completion undone. All concepts and projects have been reset.");
+    } catch (err) {
+      console.error("Failed to mark stage as incomplete:", err);
+      showToast("Failed to reset stage.");
+    }
   };
 
   if (loading) {
@@ -954,11 +1016,31 @@ export default function RoadmapView({
                         <p className={`roadmap-stage-desc text-sm mt-1.5 leading-relaxed line-clamp-2 ${isLight ? 'text-amber-800/80' : 'text-gold-300/40'}`}>{stage.description}</p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        {isCompleted && (
-                          <span className="text-xs text-purple-400 font-semibold px-3 py-1.5 rounded-xl"
-                            style={{ background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.25)' }}>
+                        {isCompleted ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMarkIncomplete(stage.id, idx);
+                            }}
+                            className="text-xs text-purple-400 hover:text-red-400 font-semibold px-3 py-1.5 rounded-xl border border-purple-500/20 hover:border-red-500/30 transition-all duration-200 cursor-pointer bg-purple-500/10 hover:bg-red-500/10"
+                            title="Click to mark stage as incomplete"
+                          >
                             ✓ Completed
-                          </span>
+                          </button>
+                        ) : (
+                          idx <= completedStages.length && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveStageIndex(idx);
+                                if (onStageAdvance) onStageAdvance(idx);
+                                showToast("Complete all learn concepts and projects to complete this stage!");
+                              }}
+                              className="text-xs text-gold-400/80 font-semibold px-3 py-1.5 rounded-xl transition-all cursor-pointer bg-gold-500/5 hover:bg-gold-500/15 border border-gold-500/20"
+                            >
+                              Not Completed
+                            </button>
+                          )
                         )}
                       </div>
                     </div>

@@ -852,11 +852,12 @@ const SidebarItem = ({
 
 /* ── Main App Content ── */
 const AppContent = ({
-  user, setUser, setShowSplash,
+  user, setUser, setShowSplash, setSessionLoading,
 }: {
   user: UserProfile;
   setUser: React.Dispatch<React.SetStateAction<UserProfile>>;
   setShowSplash: React.Dispatch<React.SetStateAction<boolean>>;
+  setSessionLoading: React.Dispatch<React.SetStateAction<boolean>>;
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -869,6 +870,13 @@ const AppContent = ({
     const unsub = offlineSyncService.onQueueChange((count) => setPendingSyncCount(count));
     return unsub;
   }, []);
+
+  // Trigger auto-sync flush on startup and whenever we go online
+  useEffect(() => {
+    if (isOnline) {
+      offlineSyncService.flush().catch(err => console.warn('[App] Auto-sync flush on online status:', err));
+    }
+  }, [isOnline]);
 
   // Track online/offline status for UI indicator
   useEffect(() => {
@@ -1182,7 +1190,7 @@ const AppContent = ({
           <div className="absolute top-20 right-10 w-[400px] h-[400px] bg-purple-700/5 blur-[120px] rounded-full pointer-events-none" />
           <div className="p-5 lg:p-8 page-transition pb-28 lg:pb-10">
             <Routes>
-              <Route path="/" element={<Dashboard user={user} isLight={isLight} />} />
+              <Route path="/" element={<Dashboard user={user} />} />
               <Route
                 path="/roadmap"
                 element={
@@ -1207,18 +1215,17 @@ const AppContent = ({
 
                 }
               />
-              <Route path="/resources" element={<Resources user={user} isLight={isLight} />} />
+              <Route path="/resources" element={<Resources user={user} />} />
               <Route
                 path="/revision"
                 element={
                   <RevisionEngine
                     user={user}
-                    isLight={isLight}
                     onXpGain={(amount: number) => setUser((prev) => ({ ...prev, xp: (prev.xp || 0) + amount }))}
                   />
                 }
               />
-              <Route path="/opportunities" element={<Opportunities user={user} isLight={isLight} />} />
+              <Route path="/opportunities" element={<Opportunities user={user} />} />
               <Route path="/filespeaker" element={<FileSpeaker user={user} setUser={setUser} isLight={isLight} />} />
               <Route path="/mentor" element={<MentorChat user={user} isLight={isLight} />} />
               <Route path="*" element={<Navigate to="/" />} />
@@ -1478,6 +1485,12 @@ export default function App() {
     const systemTheme = prefersDark ? 'dark' : 'light';
     return {
       id: '', // Will be set by Supabase
+      name: '',
+      email: '',
+      branch: '',
+      year: '',
+      dream: '',
+      educationLevel: '',
       isAuthenticated: false,
       onboardingComplete: false,
       currentStageIndex: 0,
@@ -2043,7 +2056,7 @@ export default function App() {
       {/* Inject light theme globally so splash + login pages are also styled */}
       {user.settings?.theme === 'light' && <style>{LIGHT_THEME_CSS}</style>}
       <Router>
-        <AppContent user={user} setUser={setUser} setShowSplash={setShowSplash} />
+        <AppContent user={user} setUser={setUser} setShowSplash={setShowSplash} setSessionLoading={setSessionLoading} />
       </Router>
     </>
   );

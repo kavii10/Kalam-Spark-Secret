@@ -295,6 +295,20 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Stop TTS on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -479,93 +493,137 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
   ];
 
   /* ── Message Actions ── */
-  const handleReadAloud = (idx: number, text: string) => {
+  const fallbackToSpeechSynthesis = (idx: number, text: string, lang: string) => {
     if ('speechSynthesis' in window) {
-      if (speakingIdx === idx && window.speechSynthesis.speaking) {
-        window.speechSynthesis.cancel();
-        setSpeakingIdx(null);
-        return;
-      }
-      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text.replace(/[*_#`]/g, ''));
+      utterance.lang = lang;
 
-      // Add a small delay after cancel to allow the speech engine to reset
-      setTimeout(() => {
-        const utterance = new SpeechSynthesisUtterance(text.replace(/[*_#`]/g, ''));
-        const currentLang = getCurrentLang() || 'en';
-        const langMap: Record<string, string> = { 'en': 'en-US', 'ta': 'ta-IN', 'hi': 'hi-IN' };
-        
-        let lang = langMap[currentLang] || 'en-US';
-        // Auto-detect text language based on unicode ranges if the text contains native scripts
-        if (/[\u0B80-\u0BFF]/.test(text)) lang = 'ta-IN'; // Tamil
-        else if (/[\u0900-\u097F]/.test(text)) lang = 'hi-IN'; // Hindi/Marathi
-        else if (/[\u0C00-\u0C7F]/.test(text)) lang = 'te-IN'; // Telugu
-        else if (/[\u0C80-\u0CFF]/.test(text)) lang = 'kn-IN'; // Kannada
-        else if (/[\u0D00-\u0D7F]/.test(text)) lang = 'ml-IN'; // Malayalam
-        else if (/[\u0980-\u09FF]/.test(text)) lang = 'bn-IN'; // Bengali
-        
-        utterance.lang = lang;
-
-        const doSpeak = () => {
-          // Explicitly attach the voice object (browsers often ignore the 'lang' string)
-          const voices = window.speechSynthesis.getVoices();
-          if (voices.length > 0) {
-            // Try exact match first (e.g. 'ta-IN'), then broad match (e.g. 'ta')
-            const voice = voices.find(v => v.lang === lang) || voices.find(v => v.lang.startsWith(lang.split('-')[0]));
-            if (voice) utterance.voice = voice;
-          }
-          utterance.onend = () => setSpeakingIdx(null);
-          utterance.onerror = (e) => {
-            console.warn('[MentorChat TTS] TTS voice error, retrying with default voice:', e);
-            if (e.error === 'interrupted' || e.error === 'canceled') {
-              setSpeakingIdx(null);
-              return;
-            }
-            if (utterance.voice) {
-              const fallback = new SpeechSynthesisUtterance(text.replace(/[*_#`]/g, ''));
-              fallback.lang = utterance.lang;
-              fallback.onend = () => setSpeakingIdx(null);
-              fallback.onerror = (fe) => {
-                if (fe.error === 'interrupted' || fe.error === 'canceled') {
-                  setSpeakingIdx(null);
-                  return;
-                }
-                setSpeakingIdx(null);
-                alert("Speech Synthesis (Read Aloud) failed. Please check if your system volume is turned up, an audio output device is connected, and Speech/TTS voices are installed in your OS settings.");
-              };
-              window.speechSynthesis.speak(fallback);
-            } else {
-              setSpeakingIdx(null);
-              alert("Speech Synthesis (Read Aloud) failed. Please check if your system volume is turned up, an audio output device is connected, and Speech/TTS voices are installed in your OS settings.");
-            }
-          };
-          window.speechSynthesis.speak(utterance);
-          setSpeakingIdx(idx);
-        };
-
-        // On Android WebView, voices may not be loaded yet — use onvoiceschanged or timeout fallback
+      const doSpeak = () => {
+        // Explicitly attach the voice object (browsers often ignore the 'lang' string)
         const voices = window.speechSynthesis.getVoices();
         if (voices.length > 0) {
-          doSpeak();
-        } else {
-          // Track whether we've already spoken to avoid double-call (race between
-          // onvoiceschanged and setTimeout both triggering doSpeak)
-          let alreadySpoken = false;
-          const safeSpeak = () => {
-            if (alreadySpoken) return;
-            alreadySpoken = true;
-            doSpeak();
-          };
-          window.speechSynthesis.onvoiceschanged = () => {
-            window.speechSynthesis.onvoiceschanged = null;
-            safeSpeak();
-          };
-          // Fallback: speak without a specific voice after 600ms
-          setTimeout(() => {
-            if (!window.speechSynthesis.speaking) safeSpeak();
-          }, 600);
+          // Try exact match first (e.g. 'ta-IN'), then broad match (e.g. 'ta')
+          const voice = voices.find(v => v.lang === lang) || voices.find(v => v.lang.startsWith(lang.split('-')[0]));
+          if (voice) utterance.voice = voice;
         }
-      }, 100);
+        utterance.onend = () => setSpeakingIdx(null);
+        utterance.onerror = (e) => {
+          console.warn('[MentorChat TTS] TTS voice error, retrying with default voice:', e);
+          if (e.error === 'interrupted' || e.error === 'canceled') {
+            setSpeakingIdx(null);
+            return;
+          }
+          if (utterance.voice) {
+            const fallback = new SpeechSynthesisUtterance(text.replace(/[*_#`]/g, ''));
+            fallback.lang = utterance.lang;
+            fallback.onend = () => setSpeakingIdx(null);
+            fallback.onerror = (fe) => {
+              if (fe.error === 'interrupted' || fe.error === 'canceled') {
+                setSpeakingIdx(null);
+                return;
+              }
+              setSpeakingIdx(null);
+              alert("Speech Synthesis (Read Aloud) failed. Please check if your system volume is turned up, an audio output device is connected, and Speech/TTS voices are installed in your OS settings.");
+            };
+            window.speechSynthesis.speak(fallback);
+          } else {
+            setSpeakingIdx(null);
+            alert("Speech Synthesis (Read Aloud) failed. Please check if your system volume is turned up, an audio output device is connected, and Speech/TTS voices are installed in your OS settings.");
+          }
+        };
+        window.speechSynthesis.speak(utterance);
+        setSpeakingIdx(idx);
+      };
+
+      // On Android WebView, voices may not be loaded yet — use onvoiceschanged or timeout fallback
+      const voices = window.speechSynthesis.getVoices();
+      if (voices.length > 0) {
+        doSpeak();
+      } else {
+        // Track whether we've already spoken to avoid double-call (race between
+        // onvoiceschanged and setTimeout both triggering doSpeak)
+        let alreadySpoken = false;
+        const safeSpeak = () => {
+          if (alreadySpoken) return;
+          alreadySpoken = true;
+          doSpeak();
+        };
+        window.speechSynthesis.onvoiceschanged = () => {
+          window.speechSynthesis.onvoiceschanged = null;
+          safeSpeak();
+        };
+        // Fallback: speak without a specific voice after 600ms
+        setTimeout(() => {
+          if (!window.speechSynthesis.speaking) safeSpeak();
+        }, 600);
+      }
     }
+  };
+
+  const handleReadAloud = async (idx: number, text: string) => {
+    // 1. If currently speaking this message, stop speaking
+    if (speakingIdx === idx) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      setSpeakingIdx(null);
+      return;
+    }
+
+    // 2. Stop any active playback
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+
+    // 3. Resolve language
+    const currentLang = getCurrentLang() || 'en';
+    const langMap: Record<string, string> = { 'en': 'en-US', 'ta': 'ta-IN', 'hi': 'hi-IN' };
+    let lang = langMap[currentLang] || 'en-US';
+    // Auto-detect text language based on unicode ranges if the text contains native scripts
+    if (/[\u0B80-\u0BFF]/.test(text)) lang = 'ta-IN'; // Tamil
+    else if (/[\u0900-\u097F]/.test(text)) lang = 'hi-IN'; // Hindi/Marathi
+    else if (/[\u0C00-\u0C7F]/.test(text)) lang = 'te-IN'; // Telugu
+    else if (/[\u0C80-\u0CFF]/.test(text)) lang = 'kn-IN'; // Kannada
+    else if (/[\u0D00-\u0D7F]/.test(text)) lang = 'ml-IN'; // Malayalam
+    else if (/[\u0980-\u09FF]/.test(text)) lang = 'bn-IN'; // Bengali
+
+    const backendUrl = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      ? 'http://localhost:8000'
+      : '';
+
+    // 4. Try high-quality backend edge-tts first if on desktop/localhost
+    if (backendUrl) {
+      try {
+        setSpeakingIdx(idx);
+        const cleanText = text.replace(/[*_#`]/g, '');
+        const audioUrl = `${backendUrl}/api/tts?text=${encodeURIComponent(cleanText)}&lang=${encodeURIComponent(lang)}`;
+        const audio = new Audio(audioUrl);
+        audioRef.current = audio;
+        audio.onended = () => {
+          setSpeakingIdx(null);
+          audioRef.current = null;
+        };
+        audio.onerror = (e) => {
+          console.warn('[MentorChat] Backend TTS audio error, falling back to Web Speech API', e);
+          fallbackToSpeechSynthesis(idx, text, lang);
+        };
+        await audio.play();
+        return;
+      } catch (err) {
+        console.warn('[MentorChat] Failed to play backend TTS, falling back to Web Speech API', err);
+      }
+    }
+
+    // 5. Fallback to Web Speech API
+    fallbackToSpeechSynthesis(idx, text, lang);
   };
 
   const handleShareMsg = (text: string) => {

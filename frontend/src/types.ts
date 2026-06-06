@@ -105,6 +105,23 @@ export interface UserProfile {
     states: Record<string, any>;
     checked: string[];
   };
+  podcasts?: PodcastRecord[];
+}
+
+export interface PodcastRecord {
+  id: string;
+  sourceTitle: string;
+  topic: string;
+  host1: string;
+  host2: string;
+  language: string;
+  languageName: string;
+  audioFilename: string;
+  durationEst: string;
+  linesCount: number;
+  createdAt: number;
+  script: string;
+  lines: { speaker: string; text: string }[];
 }
 
 export interface HeroStory {

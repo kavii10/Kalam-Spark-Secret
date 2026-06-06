@@ -1,15 +1,16 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   Upload, Link, FileText, MessageSquare, Zap, Headphones,
-  ChevronRight, Loader2, Play, Pause, Download, X,
+  ChevronRight, Loader2, Play, Pause, Download, X, Square,
   BookOpen, Lightbulb, HelpCircle, Target, FlaskConical, BookMarked,
   Plus, Volume2, SkipBack, SkipForward, Send, Pencil, Mic,
   Globe, Library, Languages, Clock, Trash2
 } from 'lucide-react';
-import { UserProfile } from '../types';
+import { UserProfile, PodcastRecord } from '../types';
 import { getCurrentLang } from '../i18n';
 import { summarizeWebpage, askDocumentRag, transformDocument, generateText } from '../services/geminiService';
 import { networkService } from '../services/networkService';
+import { dbService } from '../services/dbService';
 import { llamaPlugin } from '../services/llamaPlugin';
 import { Capacitor } from '@capacitor/core';
 
@@ -33,23 +34,6 @@ interface Source {
 }
 interface ChatMsg { role: 'user' | 'ai'; text: string; }
 interface TransformResult { type: string; label: string; result: string; }
-
-/** Saved podcast entry for the library */
-interface PodcastRecord {
-  id: string;
-  sourceTitle: string;
-  topic: string;
-  host1: string;
-  host2: string;
-  language: string;
-  languageName: string;
-  audioFilename: string;
-  durationEst: string;
-  linesCount: number;
-  createdAt: number;
-  script: string;
-  lines: { speaker: string; text: string }[];
-}
 
 /* --- Supported podcast languages --- */
 const PODCAST_LANGUAGES = [
@@ -1024,11 +1008,27 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
   const recognitionRef = useRef<any>(null);
 
   // Podcast library: persisted list of all generated podcasts
+  const podcastAbortControllerRef = useRef<AbortController | null>(null);
   const [podcastLibrary, setPodcastLibrary] = useState<PodcastRecord[]>(() => {
+    if (user.podcasts && user.podcasts.length > 0) return user.podcasts;
     try { return JSON.parse(localStorage.getItem('fs_podcast_library') || '[]'); } catch { return []; }
   });
   const [showLibrary, setShowLibrary] = useState(false);
-  useEffect(() => { localStorage.setItem('fs_podcast_library', JSON.stringify(podcastLibrary)); }, [podcastLibrary]);
+
+  // Sync incoming database updates back to local state
+  useEffect(() => {
+    if (user.podcasts && JSON.stringify(user.podcasts) !== JSON.stringify(podcastLibrary)) {
+      setPodcastLibrary(user.podcasts);
+    }
+  }, [user.podcasts]);
+
+  const savePodcastsToUser = (newLib: PodcastRecord[]) => {
+    setPodcastLibrary(newLib);
+    const updatedUser = { ...user, podcasts: newLib };
+    setUser(updatedUser);
+    dbService.saveUser(updatedUser).catch(err => console.error("[FileSpeaker] Failed to save user podcasts:", err));
+    localStorage.setItem('fs_podcast_library', JSON.stringify(newLib));
+  };
 
   const [downloadingIds, setDownloadingIds] = useState<Record<string, boolean>>({});
 
@@ -1521,10 +1521,21 @@ Be accurate and concise. Never invent facts.`;
     }
   };
 
+  const handleStopPodcastGeneration = () => {
+    if (podcastAbortControllerRef.current) {
+      podcastAbortControllerRef.current.abort();
+      podcastAbortControllerRef.current = null;
+    }
+    setGeneratingPodcast(false);
+  };
+
   /* ── Podcast ── */
   const handleGeneratePodcast = async () => {
     if (!activeSource || generatingPodcast) return;  // topic is now optional
     setGeneratingPodcast(true);
+    const controller = new AbortController();
+    podcastAbortControllerRef.current = controller;
+
     const sid = activeSource.source_id;
     patchState(sid, { podcast: null });
     try {
@@ -1533,6 +1544,7 @@ Be accurate and concise. Never invent facts.`;
         try {
           const res  = await fetch(`${BACKEND}/api/filespeaker/podcast`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
             body: JSON.stringify({
               source_id: sid, source_text: activeSource.text || activeSource.preview,
               topic: podcastTopic, host1_name: host1Name, host2_name: host2Name,
@@ -1543,6 +1555,7 @@ Be accurate and concise. Never invent facts.`;
           });
           if (res.ok) {
             const data = await res.json();
+            if (controller.signal.aborted) return;
             patchState(sid, { podcast: data });
 
             // Save to Podcast Library
@@ -1561,15 +1574,18 @@ Be accurate and concise. Never invent facts.`;
               script: data.script || '',
               lines: data.lines || [],
             };
-            setPodcastLibrary(prev => [record, ...prev.slice(0, 49)]); // keep max 50
+            savePodcastsToUser([record, ...podcastLibrary.slice(0, 49)]); // keep max 50
             return;
           } else {
             console.warn('[FileSpeaker] Backend podcast generation failed, status code:', res.status);
           }
-        } catch (e) {
+        } catch (e: any) {
+          if (e.name === 'AbortError') return;
           console.warn('[FileSpeaker] Backend podcast generation failed, falling back to offline...', e);
         }
       }
+
+      if (controller.signal.aborted) return;
 
       // ── Mobile / No-backend path: generate script via LLM + play with Web Speech API ──
       const lengthInstruction = podcastLength === 'short' ? '6-8 dialogue exchanges' : podcastLength === 'long' ? '18-24 dialogue exchanges' : '12-15 dialogue exchanges';
@@ -1600,9 +1616,12 @@ Each line: 1-3 natural sentences. Conversational and educational.`;
       try {
         scriptText = await generateText({ prompt, systemInstruction, responseMimeType: 'application/json' });
       } catch (e) {
+        if (controller.signal.aborted) return;
         console.error('[Podcast] LLM generation failed:', e);
         throw new Error('Could not generate podcast script. Check your internet connection.');
       }
+
+      if (controller.signal.aborted) return;
 
       // Parse the script JSON
       let lines: { speaker: string; text: string }[] = [];
@@ -1626,6 +1645,8 @@ Each line: 1-3 natural sentences. Conversational and educational.`;
           }
         }
       }
+
+      if (controller.signal.aborted) return;
 
       if (!lines || lines.length === 0) {
         throw new Error('Generated podcast script is empty. Please try again.');
@@ -1670,6 +1691,8 @@ Each line: 1-3 natural sentences. Conversational and educational.`;
         }
       }
 
+      if (controller.signal.aborted) return;
+
       // Save to Podcast Library
       const record: PodcastRecord = {
         id: podcastData.podcast_id,
@@ -1686,10 +1709,16 @@ Each line: 1-3 natural sentences. Conversational and educational.`;
         script,
         lines,
       };
-      setPodcastLibrary(prev => [record, ...prev.slice(0, 49)]);
+      savePodcastsToUser([record, ...podcastLibrary.slice(0, 49)]);
 
-    } catch (e: any) { alert(`Podcast failed: ${(e as any).message}`); }
-    finally { setGeneratingPodcast(false); }
+    } catch (e: any) { 
+      if (e.name === 'AbortError' || controller.signal.aborted) return;
+      alert(`Podcast failed: ${(e as any).message}`); 
+    }
+    finally { 
+      setGeneratingPodcast(false); 
+      podcastAbortControllerRef.current = null;
+    }
   };
 
 
@@ -2399,11 +2428,10 @@ The generated content must be extremely detailed, educational, and structured, s
                     <div className="flex flex-col sm:flex-row gap-4">
                       {/* Topic Input */}
                       <div className="flex-1">
-                        <label className={`text-[11px] uppercase tracking-wider mb-1.5 block ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>Focus Angle <span className="normal-case text-[10px] opacity-60">(optional)</span></label>
+                        <label className={`text-[11px] uppercase tracking-wider mb-1.5 block ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>Title <span className="normal-case text-[10px] opacity-60">(optional)</span></label>
                         <input value={podcastTopic} onChange={e => setPodcastTopic(e.target.value)}
-                          placeholder={`Optional: e.g. "Key challenges" — leave blank to cover full doc`}
+                          placeholder="Enter podcast title"
                           className={`w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-violet-500/40 ${isLight ? 'bg-white border-zinc-300 text-zinc-800 placeholder:text-zinc-400' : 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-600'}`} />
-                        <p className={`text-[10px] mt-1 ${isLight ? 'text-zinc-400' : 'text-zinc-600'}`}>Podcast content is always based on your uploaded document</p>
                       </div>
 
                       {/* Language Selector Dropdown */}
@@ -2679,10 +2707,21 @@ The generated content must be extremely detailed, educational, and structured, s
                         </div>
                       </div>
                     </div>
-                    <button onClick={handleGeneratePodcast} disabled={generatingPodcast}
-                      className="w-full bg-violet-600 hover:bg-violet-500 text-white font-bold py-3 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2.5">
-                      {generatingPodcast ? <><Loader2 size={16} className="animate-spin" /> Generating Podcast... (2-5 min)</> : <><Headphones size={16} /> Generate Podcast</>}
-                    </button>
+                    {generatingPodcast ? (
+                      <div className="flex gap-2 w-full">
+                        <button disabled className="flex-1 bg-violet-600/50 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2.5">
+                          <Loader2 size={16} className="animate-spin" /> Generating... (2-5 min)
+                        </button>
+                        <button onClick={handleStopPodcastGeneration} className="bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-6 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer">
+                          <Square size={13} fill="currentColor" /> Stop
+                        </button>
+                      </div>
+                    ) : (
+                      <button onClick={handleGeneratePodcast}
+                        className="w-full bg-violet-600 hover:bg-violet-500 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2.5 cursor-pointer">
+                        <Headphones size={16} /> Generate Podcast
+                      </button>
+                    )}
                     {generatingPodcast && <p className={`text-[11px] text-center ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>Gemma4 is writing the script and TTS is synthesizing audio...☕</p>}
                   </div>
 
@@ -2858,7 +2897,7 @@ The generated content must be extremely detailed, educational, and structured, s
                         </p>
                       </div>
                       <button
-                        onClick={() => setPodcastLibrary(prev => prev.filter(p => p.id !== rec.id))}
+                        onClick={() => savePodcastsToUser(podcastLibrary.filter(p => p.id !== rec.id))}
                         title="Delete from library"
                         className={`opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-all ${
                           isLight ? 'hover:bg-red-50 text-red-400 hover:text-red-600' : 'hover:bg-red-500/10 text-zinc-600 hover:text-red-400'

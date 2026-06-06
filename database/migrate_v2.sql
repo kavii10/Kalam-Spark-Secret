@@ -15,6 +15,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS motivation           TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS rewards              JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS settings             JSONB;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS file_speaker_data    JSONB;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS podcasts             JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS linked_subject TEXT;
 
 -- STEP 2: Fix corrupted rows where onboarding_complete got reset to false

@@ -35,7 +35,7 @@ load_dotenv()  # Load .env from backend directory
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Query, WebSocket, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -1103,7 +1103,7 @@ async def fs_transform(req: FSTransformRequest):
 
 
 @app.post("/api/filespeaker/podcast")
-async def fs_podcast(req: FSPodcastRequest):
+async def fs_podcast(req: FSPodcastRequest, request: Request):
     """Generate a full AI podcast from a source document in the selected language."""
     from file_speaker import generate_full_podcast
     try:
@@ -1115,6 +1115,7 @@ async def fs_podcast(req: FSPodcastRequest):
             req.host1_name, req.host2_name,
             req.host1_voice, req.host2_voice,
             req.tone, req.length, req.language,
+            request=request,
         )
     except RuntimeError as e:
         raise HTTPException(500, str(e))
@@ -1159,6 +1160,49 @@ async def fs_serve_audio(filename: str):
     if not audio_path.exists():
         raise HTTPException(404, "Audio file not found.")
     return FileResponse(str(audio_path), media_type="audio/mpeg", filename=filename)
+
+
+@app.get("/api/tts")
+async def api_tts(text: str, lang: str = "en"):
+    """Generate TTS audio using edge-tts and return the audio file."""
+    import uuid
+    import edge_tts
+    from file_speaker import AUDIO_DIR, LANGUAGE_VOICES
+    
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="Text is empty.")
+    
+    lang_code = lang.split('-')[0].lower()
+    voice_entry = LANGUAGE_VOICES.get(lang_code, LANGUAGE_VOICES["en"])
+    voice = voice_entry.get("host1", "en-US-ChristopherNeural")
+    
+    clean_text = text.strip()
+    filename = f"tts_{uuid.uuid4().hex}.mp3"
+    filepath = AUDIO_DIR / filename
+    
+    success = False
+    try:
+        communicate = edge_tts.Communicate(clean_text, voice)
+        await communicate.save(str(filepath))
+        success = True
+    except Exception as e:
+        print(f"[TTS Endpoint] edge-tts failed with voice {voice}: {e}")
+        
+    if not success:
+        # Fallback to gtts
+        try:
+            from gtts import gTTS
+            tts = gTTS(text=clean_text, lang=lang_code)
+            tts.save(str(filepath))
+            success = True
+            print(f"[TTS Endpoint] gTTS fallback succeeded for language: {lang_code}")
+        except Exception as ge:
+            print(f"[TTS Endpoint] gTTS fallback failed: {ge}")
+            
+    if not success:
+        raise HTTPException(status_code=500, detail="Could not generate speech audio.")
+        
+    return FileResponse(str(filepath), media_type="audio/mpeg", filename=filename)
 
 
 # ──────────────────────────────────────────────
