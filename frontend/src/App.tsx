@@ -544,10 +544,38 @@ const LIGHT_THEME_CSS = `
     background: #f9fafb !important;
     border-color: #e5e7eb !important;
   }
-  .flashcard-create-btn {
+  label.flashcard-create-btn {
     background: #ffffff !important;
     border-color: #d1d5db !important;
     color: #4b5563 !important;
+  }
+  /* Front-side button in light mode (Question) */
+  label.flashcard-create-btn.text-gold-400 {
+    background: #fff7ed !important;
+    border-color: rgba(249, 115, 22, 0.3) !important;
+    color: #c2410c !important;
+  }
+  label.flashcard-create-btn.text-gold-400:hover {
+    background: #ffedd5 !important;
+    border-color: rgba(249, 115, 22, 0.5) !important;
+  }
+  /* Back-side button in light mode (Answer) */
+  label.flashcard-create-btn.text-purple-400 {
+    background: #f5f3ff !important;
+    border-color: rgba(139, 92, 246, 0.3) !important;
+    color: #6d28d9 !important;
+  }
+  label.flashcard-create-btn.text-purple-400:hover {
+    background: #ede9fe !important;
+    border-color: rgba(139, 92, 246, 0.5) !important;
+  }
+  /* Attachment preview box in light mode */
+  .flashcard-create-box div.bg-white\\/10 {
+    background-color: #f1f5f9 !important;
+    border-color: #e2e8f0 !important;
+  }
+  .flashcard-create-box div.bg-black\\/40 {
+    background-color: #e2e8f0 !important;
   }
 
   /* ── Analytics Tab Calendar and Cards ── */
