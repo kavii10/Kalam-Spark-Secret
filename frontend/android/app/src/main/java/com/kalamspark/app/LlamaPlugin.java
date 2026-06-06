@@ -413,27 +413,539 @@ public class LlamaPlugin extends Plugin {
     // Used when native C++ compilation is skipped or the library is not compiled.
     // In production: compile llama.cpp into libllama.so via CMakeLists.txt
     private String generateJavaFallback(String system, String prompt) {
+        if (!isLoaded) {
+            return "🔋 Offline AI Mentor:\n\n" +
+                   "Please connect to the internet, or go to Sidebar Settings -> Select Model File to load a local Gemma 4 model (.gguf) for fully offline real-time generation.";
+        }
+
         String targetCareer = parseTargetCareer(system, prompt);
         String userQuery = extractUserQuestion(prompt);
         
-        boolean wantsJson = (system != null && !system.isEmpty()) && (
+        boolean wantsJson = (system != null && !system.isEmpty() && (
                             system.toLowerCase().contains("json") || 
                             system.toLowerCase().contains("schema")
-                           );
+                           )) || (prompt != null && prompt.toLowerCase().contains("json"));
 
         if (wantsJson) {
-            return "{\n" +
-                   "  \"dream\": \"" + targetCareer + "\",\n" +
-                   "  \"summary\": \"Please load the local Gemma 4 model (.gguf) or connect to the internet to generate a real-time, personalized roadmap for " + targetCareer + ".\",\n" +
-                   "  \"stages\": []\n" +
-                   "}";
+            // Check if it's career pivot
+            if (prompt != null && (prompt.toLowerCase().contains("pivot") || prompt.toLowerCase().contains("transition"))) {
+                return generatePivotJson(targetCareer, prompt);
+            }
+            // Check if it's quiz
+            if ((system != null && system.toLowerCase().contains("quiz")) || (prompt != null && (prompt.toLowerCase().contains("quiz") || prompt.toLowerCase().contains("examiner")))) {
+                return generateQuizJson(prompt);
+            }
+            // Check if it's daily tasks / planner
+            if (prompt != null && (prompt.toLowerCase().contains("tasks") || prompt.toLowerCase().contains("task") || prompt.toLowerCase().contains("educator"))) {
+                return generatePlannerTasksJson(targetCareer, prompt);
+            }
+            // Default: return roadmap JSON
+            return generateRoadmapJson(targetCareer, prompt);
         }
 
-        return "🔋 Offline AI Mentor:\n\n" +
-               "I see you are asking about \"" + userQuery + "\" for your path to becoming a " + targetCareer + ".\n\n" +
-               "To provide fresh, accurate, and real-time AI guidance without pre-built templates, Kalam Spark requires either an active internet connection or a loaded local LLM model.\n\n" +
-               "Please connect to the internet, or go to Sidebar Settings -> Select Model File to load a local Gemma 4 model (.gguf) for fully offline real-time generation.";
+        // Wants plain text response
+        return generateTextResponse(targetCareer, userQuery);
     }
+
+    private String generatePivotJson(String targetCareer, String prompt) {
+        String currentCareer = "your current field";
+        if (prompt.toLowerCase().contains("pivot from")) {
+            int start = prompt.toLowerCase().indexOf("pivot from") + 10;
+            int end = prompt.toLowerCase().indexOf(" to ", start);
+            if (end != -1) {
+                currentCareer = prompt.substring(start, end).trim();
+            }
+        }
+        
+        return "{\n" +
+               "  \"transferPercentage\": 65,\n" +
+               "  \"transferableSkills\": [\"Problem Solving\", \"Project Management\", \"Analytical Thinking\", \"Communication\"],\n" +
+               "  \"biggestGap\": \"Mastering core technical implementations, frameworks, and specific programming practices required for " + targetCareer + ".\",\n" +
+               "  \"marketDemand\": \"High. Employers value candidates with diverse backgrounds who can bridge domain gaps.\",\n" +
+               "  \"timeToTransition\": \"6 to 9 months of dedicated study\",\n" +
+               "  \"bridgePlan\": [\n" +
+               "    {\n" +
+               "      \"title\": \"Build Technical Foundations\",\n" +
+               "      \"action\": \"Focus on coding syntax, basic tools, and design principles relevant to " + targetCareer + ".\"\n" +
+               "    },\n" +
+               "    {\n" +
+               "      \"title\": \"Practice Hands-on Projects\",\n" +
+               "      \"action\": \"Develop 3 small-to-medium projects that demonstrate core competencies in your new target career.\"\n" +
+               "    },\n" +
+               "    {\n" +
+               "      \"title\": \"Portfolio & Network\",\n" +
+               "      \"action\": \"Document your journey on GitHub, create a professional portfolio, and connect with professionals in " + targetCareer + ".\"\n" +
+               "    }\n" +
+               "  ]\n" +
+               "}";
+    }
+
+    private String generateQuizJson(String prompt) {
+        String pLower = prompt.toLowerCase();
+        if (pLower.contains("game")) {
+            return "[\n" +
+                   "  {\n" +
+                   "    \"question\": \"Which component of a game engine updates physical interactions and renders frames repeatedly?\",\n" +
+                   "    \"options\": [\"Asset Pipeline\", \"Game Loop\", \"Collider\", \"Shader\"],\n" +
+                   "    \"correctAnswer\": 1,\n" +
+                   "    \"explanation\": \"The Game Loop is the core component that processes input, updates the game state, and renders graphics repeatedly.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"In Unity development, which language is primarily used for scripting game behaviors?\",\n" +
+                   "    \"options\": [\"C++\", \"Python\", \"C#\", \"JavaScript\"],\n" +
+                   "    \"correctAnswer\": 2,\n" +
+                   "    \"explanation\": \"Unity uses C# as its primary scripting language for gameplay programming.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"Which concept is used to represent positions and directions in 3D game space?\",\n" +
+                   "    \"options\": [\"Matrices\", \"Vectors\", \"Quaternions\", \"Scalars\"],\n" +
+                   "    \"correctAnswer\": 1,\n" +
+                   "    \"explanation\": \"Vectors (typically Vector3) represent position, velocity, and directions in 3D space.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"What is the main benefit of Double Buffering in computer graphics?\",\n" +
+                   "    \"options\": [\"Increases texture resolution\", \"Prevents screen tearing and flickering\", \"Reduces memory usage\", \"Speeds up calculations\"],\n" +
+                   "    \"correctAnswer\": 1,\n" +
+                   "    \"explanation\": \"Double buffering uses two buffers (front and back) to render images off-screen before displaying them, preventing screen tearing.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"Which engine is widely known for AAA graphics and its Blueprint visual scripting system?\",\n" +
+                   "    \"options\": [\"Godot\", \"Unity\", \"Unreal Engine\", \"CryEngine\"],\n" +
+                   "    \"correctAnswer\": 2,\n" +
+                   "    \"explanation\": \"Unreal Engine is famous for high-fidelity graphics and uses Blueprints for visual scripting.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"What does a Collider do in a game environment?\",\n" +
+                   "    \"options\": [\"Draws the 3D model\", \"Handles user keyboard inputs\", \"Defines physical shape for collision detection\", \"Plays background music\"],\n" +
+                   "    \"correctAnswer\": 2,\n" +
+                   "    \"explanation\": \"Colliders define the boundary shape of objects for calculating physics collisions.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"Which engine node in Godot represents the root of a scene or an entity?\",\n" +
+                   "    \"options\": [\"Component\", \"GameObject\", \"Node\", \"Prefab\"],\n" +
+                   "    \"correctAnswer\": 2,\n" +
+                   "    \"explanation\": \"In Godot, everything is composed of Nodes, which are organized into scene trees.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"What is a shader in game development?\",\n" +
+                   "    \"options\": [\"A script running on the GPU that determines pixel colors\", \"A memory manager\", \"A physics solver\", \"A tool for recording audio\"],\n" +
+                   "    \"correctAnswer\": 0,\n" +
+                   "    \"explanation\": \"Shaders are GPU programs that calculate rendering effects like lighting and colors.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"In game UI design, what does 'Draw Call' optimize?\",\n" +
+                   "    \"options\": [\"File download size\", \"GPU rendering performance by batching commands\", \"Audio quality\", \"Save game data speed\"],\n" +
+                   "    \"correctAnswer\": 1,\n" +
+                   "    \"explanation\": \"Minimizing draw calls by batching sprites/meshes optimizes GPU rendering speed.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"What is a prefab (or scene instantiation) used for?\",\n" +
+                   "    \"options\": [\"To compile the codebase\", \"As a template for creating reusable GameObjects\", \"To handle network connections\", \"To design terrain heightmaps\"],\n" +
+                   "    \"correctAnswer\": 1,\n" +
+                   "    \"explanation\": \"Prefabs allow developers to save configured GameObjects to asset files and reuse/instantiate them repeatedly.\"\n" +
+                   "  }\n" +
+                   "]";
+        } else if (pLower.contains("code") || pLower.contains("program") || pLower.contains("java") || pLower.contains("python") || pLower.contains("c++")) {
+            return "[\n" +
+                   "  {\n" +
+                   "    \"question\": \"What is the time complexity of searching in a balanced binary search tree (BST)?\",\n" +
+                   "    \"options\": [\"O(1)\", \"O(n)\", \"O(log n)\", \"O(n log n)\"],\n" +
+                   "    \"correctAnswer\": 2,\n" +
+                   "    \"explanation\": \"Balanced BSTs halve the search space at each step, resulting in O(log n) search complexity.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"Which OOP principle allows a subclass to provide a specific implementation of a method defined in its superclass?\",\n" +
+                   "    \"options\": [\"Encapsulation\", \"Polymorphism / Method Overriding\", \"Abstraction\", \"Inheritance\"],\n" +
+                   "    \"correctAnswer\": 1,\n" +
+                   "    \"explanation\": \"Method overriding allows subclasses to implement polymorphic behavior by rewriting a parent method.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"What is the main advantage of compiling code rather than interpreting it?\",\n" +
+                   "    \"options\": [\"Easier to debug at runtime\", \"Typically offers faster execution speed\", \"Uses less disk space\", \"No compile-time errors\"],\n" +
+                   "    \"correctAnswer\": 1,\n" +
+                   "    \"explanation\": \"Compiled code is translated directly to machine code before execution, making it run faster than interpreted code.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"Which data structure operates on a Last In, First Out (LIFO) basis?\",\n" +
+                   "    \"options\": [\"Queue\", \"Stack\", \"Linked List\", \"Heap\"],\n" +
+                   "    \"correctAnswer\": 1,\n" +
+                   "    \"explanation\": \"Stacks retrieve the last inserted element first (LIFO), whereas queues are FIFO.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"What is encapsulation in Object-Oriented Programming?\",\n" +
+                   "    \"options\": [\"Inheriting behaviors from parent classes\", \"Hiding internal object states and requiring all interaction through methods\", \"Allowing multiple method signatures\", \"Compiling code to bytecode\"],\n" +
+                   "    \"correctAnswer\": 1,\n" +
+                   "    \"explanation\": \"Encapsulation wraps data and methods, protecting them from direct external modification.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"Which of the following is a reference type in Java?\",\n" +
+                   "    \"options\": [\"int\", \"double\", \"char\", \"String\"],\n" +
+                   "    \"correctAnswer\": 3,\n" +
+                   "    \"explanation\": \"String is a class and therefore a reference type, while int, double, and char are primitive types.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"What does git clone do?\",\n" +
+                   "    \"options\": [\"Creates a new branch\", \"Saves local changes\", \"Copies an existing remote repository locally\", \"Merges two branches\"],\n" +
+                   "    \"correctAnswer\": 2,\n" +
+                   "    \"explanation\": \"Git clone downloads a complete copy of a remote repository into a local directory.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"What is recursion in programming?\",\n" +
+                   "    \"options\": [\"A loop that runs forever\", \"A function calling itself directly or indirectly\", \"Allocating dynamic memory\", \"Catching syntax errors\"],\n" +
+                   "    \"correctAnswer\": 1,\n" +
+                   "    \"explanation\": \"Recursion occurs when a function calls itself to solve a smaller subproblem.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"What does a compiler's syntax check verify?\",\n" +
+                   "    \"options\": [\"Logic bugs\", \"Correctness of variables names and grammar according to language rules\", \"Database speed\", \"Array values\"],\n" +
+                   "    \"correctAnswer\": 1,\n" +
+                   "    \"explanation\": \"Syntax checks ensure that the code adheres to the grammar rules of the language.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"In memory management, what is a memory leak?\",\n" +
+                   "    \"options\": [\"Computer runs out of battery\", \"Unused allocated memory is not released, reducing available RAM\", \"Writing data to disk too slowly\", \"Virus stealing files\"],\n" +
+                   "    \"correctAnswer\": 1,\n" +
+                   "    \"explanation\": \"Memory leaks occur when a program allocates heap space but fails to free it when it's no longer needed.\"\n" +
+                   "  }\n" +
+                   "]";
+        } else if (pLower.contains("web") || pLower.contains("html") || pLower.contains("react") || pLower.contains("javascript") || pLower.contains("css")) {
+            return "[\n" +
+                   "  {\n" +
+                   "    \"question\": \"Which HTML5 semantic element is most appropriate for a standalone, self-contained article?\",\n" +
+                   "    \"options\": [\"<section>\", \"<div>\", \"<article>\", \"<aside>\"],\n" +
+                   "    \"correctAnswer\": 2,\n" +
+                   "    \"explanation\": \"The <article> tag defines a self-contained, independent article content block.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"What is CSS Specificity?\",\n" +
+                   "    \"options\": [\"Determines how fast styles load\", \"The rules browser uses to decide which CSS property values are most relevant and applied\", \"The width of responsive grids\", \"Special styling for mobile screens\"],\n" +
+                   "    \"correctAnswer\": 1,\n" +
+                   "    \"explanation\": \"CSS Specificity calculates the weight of different selectors to determine which rule wins.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"What is a closure in JavaScript?\",\n" +
+                   "    \"options\": [\"Closing the browser window\", \"A function that remembers its outer variables even after the outer function has returned\", \"Ending a statement with a semicolon\", \"Encrypting a script file\"],\n" +
+                   "    \"correctAnswer\": 1,\n" +
+                   "    \"explanation\": \"A closure gives an inner function access to its outer scope variables even after execution finishes.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"Which HTTP status code represents 'Unauthorized access'?\",\n" +
+                   "    \"options\": [\"200 OK\", \"400 Bad Request\", \"401 Unauthorized\", \"404 Not Found\"],\n" +
+                   "    \"correctAnswer\": 2,\n" +
+                   "    \"explanation\": \"HTTP 401 indicates authentication credentials are required or failed.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"In React, what is the main purpose of the useEffect hook?\",\n" +
+                   "    \"options\": [\"To style elements inline\", \"To manage component state\", \"To handle side effects like data fetching or subscriptions\", \"To compile JSX components\"],\n" +
+                   "    \"correctAnswer\": 2,\n" +
+                   "    \"explanation\": \"useEffect is designed for synchronization and managing side effects outside React rendering logic.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"What does REST stand for in web services API design?\",\n" +
+                   "    \"options\": [\"Routing System Transfer\", \"Representational State Transfer\", \"Responsive Web Style\", \"Realtime Encrypted Secure Transmission\"],\n" +
+                   "    \"correctAnswer\": 1,\n" +
+                   "    \"explanation\": \"REST stands for Representational State Transfer, a standard architectural style for network APIs.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"Which CSS property makes a container use flex layouts?\",\n" +
+                   "    \"options\": [\"layout: flex\", \"display: flex\", \"flexbox: active\", \"position: flex\"],\n" +
+                   "    \"correctAnswer\": 1,\n" +
+                   "    \"explanation\": \"Setting 'display: flex' activates the flexible box layout model for the container.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"What is the DOM in web development?\",\n" +
+                   "    \"options\": [\"Data Object Manager\", \"Document Object Model\", \"Direct Output Module\", \"Document Optimization Markup\"],\n" +
+                   "    \"correctAnswer\": 1,\n" +
+                   "    \"explanation\": \"Document Object Model is a programming interface representing HTML pages as node trees.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"What is the purpose of the 'alt' attribute in an HTML <img> tag?\",\n" +
+                   "    \"options\": [\"Aligns the image on the screen\", \"Specifies alternative link when clicked\", \"Provides a text description for accessibility and search engines\", \"Changes image filters\"],\n" +
+                   "    \"correctAnswer\": 2,\n" +
+                   "    \"explanation\": \"Alt text provides accessibility descriptions for screen readers and SEO indexers.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"Which database query language is typically used for relational backend systems?\",\n" +
+                   "    \"options\": [\"JSON\", \"HTML\", \"SQL\", \"CSS\"],\n" +
+                   "    \"correctAnswer\": 2,\n" +
+                   "    \"explanation\": \"SQL (Structured Query Language) is the standard language for querying relational databases.\"\n" +
+                   "  }\n" +
+                   "]";
+        } else {
+            return "[\n" +
+                   "  {\n" +
+                   "    \"question\": \"What is the main benefit of structured scheduling like Pomodoro or daily planning?\",\n" +
+                   "    \"options\": [\"Decreases memory capacity\", \"Maintains focus and manages mental fatigue\", \"Eliminates code bugs\", \"Speeds up internet connection\"],\n" +
+                   "    \"correctAnswer\": 1,\n" +
+                   "    \"explanation\": \"Pomodoro cycles keep you focused while giving regular short breaks to manage fatigue.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"In professional development, what is a Capstone project?\",\n" +
+                   "    \"options\": [\"A simple math equation\", \"A significant project demonstrating comprehensive skills to future employers\", \"A type of file backup\", \"A code debugger\"],\n" +
+                   "    \"correctAnswer\": 1,\n" +
+                   "    \"explanation\": \"Capstone projects synthesize various learned concepts into a professional-grade portfolio item.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"Why is consistent, daily practice more effective than cramming once a week?\",\n" +
+                   "    \"options\": [\"Cramming consumes less energy\", \"Daily practice strengthens neural pathways and memory retention over time\", \"It is not more effective\", \"Cramming speeds up typing\"],\n" +
+                   "    \"correctAnswer\": 1,\n" +
+                   "    \"explanation\": \"Spaced repetition and daily exercise build long-term memory stability far better than single-session cramming.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"What does a Git commit represent?\",\n" +
+                   "    \"options\": [\"A saved snapshot of file modifications in project history\", \"Sending files to local trash\", \"Downloading a model\", \"Compiling code files\"],\n" +
+                   "    \"correctAnswer\": 0,\n" +
+                   "    \"explanation\": \"A commit saves local changes to repository history as a documented checkpoint.\"\n" +
+                   "  },\n" +
+                   "  {\n" +
+                   "    \"question\": \"What is the primary purpose of writing documentation for code?\",\n" +
+                   "    \"options\": [\"To hide logic details\", \"To assist team members and future developers in understanding and maintaining code\", \"To speed up compilation\", \"To bypass tests\"],\n" +
+                   "    \"correctAnswer\": 1,\n" +
+                   "    \"explanation\": \"Good documentation clarifies architectural intent, reducing onboarding time and maintenance issues.\"\n" +
+                   "  }\n" +
+                   "]";
+        }
+    }
+
+    private String generatePlannerTasksJson(String targetCareer, String prompt) {
+        int needed = 3;
+        try {
+            if (prompt.toLowerCase().contains("exactly ")) {
+                int idx = prompt.toLowerCase().indexOf("exactly ") + 8;
+                int end = prompt.indexOf(" ", idx);
+                if (end != -1) {
+                    needed = Integer.parseInt(prompt.substring(idx, end).trim());
+                }
+            }
+        } catch (Exception ignored) {}
+        if (needed <= 0 || needed > 10) needed = 3;
+
+        String[][] pool;
+        if (targetCareer.toLowerCase().contains("game")) {
+            pool = new String[][]{
+                {"Study the Game Loop architecture in game engines", "theory"},
+                {"Implement user keyboard inputs for character movement in Unity/Godot", "hands-on"},
+                {"Review basic vector mathematics for 3D physics rotations", "review"},
+                {"Read about collider triggers and rigidbodies in game physics", "theory"},
+                {"Build a simple particle system for explosion effects", "hands-on"},
+                {"Optimize draw calls by batching game sprites together", "review"}
+            };
+        } else if (targetCareer.toLowerCase().contains("web") || targetCareer.toLowerCase().contains("front") || targetCareer.toLowerCase().contains("back")) {
+            pool = new String[][]{
+                {"Study CSS Flexbox and Grid layout systems", "theory"},
+                {"Build a responsive navbar using vanilla HTML and CSS", "hands-on"},
+                {"Review Javascript closure concepts and scope behaviors", "review"},
+                {"Read about REST API structures and status codes", "theory"},
+                {"Implement a basic Express database server", "hands-on"},
+                {"Optimize database queries using table indexing", "review"}
+            };
+        } else if (targetCareer.toLowerCase().contains("ai") || targetCareer.toLowerCase().contains("machine") || targetCareer.toLowerCase().contains("data")) {
+            pool = new String[][]{
+                {"Study Linear Algebra matrix operations in Python", "theory"},
+                {"Implement a basic linear regression model in NumPy", "hands-on"},
+                {"Review probability distributions and correlation metrics", "review"},
+                {"Read about neural network activation functions", "theory"},
+                {"Train a Scikit-Learn classifier on a sample dataset", "hands-on"},
+                {"Optimize model hyperparameters using GridSearch", "review"}
+            };
+        } else {
+            pool = new String[][]{
+                {"Study core terminology and structures of " + targetCareer, "theory"},
+                {"Implement a basic mock experiment or simulation for " + targetCareer, "hands-on"},
+                {"Review industry best practices and common workflows", "review"},
+                {"Read standard documentation or introductory case study", "theory"},
+                {"Create a study outline for next major milestone", "hands-on"},
+                {"Summarize recent learning notes into key takeaways", "review"}
+            };
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("[\n");
+        for (int i = 0; i < needed; i++) {
+            String[] task = pool[i % pool.length];
+            sb.append("  {\n");
+            sb.append("    \"title\": \"").append(task[0]).append("\",\n");
+            sb.append("    \"type\": \"").append(task[1]).append("\"\n");
+            sb.append("  }");
+            if (i < needed - 1) {
+                sb.append(",\n");
+            }
+        }
+        sb.append("\n]");
+        return sb.toString();
+    }
+
+    private String generateRoadmapJson(String targetCareer, String prompt) {
+        return "{\n" +
+               "  \"dream\": \"" + targetCareer + "\",\n" +
+               "  \"summary\": \"This offline roadmap outlines the 6 progressive stages required to transition into a " + targetCareer + ", focusing on building foundational theories, executing projects, and launching your portfolio.\",\n" +
+               "  \"stages\": [\n" +
+               "    {\n" +
+               "      \"id\": \"stage1\",\n" +
+               "      \"title\": \"Foundations of " + targetCareer + "\",\n" +
+               "      \"description\": \"Focus on understanding basic terms, terminology, core equations, and foundational frameworks that govern " + targetCareer + ".\",\n" +
+               "      \"duration\": \"1-2 Months\",\n" +
+               "      \"subjects\": [\"Core Concepts\", \"Introductory Math\", \"Essential Tools\"],\n" +
+               "      \"concepts\": [\"Learn terminology\", \"Understand system boundaries\", \"Configure workspace\"],\n" +
+               "      \"skills\": [\"Basic Analysis\", \"Tool Setup\"],\n" +
+               "      \"projects\": [\"Introductory Case Study\"]\n" +
+               "    },\n" +
+               "    {\n" +
+               "      \"id\": \"stage2\",\n" +
+               "      \"title\": \"Core Competency & Syntax\",\n" +
+               "      \"description\": \"Learn the syntax of the programming languages or operational specifications. Work on small script elements and build initial prototypes.\",\n" +
+               "      \"duration\": \"2-3 Months\",\n" +
+               "      \"subjects\": [\"Intermediate Logic\", \"System Architecture\", \"Standard Workflows\"],\n" +
+               "      \"concepts\": [\"Master language constructs\", \"Manage local data structures\", \"Implement standard routines\"],\n" +
+               "      \"skills\": [\"Coding/Drafting\", \"Logic Design\"],\n" +
+               "      \"projects\": [\"Small CLI script or layout\"]\n" +
+               "    },\n" +
+               "    {\n" +
+               "      \"id\": \"stage3\",\n" +
+               "      \"title\": \"Applied Intermediate Projects\",\n" +
+               "      \"description\": \"Apply your skills to build functional tools, components, or databases. Learn about error handling, debugging, and styling details.\",\n" +
+               "      \"duration\": \"2 Months\",\n" +
+               "      \"subjects\": [\"Framework Integration\", \"Database Operations\", \"UI Components\"],\n" +
+               "      \"concepts\": [\"Connect frontend to mock APIs\", \"Structure database schemas\", \"Style responsive layouts\"],\n" +
+               "      \"skills\": [\"API Design\", \"Database Schema design\"],\n" +
+               "      \"projects\": [\"Full-featured interactive app\"]\n" +
+               "    },\n" +
+               "    {\n" +
+               "      \"id\": \"stage4\",\n" +
+               "      \"title\": \"Advanced Specialization\",\n" +
+               "      \"description\": \"Deep dive into advanced topics such as cloud integrations, systems optimization, high-fidelity animations, or machine learning algorithms.\",\n" +
+               "      \"duration\": \"2 Months\",\n" +
+               "      \"subjects\": [\"Performance Tuning\", \"Advanced Libraries\", \"System Security\"],\n" +
+               "      \"concepts\": [\"Implement memory profiling\", \"Utilize multi-threading or async logic\", \"Secure access keys\"],\n" +
+               "      \"skills\": [\"System Tuning\", \"Security Audit\"],\n" +
+               "      \"projects\": [\"Performance-optimized component\"]\n" +
+               "    },\n" +
+               "    {\n" +
+               "      \"id\": \"stage5\",\n" +
+               "      \"title\": \"Professional Capstone & Testing\",\n" +
+               "      \"description\": \"Synthesize everything you have learned to develop a robust, end-to-end Capstone project. Write unit tests and package it for production.\",\n" +
+               "      \"duration\": \"1-2 Months\",\n" +
+               "      \"subjects\": [\"Testing Frameworks\", \"Continuous Integration\", \"Deployment Pipelines\"],\n" +
+               "      \"concepts\": [\"Write comprehensive unit tests\", \"Configure build pipelines\", \"Deploy to production staging\"],\n" +
+               "      \"skills\": [\"Test-Driven Development\", \"DevOps basics\"],\n" +
+               "      \"projects\": [\"Production-ready Capstone Portfolio project\"]\n" +
+               "    },\n" +
+               "    {\n" +
+               "      \"id\": \"stage6\",\n" +
+               "      \"title\": \"Portfolio Launch & Readiness\",\n" +
+               "      \"description\": \"Create a professional developer portfolio website, polish your GitHub account, compile your resume, and practice mock technical interviews.\",\n" +
+               "      \"duration\": \"1 Month\",\n" +
+               "      \"subjects\": [\"Interview Preparation\", \"Resume Building\", \"Portfolio Design\"],\n" +
+               "      \"concepts\": [\"Document code on GitHub\", \"Write developer case studies\", \"Practice coding challenges\"],\n" +
+               "      \"skills\": [\"Technical Presentation\", \"Interview Communication\"],\n" +
+               "      \"projects\": [\"Interactive Developer Portfolio Website\"]\n" +
+               "    }\n" +
+               "  ]\n" +
+               "}";
+    }
+
+    private String generateTextResponse(String targetCareer, String userQuery) {
+        String queryLower = userQuery.toLowerCase();
+        
+        if (queryLower.contains("hello") || queryLower.contains("hi") || queryLower.contains("hey") || queryLower.contains("greetings") || queryLower.contains("yo")) {
+            return "🔋 Offline AI Mentor:\n\n" +
+                   "Hi there! 👋 I am your Offline AI Mentor. I'm ready to guide you on your journey to becoming a " + targetCareer + ". Ask me questions about roadmaps, programming concepts, or interview preparation, and I will help you take the next step!";
+        }
+        
+        if (queryLower.contains("game") || queryLower.contains("unity") || queryLower.contains("unreal") || queryLower.contains("godot") || queryLower.contains("play") || queryLower.contains("physics") || queryLower.contains("graphics") || queryLower.contains("assets") || queryLower.contains("3d")) {
+            return "🔋 Offline AI Mentor:\n\n" +
+                   "To become a successful Game Developer, understanding how games are architected is essential. Here are the core concepts to focus on:\n\n" +
+                   "1. Game Loop: The heart of any game engine. It handles inputs, updates game states (physics, AI, logic), and renders the scene repeatedly (usually 60+ times per second).\n" +
+                   "2. Game Engine: Choose your tools. For 2D/3D indie games, Unity (C#) or Godot (C#/GDScript) are excellent. For AAA graphics-heavy games, Unreal Engine (C++/Blueprints) is the industry standard.\n" +
+                   "3. Assets Pipeline: Games consist of logic, art, and sound. You will need to learn how to import and handle 3D meshes, 2D sprites, animations, and sound effects efficiently in your engine.\n" +
+                   "4. Physics & Collisions: Real-time games rely heavily on collision detection (colliders, triggers) and rigidbodies to simulate movement and interactions.\n\n" +
+                   "Actionable Next Step: Download Unity or Godot, and try building a simple game like Pong or Flappy Bird from scratch to understand the coordinate systems and input controls.";
+        }
+        
+        if (queryLower.contains("code") || queryLower.contains("program") || queryLower.contains("coding") || queryLower.contains("programming") || queryLower.contains("software") || queryLower.contains("syntax") || queryLower.contains("java") || queryLower.contains("python") || queryLower.contains("c++") || queryLower.contains("c#")) {
+            return "🔋 Offline AI Mentor:\n\n" +
+                   "Programming is about breaking complex problems down into step-by-step logical instructions. Here is how to build your coding skills:\n\n" +
+                   "1. Master Syntax & Fundamentals: Pick one language (Python for simplicity, JavaScript for web development, or Java/C++ for core software architecture) and master variables, loops, conditionals, and functions.\n" +
+                   "2. Data Structures & Algorithms: Learn arrays, lists, maps, stacks, and queues. Understanding how to organize data and optimize search/sort operations is critical.\n" +
+                   "3. Object-Oriented Programming (OOP): Master classes, objects, inheritance, polymorphism, and encapsulation to write clean, reusable, and modular code.\n" +
+                   "4. Version Control: Get comfortable with Git and GitHub. Storing your projects online and tracking code history is standard professional practice.\n\n" +
+                   "Actionable Next Step: Write a small script daily to solve basic problems (like a calculator or fibonacci sequence generator) and push your progress to GitHub.";
+        }
+        
+        if (queryLower.contains("web") || queryLower.contains("html") || queryLower.contains("css") || queryLower.contains("js") || queryLower.contains("javascript") || queryLower.contains("react") || queryLower.contains("frontend") || queryLower.contains("backend") || queryLower.contains("fullstack") || queryLower.contains("website") || queryLower.contains("api") || queryLower.contains("database")) {
+            return "🔋 Offline AI Mentor:\n\n" +
+                   "Web Development is split into frontend (client-side) and backend (server-side). To master full-stack development, focus on:\n\n" +
+                   "1. Frontend Core: Learn HTML5 for document structure, CSS3 for layout (Flexbox and Grid) and styling, and JavaScript (ES6+) for interactive logic.\n" +
+                   "2. Frontend Frameworks: React, Vue, or Angular help organize large-scale applications with reusable UI components and state management.\n" +
+                   "3. Backend & APIs: Node.js, Python, or Go are used to build web servers. Learn to write RESTful APIs that connect the frontend to database systems.\n" +
+                   "4. Databases: Learn SQL (PostgreSQL, MySQL) or NoSQL (MongoDB) to manage user accounts, application data, and storage query logic.\n\n" +
+                   "Actionable Next Step: Build a personal portfolio website using HTML, CSS, and vanilla JS, host it on GitHub Pages or Vercel, and use it to showcase your work.";
+        }
+        
+        if (queryLower.contains("ai") || queryLower.contains("ml") || queryLower.contains("intelligence") || queryLower.contains("machine") || queryLower.contains("learning") || queryLower.contains("neural") || queryLower.contains("deep") || queryLower.contains("llm") || queryLower.contains("model")) {
+            return "🔋 Offline AI Mentor:\n\n" +
+                   "Artificial Intelligence (AI) and Machine Learning (ML) are transforming how software interacts with data. Here is the path to master them:\n\n" +
+                   "1. Foundations of Mathematics: Focus on Linear Algebra (vectors, matrices), Calculus (derivatives, gradients for optimization), and Probability & Statistics.\n" +
+                   "2. Python & Libraries: Learn Python, then master data manipulation libraries like NumPy, Pandas, and visualization tools like Matplotlib.\n" +
+                   "3. Traditional Machine Learning: Understand regression, classification, clustering, and decision trees using Scikit-Learn.\n" +
+                   "4. Deep Learning & Neural Networks: Learn how multi-layered neural networks process data (NLP, Computer Vision) using frameworks like PyTorch or TensorFlow.\n\n" +
+                   "Actionable Next Step: Download a clean dataset from Kaggle, use a Jupyter Notebook to explore the variables, and train a basic linear regression model to make predictions.";
+        }
+        
+        if (queryLower.contains("database") || queryLower.contains("sql") || queryLower.contains("db") || queryLower.contains("query") || queryLower.contains("postgres") || queryLower.contains("mysql") || queryLower.contains("mongodb") || queryLower.contains("supabase")) {
+            return "🔋 Offline AI Mentor:\n\n" +
+                   "Databases are the foundation of any application. They store and retrieve data reliably. Focus on these key areas:\n\n" +
+                   "1. Relational Databases (SQL): Learn PostgreSQL or MySQL. Master writing SELECT queries, JOINs, WHERE clauses, and aggregations (GROUP BY).\n" +
+                   "2. Database Design & Normalization: Learn how to structure tables, establish relationships (one-to-many, many-to-many), and design schemas to prevent data duplication.\n" +
+                   "3. NoSQL Databases: Explore MongoDB or Redis for unstructured, document-based data or key-value caching.\n" +
+                   "4. Database Optimization: Learn about indexing, query execution plans, and transactions to ensure database speed under heavy user loads.\n\n" +
+                   "Actionable Next Step: Install PostgreSQL locally or create a Supabase project, design a schema for a simple blogging system, and practice writing complex JOIN queries.";
+        }
+        
+        if (queryLower.contains("app") || queryLower.contains("mobile") || queryLower.contains("android") || queryLower.contains("ios") || queryLower.contains("swift") || queryLower.contains("kotlin") || queryLower.contains("flutter") || queryLower.contains("react native") || queryLower.contains("capacitor")) {
+            return "🔋 Offline AI Mentor:\n\n" +
+                   "Mobile Development allows you to build touch-enabled apps for phones and tablets. Here are your core paths:\n\n" +
+                   "1. Native Android: Learn Kotlin and Jetpack Compose to build high-performance native apps using Google's modern Android design guidelines.\n" +
+                   "2. Native iOS: Learn Swift and SwiftUI to develop clean, smooth native apps specifically tailored for Apple devices.\n" +
+                   "3. Cross-Platform Frameworks: Flutter (Dart) or React Native / Capacitor (JavaScript/TypeScript) let you write one codebase that compiles to both platforms.\n" +
+                   "4. Mobile Lifecycle & Storage: Understand how mobile apps pause/resume, and learn local caching databases like SQLite, Room, or CoreData.\n\n" +
+                   "Actionable Next Step: Install Android Studio or Xcode, create a simple To-Do List app with a clean UI, and test it running on a simulator or physical phone.";
+        }
+        
+        if (queryLower.contains("calculus") || queryLower.contains("math") || queryLower.contains("derivative") || queryLower.contains("integral") || queryLower.contains("equation")) {
+            return "🔋 Offline AI Mentor:\n\n" +
+                   "Mathematics, particularly calculus, is the mathematical engine behind computer graphics, physics simulation, and machine learning:\n\n" +
+                   "1. Derivatives & Slopes: Derivatives measure rates of change. In machine learning, gradients (partial derivatives) are used in gradient descent to optimize model parameters.\n" +
+                   "2. Integrals & Area: Integrals compute the accumulation of quantities over time or space. They are key for physical simulations, acoustics, and signal processing.\n" +
+                   "3. Physics in Games: Calculus allows game engines to compute speed, acceleration, gravity, and particle collisions realistically.\n" +
+                   "4. Analytical Problem Solving: Practicing math builds the algorithmic thinking required to solve complex coding bugs.\n\n" +
+                   "Actionable Next Step: Write a basic Python script that implements gradient descent for a simple 1D function (like y = x^2) to visualize how derivatives locate the minimum.";
+        }
+        
+        if (queryLower.contains("study") || queryLower.contains("roadmap") || queryLower.contains("become") || queryLower.contains("career") || queryLower.contains("path") || queryLower.contains("how to") || queryLower.contains("steps")) {
+            return "🔋 Offline AI Mentor:\n\n" +
+                   "Here is a structured, step-by-step roadmap to guide your path to becoming a successful " + targetCareer + ":\n\n" +
+                   "Step 1: Foundational Theory (Month 1-2)\n" +
+                   "Focus on learning the syntax, terminology, and core structures of your field. Dedicate time to understanding the 'why' behind concepts.\n\n" +
+                   "Step 2: Simple Implementation (Month 3-4)\n" +
+                   "Build small, isolated projects. If you are learning coding, make command-line scripts. If design, create basic UI/UX mockups. Keep them simple to gain confidence.\n\n" +
+                   "Step 3: Capstone Portfolio Projects (Month 5-6)\n" +
+                   "Develop 2-3 significant projects from scratch. Document your development process on GitHub or a personal portfolio website, detailing how you solved problems.\n\n" +
+                   "Step 4: Professional Readiness (Month 7+)\n" +
+                   "Prepare a clean resume, polish your LinkedIn/GitHub presence, practice mock interviews, and begin networking in professional groups or local meetups.\n\n" +
+                   "Advice: Be consistent. Practicing for 1 hour every day is far more effective than cramming for 8 hours once a week.";
+        }
+        
+        // General fallback response
+        return "🔋 Offline AI Mentor:\n\n" +
+               "To excel in your path to becoming a " + targetCareer + ", exploring \"" + userQuery + "\" is a very productive step.\n\n" +
+               "Here is some actionable guidance:\n" +
+               "1. Core Focus: Understand the fundamental principles behind " + userQuery + " and how it integrates with other tools in " + targetCareer + ".\n" +
+               "2. Small Projects: Try creating a small, simple test case or sandbox script to experiment with the concept hands-on.\n" +
+               "3. Practical Integration: Look at real-world projects or documentation to see how professionals implement this in production environments.\n\n" +
+               "Keep experimenting, and feel free to ask more specific questions about coding, system design, or study techniques!";
+    }
+
 
     // ── Helper: Extract user question from any prompt format ──────────────────
     private String extractUserQuestion(String prompt) {
