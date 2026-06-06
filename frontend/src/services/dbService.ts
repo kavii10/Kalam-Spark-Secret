@@ -455,11 +455,13 @@ export const dbService = {
     console.log('[dbService] Populating IndexedDB from Supabase for user:', userId);
 
     try {
-      const [roadmapRes, tasksRes, stagesRes, mentorRes] = await Promise.allSettled([
+      const [roadmapRes, tasksRes, stagesRes, mentorRes, flashcardsRes, statsRes] = await Promise.allSettled([
         supabase.from(TABLES.ROADMAPS).select('*').eq('user_id', userId).single(),
         supabase.from(TABLES.TASKS).select('*').eq('user_id', userId).order('date', { ascending: false }),
         supabase.from(TABLES.PROGRESS).select('*').eq('user_id', userId),
         supabase.from(TABLES.MENTOR).select('role, text, created_at, session_id').eq('user_id', userId).order('created_at', { ascending: true }).limit(200),
+        supabase.from('flashcards').select('*').eq('user_id', userId),
+        supabase.from('flashcard_stats').select('*').eq('user_id', userId),
       ]);
 
       if (roadmapRes.status === 'fulfilled' && roadmapRes.value.data) {
@@ -493,6 +495,14 @@ export const dbService = {
           ...m,
         }));
         await localDB.putMany('mentor_messages', records, false);
+      }
+
+      if (flashcardsRes.status === 'fulfilled' && flashcardsRes.value.data?.length) {
+        await localDB.putMany('flashcards', flashcardsRes.value.data, false);
+      }
+
+      if (statsRes.status === 'fulfilled' && statsRes.value.data?.length) {
+        await localDB.putMany('flashcard_stats', statsRes.value.data, false);
       }
 
       // Run maintenance after population (expire old tasks, trim chat, check quota)

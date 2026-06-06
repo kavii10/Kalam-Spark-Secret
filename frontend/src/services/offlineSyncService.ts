@@ -36,7 +36,10 @@ export type SyncOpType =
   | 'save_mentor_msg'
   | 'clear_mentor'
   | 'delete_mentor_session'
-  | 'save_reward';
+  | 'save_reward'
+  | 'save_flashcard'
+  | 'save_flashcard_stats'
+  | 'delete_flashcard';
 
 export interface SyncOperation {
   id: string;
@@ -106,6 +109,24 @@ class OfflineSyncService {
     if (type === 'delete_task' && payload?.id) {
       // If we have a pending save_task for the same id, remove it (delete wins)
       const oldSave = queue.find(op => op.type === 'save_task' && op.payload?.id === payload.id);
+      if (oldSave) await localDB.dequeueSyncOp(oldSave.id);
+    }
+
+    // Dedup save_flashcard by card id
+    if (type === 'save_flashcard' && payload?.id) {
+      const old = queue.find(op => op.type === 'save_flashcard' && op.payload?.id === payload.id);
+      if (old) await localDB.dequeueSyncOp(old.id);
+    }
+
+    // Dedup save_flashcard_stats by stats id or flashcard id
+    if (type === 'save_flashcard_stats' && payload?.id) {
+      const old = queue.find(op => op.type === 'save_flashcard_stats' && op.payload?.id === payload.id);
+      if (old) await localDB.dequeueSyncOp(old.id);
+    }
+
+    // Dedup delete_flashcard by card id
+    if (type === 'delete_flashcard' && payload?.id) {
+      const oldSave = queue.find(op => op.type === 'save_flashcard' && op.payload?.id === payload.id);
       if (oldSave) await localDB.dequeueSyncOp(oldSave.id);
     }
 
@@ -285,6 +306,24 @@ class OfflineSyncService {
         const { error } = await supabase.from('users')
           .update({ rewards: dbPayload.rewards })
           .eq('id', dbPayload.user_id);
+        if (error) throw error;
+        break;
+      }
+
+      case 'save_flashcard': {
+        const { error } = await supabase.from('flashcards').upsert(dbPayload, { onConflict: 'id' });
+        if (error) throw error;
+        break;
+      }
+
+      case 'save_flashcard_stats': {
+        const { error } = await supabase.from('flashcard_stats').upsert(dbPayload, { onConflict: 'id' });
+        if (error) throw error;
+        break;
+      }
+
+      case 'delete_flashcard': {
+        const { error } = await supabase.from('flashcards').update({ active: false, updated_at: new Date().toISOString() }).eq('id', dbPayload.id);
         if (error) throw error;
         break;
       }
