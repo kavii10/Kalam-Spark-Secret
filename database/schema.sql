@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   linked_subject TEXT,
   completed      BOOLEAN DEFAULT FALSE,
   date           TIMESTAMPTZ,
+  updated_at     TIMESTAMPTZ DEFAULT NOW(),
   created_at     TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -169,3 +170,19 @@ CREATE INDEX IF NOT EXISTS idx_flashcard_stats_flashcard
 
 CREATE INDEX IF NOT EXISTS idx_task_revisions_user_next_review
   ON task_revisions (user_id, next_review);
+
+-- ============================================================
+-- Triggers for auto-updating updated_at timestamp
+-- ============================================================
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+   NEW.updated_at = NOW();
+   RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE OR REPLACE TRIGGER update_roadmaps_updated_at BEFORE UPDATE ON roadmaps FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+CREATE OR REPLACE TRIGGER update_tasks_updated_at BEFORE UPDATE ON tasks FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+CREATE OR REPLACE TRIGGER update_flashcards_updated_at BEFORE UPDATE ON flashcards FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+CREATE OR REPLACE TRIGGER update_flashcard_stats_updated_at BEFORE UPDATE ON flashcard_stats FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();

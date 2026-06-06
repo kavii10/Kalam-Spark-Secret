@@ -17,6 +17,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS settings             JSONB;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS file_speaker_data    JSONB;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS podcasts             JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS linked_subject TEXT;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
 
 -- STEP 2: Fix corrupted rows where onboarding_complete got reset to false
 -- This fixes any user who has a dream set (they clearly completed onboarding)
