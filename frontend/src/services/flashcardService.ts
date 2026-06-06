@@ -7,6 +7,9 @@ import { supabase } from "./supabaseClient";
 import { fsrsService, FSRSCard } from "./fsrsService";
 import { ebisuService, EbisuModel } from "./ebisuService";
 import { UserProfile } from '../types';
+import { localDB, DEVICE_ID, nowISO } from "./localDB";
+import { offlineSyncService } from "./offlineSyncService";
+import { networkService } from "./networkService";
 
 export interface Flashcard {
   id: string;
@@ -58,182 +61,167 @@ export class FlashcardService {
     back: string
   ): Promise<Flashcard> {
     const id = `card_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    const { data, error } = await supabase
-      .from("flashcards")
-      .insert({
-        id,
-        user_id: userId,
-        deck_id: deckId,
-        front,
-        back,
-        active: true,
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    // Initialize stats
-    await this.initializeCardStats(userId, id);
-
-    return {
-      id: data.id,
-      userId: data.user_id,
-      deckId: data.deck_id,
-      front: data.front,
-      back: data.back,
-      active: data.active,
-      createdAt: new Date(data.created_at),
-      updatedAt: new Date(data.updated_at),
-    };
-  }
-
-  /**
-   * Initialize stats for a new card
-   */
-  private async initializeCardStats(userId: string, flashcardId: string): Promise<void> {
     const statsId = `stats_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const now = nowISO();
+    
+    const newCard = {
+      id,
+      user_id: userId,
+      deck_id: deckId,
+      front,
+      back,
+      active: true,
+      created_at: now,
+      updated_at: now,
+    };
+
     const fsrsCard = fsrsService.initializeCard();
     const ebisuModel = ebisuService.initializeModel();
 
-    const { error } = await supabase
-      .from("flashcard_stats")
-      .insert({
-        id: statsId,
-        user_id: userId,
-        flashcard_id: flashcardId,
-        stability: fsrsCard.stability,
-        difficulty: fsrsCard.difficulty,
-        repetition_count: fsrsCard.repetitionCount,
-        ebisu_model: ebisuService.serializeModel(ebisuModel),
-        next_review: fsrsCard.nextReview.toISOString(),
-        review_count: 0,
-      });
+    const newStats = {
+      id: statsId,
+      user_id: userId,
+      flashcard_id: id,
+      stability: fsrsCard.stability,
+      difficulty: fsrsCard.difficulty,
+      repetition_count: fsrsCard.repetitionCount,
+      ebisu_model: ebisuService.serializeModel(ebisuModel),
+      next_review: fsrsCard.nextReview.toISOString(),
+      last_review: null,
+      last_grade: null,
+      review_count: 0,
+      created_at: now,
+      updated_at: now,
+    };
 
-    if (error) throw error;
+    // Save locally
+    await localDB.put('flashcards', newCard, true);
+    await localDB.put('flashcard_stats', newStats, true);
+
+    // Sync to Supabase in background
+    const enrichedCard = { ...newCard, _device_id: DEVICE_ID };
+    const enrichedStats = { ...newStats, _device_id: DEVICE_ID };
+    if (networkService.isOnline()) {
+      try {
+        await offlineSyncService.executeOne('save_flashcard', enrichedCard);
+        await localDB.markSynced('flashcards', id);
+      } catch (e) {
+        await offlineSyncService.enqueue('save_flashcard', enrichedCard);
+      }
+      try {
+        await offlineSyncService.executeOne('save_flashcard_stats', enrichedStats);
+        await localDB.markSynced('flashcard_stats', statsId);
+      } catch (e) {
+        await offlineSyncService.enqueue('save_flashcard_stats', enrichedStats);
+      }
+    } else {
+      await offlineSyncService.enqueue('save_flashcard', enrichedCard);
+      await offlineSyncService.enqueue('save_flashcard_stats', enrichedStats);
+    }
+
+    return {
+      id: newCard.id,
+      userId: newCard.user_id,
+      deckId: newCard.deck_id,
+      front: newCard.front,
+      back: newCard.back,
+      active: newCard.active,
+      createdAt: new Date(newCard.created_at),
+      updatedAt: new Date(newCard.updated_at),
+    };
   }
 
   /**
    * Get all flashcards for a user in a deck
    */
   async getFlashcardsInDeck(userId: string, deckId: string): Promise<CardWithStats[]> {
-    const { data, error } = await supabase
-      .from("flashcards")
-      .select(`
-        id,
-        user_id,
-        deck_id,
-        front,
-        back,
-        active,
-        created_at,
-        updated_at,
-        flashcard_stats (
-          id,
-          user_id,
-          flashcard_id,
-          stability,
-          difficulty,
-          repetition_count,
-          ebisu_model,
-          next_review,
-          last_review,
-          last_grade,
-          review_count,
-          created_at,
-          updated_at
-        )
-      `)
-      .eq("user_id", userId)
-      .eq("deck_id", deckId)
-      .eq("active", true);
+    if (networkService.isOnline()) {
+      try {
+        const { data, error } = await supabase
+          .from("flashcards")
+          .select(`
+            id,
+            user_id,
+            deck_id,
+            front,
+            back,
+            active,
+            created_at,
+            updated_at,
+            flashcard_stats (
+              id,
+              user_id,
+              flashcard_id,
+              stability,
+              difficulty,
+              repetition_count,
+              ebisu_model,
+              next_review,
+              last_review,
+              last_grade,
+              review_count,
+              created_at,
+              updated_at
+            )
+          `)
+          .eq("user_id", userId)
+          .eq("deck_id", deckId)
+          .eq("active", true);
 
-    if (error) throw error;
+        if (error) throw error;
 
-    return (data || []).map((card: any) => ({
-      card: {
-        id: card.id,
-        userId: card.user_id,
-        deckId: card.deck_id,
-        front: card.front,
-        back: card.back,
-        active: card.active,
-        createdAt: new Date(card.created_at),
-        updatedAt: new Date(card.updated_at),
-      },
-      stats: card.flashcard_stats[0] ? {
-        id: card.flashcard_stats[0].id,
-        userId: card.flashcard_stats[0].user_id,
-        flashcardId: card.flashcard_stats[0].flashcard_id,
-        stability: card.flashcard_stats[0].stability,
-        difficulty: card.flashcard_stats[0].difficulty,
-        repetitionCount: card.flashcard_stats[0].repetition_count,
-        ebisuModel: ebisuService.parseModel(card.flashcard_stats[0].ebisu_model),
-        nextReview: new Date(card.flashcard_stats[0].next_review),
-        lastReview: card.flashcard_stats[0].last_review ? new Date(card.flashcard_stats[0].last_review) : null,
-        lastGrade: card.flashcard_stats[0].last_grade,
-        reviewCount: card.flashcard_stats[0].review_count,
-        createdAt: new Date(card.flashcard_stats[0].created_at),
-        updatedAt: new Date(card.flashcard_stats[0].updated_at),
-      } : this.createEmptyStats(card.id, userId),
-    }));
-  }
+        if (data) {
+          const cardsToPut: any[] = [];
+          const statsToPut: any[] = [];
+          data.forEach((card: any) => {
+            cardsToPut.push({
+              id: card.id,
+              user_id: card.user_id,
+              deck_id: card.deck_id,
+              front: card.front,
+              back: card.back,
+              active: card.active,
+              created_at: card.created_at,
+              updated_at: card.updated_at,
+            });
+            if (card.flashcard_stats && card.flashcard_stats[0]) {
+              statsToPut.push(card.flashcard_stats[0]);
+            }
+          });
 
-  /**
-   * Get due cards for review
-   */
-  async getDueCards(userId: string): Promise<CardWithStats[]> {
-    const now = new Date();
+          if (cardsToPut.length > 0) {
+            await localDB.putMany('flashcards', cardsToPut, false);
+          }
+          if (statsToPut.length > 0) {
+            await localDB.putMany('flashcard_stats', statsToPut, false);
+          }
+        }
+      } catch (err) {
+        console.warn("[FlashcardService] Error pre-fetching cards from Supabase, falling back to local:", err);
+      }
+    }
 
-    const { data, error } = await supabase
-      .from("flashcard_stats")
-      .select(`
-        id,
-        user_id,
-        flashcard_id,
-        stability,
-        difficulty,
-        repetition_count,
-        ebisu_model,
-        next_review,
-        last_review,
-        last_grade,
-        review_count,
-        created_at,
-        updated_at,
-        flashcards (
-          id,
-          user_id,
-          deck_id,
-          front,
-          back,
-          active,
-          created_at,
-          updated_at
-        )
-      `)
-      .eq("user_id", userId)
-      .lte("next_review", now.toISOString())
-      .order("next_review", { ascending: true })
-      .limit(50);
+    // Load from local IndexedDB
+    const allLocalCards = await localDB.getAll<any>('flashcards', 'user_id', userId);
+    const deckCards = allLocalCards.filter(c => c.deck_id === deckId && c.active !== false);
 
-    if (error) throw error;
+    const allLocalStats = await localDB.getAll<any>('flashcard_stats', 'user_id', userId);
+    const statsMap = new Map(allLocalStats.map(s => [s.flashcard_id, s]));
 
-    return (data || [])
-      .filter((stat: any) => stat.flashcards && stat.flashcards.active)
-      .map((stat: any) => ({
+    return deckCards.map((card: any) => {
+      const stat = statsMap.get(card.id);
+      return {
         card: {
-          id: stat.flashcards.id,
-          userId: stat.flashcards.user_id,
-          deckId: stat.flashcards.deck_id,
-          front: stat.flashcards.front,
-          back: stat.flashcards.back,
-          active: stat.flashcards.active,
-          createdAt: new Date(stat.flashcards.created_at),
-          updatedAt: new Date(stat.flashcards.updated_at),
+          id: card.id,
+          userId: card.user_id,
+          deckId: card.deck_id,
+          front: card.front,
+          back: card.back,
+          active: card.active,
+          createdAt: new Date(card.created_at),
+          updatedAt: new Date(card.updated_at),
         },
-        stats: {
+        stats: stat ? {
           id: stat.id,
           userId: stat.user_id,
           flashcardId: stat.flashcard_id,
@@ -247,8 +235,149 @@ export class FlashcardService {
           reviewCount: stat.review_count,
           createdAt: new Date(stat.created_at),
           updatedAt: new Date(stat.updated_at),
+        } : this.createEmptyStats(card.id, userId),
+      };
+    });
+  }
+
+  /**
+   * Get due cards for review
+   */
+  async getDueCards(userId: string): Promise<CardWithStats[]> {
+    const now = new Date();
+
+    if (networkService.isOnline()) {
+      try {
+        const { data, error } = await supabase
+          .from("flashcard_stats")
+          .select(`
+            id,
+            user_id,
+            flashcard_id,
+            stability,
+            difficulty,
+            repetition_count,
+            ebisu_model,
+            next_review,
+            last_review,
+            last_grade,
+            review_count,
+            created_at,
+            updated_at,
+            flashcards (
+              id,
+              user_id,
+              deck_id,
+              front,
+              back,
+              active,
+              created_at,
+              updated_at
+            )
+          `)
+          .eq("user_id", userId)
+          .lte("next_review", now.toISOString())
+          .order("next_review", { ascending: true })
+          .limit(50);
+
+        if (error) throw error;
+
+        if (data) {
+          const cardsToPut: any[] = [];
+          const statsToPut: any[] = [];
+          
+          data.forEach((stat: any) => {
+            if (stat.flashcards) {
+              const { flashcards, ...statProps } = stat;
+              cardsToPut.push(flashcards);
+              statsToPut.push(statProps);
+            }
+          });
+
+          if (cardsToPut.length > 0) {
+            await localDB.putMany('flashcards', cardsToPut, false);
+          }
+          if (statsToPut.length > 0) {
+            await localDB.putMany('flashcard_stats', statsToPut, false);
+          }
+        }
+
+        return (data || [])
+          .filter((stat: any) => stat.flashcards && stat.flashcards.active)
+          .map((stat: any) => ({
+            card: {
+              id: stat.flashcards.id,
+              userId: stat.flashcards.user_id,
+              deckId: stat.flashcards.deck_id,
+              front: stat.flashcards.front,
+              back: stat.flashcards.back,
+              active: stat.flashcards.active,
+              createdAt: new Date(stat.flashcards.created_at),
+              updatedAt: new Date(stat.flashcards.updated_at),
+            },
+            stats: {
+              id: stat.id,
+              userId: stat.user_id,
+              flashcardId: stat.flashcard_id,
+              stability: stat.stability,
+              difficulty: stat.difficulty,
+              repetitionCount: stat.repetition_count,
+              ebisuModel: ebisuService.parseModel(stat.ebisu_model),
+              nextReview: new Date(stat.next_review),
+              lastReview: stat.last_review ? new Date(stat.last_review) : null,
+              lastGrade: stat.last_grade,
+              reviewCount: stat.review_count,
+              createdAt: new Date(stat.created_at),
+              updatedAt: new Date(stat.updated_at),
+            },
+          }));
+      } catch (err) {
+        console.warn("[FlashcardService] Error fetching due cards from Supabase, falling back to local:", err);
+      }
+    }
+
+    // Offline or fallback flow
+    const allCards = await localDB.getAll<any>('flashcards', 'user_id', userId);
+    const activeCardsMap = new Map(allCards.filter(c => c.active !== false).map(c => [c.id, c]));
+    
+    const allStats = await localDB.getAll<any>('flashcard_stats', 'user_id', userId);
+    const nowStr = now.toISOString();
+    
+    const dueStats = allStats
+      .filter(s => activeCardsMap.has(s.flashcard_id) && s.next_review <= nowStr)
+      .sort((a, b) => a.next_review.localeCompare(b.next_review))
+      .slice(0, 50);
+
+    return dueStats.map(s => {
+      const card = activeCardsMap.get(s.flashcard_id)!;
+      return {
+        card: {
+          id: card.id,
+          userId: card.user_id,
+          deckId: card.deck_id,
+          front: card.front,
+          back: card.back,
+          active: card.active,
+          createdAt: new Date(card.created_at),
+          updatedAt: new Date(card.updated_at),
         },
-      }));
+        stats: {
+          id: s.id,
+          userId: s.user_id,
+          flashcardId: s.flashcard_id,
+          stability: s.stability,
+          difficulty: s.difficulty,
+          repetitionCount: s.repetition_count,
+          ebisuModel: ebisuService.parseModel(s.ebisu_model),
+          nextReview: new Date(s.next_review),
+          lastReview: s.last_review ? new Date(s.last_review) : null,
+          lastGrade: s.last_grade,
+          reviewCount: s.review_count,
+          createdAt: new Date(s.created_at),
+          updatedAt: new Date(s.updated_at),
+        },
+      };
+    });
   }
 
   /**
@@ -260,29 +389,63 @@ export class FlashcardService {
     grade: number, // 1-4 for FSRS
     difficulty: 0 | 1 // 0=forgot, 1=recalled for Ebisu
   ): Promise<{ xpGain: number; stats: FlashcardStats }> {
-    // Get current stats
-    const { data: statData, error: statError } = await supabase
-      .from("flashcard_stats")
-      .select("*")
-      .eq("flashcard_id", flashcardId)
-      .single();
+    // Get current stats from local DB first
+    let currentStats: any = null;
+    const statData = await localDB.getAll<any>('flashcard_stats', 'flashcard_id', flashcardId);
+    if (statData && statData.length > 0) {
+      currentStats = statData[0];
+    }
+    
+    // If not found locally but online, fetch from Supabase
+    if (!currentStats && networkService.isOnline()) {
+      try {
+        const { data, error } = await supabase
+          .from("flashcard_stats")
+          .select("*")
+          .eq("flashcard_id", flashcardId)
+          .single();
+        if (data && !error) {
+          currentStats = data;
+          await localDB.put('flashcard_stats', data, false);
+        }
+      } catch (err) {
+        console.warn("[FlashcardService] Error fetching stats from Supabase in reviewCard:", err);
+      }
+    }
 
-    if (statError) throw statError;
+    if (!currentStats) {
+      const emptyStats = this.createEmptyStats(flashcardId, userProfile.id);
+      currentStats = {
+        id: emptyStats.id || `stats_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        user_id: userProfile.id,
+        flashcard_id: flashcardId,
+        stability: emptyStats.stability,
+        difficulty: emptyStats.difficulty,
+        repetition_count: emptyStats.repetitionCount,
+        ebisu_model: ebisuService.serializeModel(emptyStats.ebisuModel),
+        next_review: emptyStats.nextReview.toISOString(),
+        last_review: emptyStats.lastReview ? emptyStats.lastReview.toISOString() : null,
+        last_grade: emptyStats.lastGrade,
+        review_count: emptyStats.reviewCount,
+        created_at: emptyStats.createdAt.toISOString(),
+        updated_at: emptyStats.updatedAt.toISOString(),
+      };
+    }
 
     // FSRS update
     const fsrsCard: FSRSCard = {
-      stability: statData.stability,
-      difficulty: statData.difficulty,
-      lastReview: new Date(statData.last_review || new Date()),
-      nextReview: new Date(statData.next_review),
-      repetitionCount: statData.repetition_count,
+      stability: currentStats.stability,
+      difficulty: currentStats.difficulty,
+      lastReview: new Date(currentStats.last_review || new Date()),
+      nextReview: new Date(currentStats.next_review),
+      repetitionCount: currentStats.repetition_count,
     };
 
     const fsrsResult = fsrsService.calculateNextReview(fsrsCard, grade);
 
     // Ebisu update
-    const ebisuModel = ebisuService.parseModel(statData.ebisu_model);
-    const lastReview = statData.last_review ? new Date(statData.last_review) : new Date();
+    const ebisuModel = ebisuService.parseModel(currentStats.ebisu_model);
+    const lastReview = currentStats.last_review ? new Date(currentStats.last_review) : new Date();
     const hoursElapsed = (Date.now() - lastReview.getTime()) / (1000 * 60 * 60);
     const updatedEbisuModel = ebisuService.updateModel(ebisuModel, difficulty, hoursElapsed);
 
@@ -293,25 +456,38 @@ export class FlashcardService {
     else if (grade === 2) xpGain = 10; // Hard
     else xpGain = 5; // Again
 
-    // Update stats
-    const { data: updatedStats, error: updateError } = await supabase
-      .from("flashcard_stats")
-      .update({
-        stability: fsrsResult.newStability,
-        difficulty: fsrsResult.newDifficulty,
-        repetition_count: statData.repetition_count + 1,
-        ebisu_model: ebisuService.serializeModel(updatedEbisuModel),
-        next_review: fsrsResult.nextReviewDate.toISOString(),
-        last_review: new Date().toISOString(),
-        last_grade: grade,
-        review_count: statData.review_count + 1,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("flashcard_id", flashcardId)
-      .select()
-      .single();
+    // Update stats locally
+    const now = nowISO();
+    const updatedStats = {
+      id: currentStats.id,
+      user_id: userProfile.id,
+      flashcard_id: flashcardId,
+      stability: fsrsResult.newStability,
+      difficulty: fsrsResult.newDifficulty,
+      repetition_count: currentStats.repetition_count + 1,
+      ebisu_model: ebisuService.serializeModel(updatedEbisuModel),
+      next_review: fsrsResult.nextReviewDate.toISOString(),
+      last_review: now,
+      last_grade: grade,
+      review_count: currentStats.review_count + 1,
+      created_at: currentStats.created_at || now,
+      updated_at: now,
+    };
 
-    if (updateError) throw updateError;
+    await localDB.put('flashcard_stats', updatedStats, true);
+
+    // Sync to Supabase in background
+    const enriched = { ...updatedStats, _device_id: DEVICE_ID };
+    if (networkService.isOnline()) {
+      try {
+        await offlineSyncService.executeOne('save_flashcard_stats', enriched);
+        await localDB.markSynced('flashcard_stats', updatedStats.id);
+      } catch (e) {
+        await offlineSyncService.enqueue('save_flashcard_stats', enriched);
+      }
+    } else {
+      await offlineSyncService.enqueue('save_flashcard_stats', enriched);
+    }
 
     return {
       xpGain,
@@ -351,7 +527,7 @@ export class FlashcardService {
     const ebisuStats = ebisuService.getStatistics(
       cards.map((c) => ({
         model: c.stats.ebisuModel,
-        hoursElapsed: (Date.now() - c.stats.lastReview!.getTime()) / (1000 * 60 * 60),
+        hoursElapsed: c.stats.lastReview ? (Date.now() - c.stats.lastReview.getTime()) / (1000 * 60 * 60) : 0,
       }))
     );
 
@@ -390,16 +566,27 @@ export class FlashcardService {
    * Get memory strength for a card
    */
   async getMemoryStrength(statsId: string): Promise<number> {
-    const { data, error } = await supabase
-      .from("flashcard_stats")
-      .select("ebisu_model, last_review")
-      .eq("id", statsId)
-      .single();
+    let stat = await localDB.get<any>('flashcard_stats', statsId);
+    
+    if (!stat && networkService.isOnline()) {
+      try {
+        const { data, error } = await supabase
+          .from("flashcard_stats")
+          .select("ebisu_model, last_review")
+          .eq("id", statsId)
+          .single();
+        if (data && !error) {
+          stat = data;
+        }
+      } catch (err) {
+        console.warn("[FlashcardService] Error fetching stats in getMemoryStrength:", err);
+      }
+    }
 
-    if (error) throw error;
+    if (!stat) return 0;
 
-    const ebisuModel = ebisuService.parseModel(data.ebisu_model);
-    const lastReview = data.last_review ? new Date(data.last_review) : new Date();
+    const ebisuModel = ebisuService.parseModel(stat.ebisu_model);
+    const lastReview = stat.last_review ? new Date(stat.last_review) : new Date();
     const hoursElapsed = (Date.now() - lastReview.getTime()) / (1000 * 60 * 60);
 
     return ebisuService.predictRecall(ebisuModel, hoursElapsed);
@@ -409,23 +596,64 @@ export class FlashcardService {
    * Update flashcard content
    */
   async updateFlashcard(id: string, front: string, back: string, deckId: string): Promise<void> {
-    const { error } = await supabase
-      .from("flashcards")
-      .update({ front, back, deck_id: deckId, updated_at: new Date().toISOString() })
-      .eq("id", id);
-    if (error) throw error;
+    const now = nowISO();
+    const existing = await localDB.get<any>('flashcards', id);
+    const updatedCard = {
+      ...existing,
+      id,
+      front,
+      back,
+      deck_id: deckId,
+      updated_at: now,
+    };
+
+    // Save locally first
+    await localDB.put('flashcards', updatedCard, true);
+
+    // Sync to Supabase in background
+    const enriched = { ...updatedCard, _device_id: DEVICE_ID };
+    if (networkService.isOnline()) {
+      try {
+        await offlineSyncService.executeOne('save_flashcard', enriched);
+        await localDB.markSynced('flashcards', id);
+      } catch (e) {
+        await offlineSyncService.enqueue('save_flashcard', enriched);
+      }
+    } else {
+      await offlineSyncService.enqueue('save_flashcard', enriched);
+    }
   }
 
   /**
    * Soft delete flashcard
    */
   async deleteFlashcard(id: string): Promise<void> {
-    const { error } = await supabase
-      .from("flashcards")
-      .update({ active: false, updated_at: new Date().toISOString() })
-      .eq("id", id);
-    if (error) throw error;
+    const now = nowISO();
+    const existing = await localDB.get<any>('flashcards', id);
+    const updatedCard = {
+      ...existing,
+      id,
+      active: false,
+      updated_at: now,
+    };
+
+    // Save locally first
+    await localDB.put('flashcards', updatedCard, true);
+
+    // Sync to Supabase in background
+    const enriched = { id, updated_at: now, _device_id: DEVICE_ID };
+    if (networkService.isOnline()) {
+      try {
+        await offlineSyncService.executeOne('delete_flashcard', enriched);
+        await localDB.markSynced('flashcards', id);
+      } catch (e) {
+        await offlineSyncService.enqueue('delete_flashcard', enriched);
+      }
+    } else {
+      await offlineSyncService.enqueue('delete_flashcard', enriched);
+    }
   }
 }
 
 export const flashcardService = new FlashcardService();
+

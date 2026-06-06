@@ -17,7 +17,7 @@
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const DB_NAME = 'KalamSparkDB';
-const DB_VERSION = 2;                    // bump when schema changes
+const DB_VERSION = 3;                    // bump when schema changes
 const SCHEMA_VERSION = 2;               // stored on every record
 const TASK_EXPIRY_DAYS = 30;            // auto-delete tasks older than this
 const MAX_LOCAL_MENTOR_MSGS = 200;      // keep only the latest N messages locally
@@ -31,7 +31,9 @@ export type LocalStoreName =
   | 'mentor_messages'
   | 'completed_stages'
   | 'sync_queue'
-  | 'computed_cache';   // NEW: pre-computed dashboard values
+  | 'computed_cache'
+  | 'flashcards'
+  | 'flashcard_stats';   // NEW: pre-computed dashboard values
 
 // ─── Device ID — stable per-install identifier ───────────────────────────────
 function getDeviceId(): string {
@@ -150,6 +152,20 @@ class LocalDB {
         // ── computed_cache: pre-computed dashboard values (NEW in v2) ──
         if (!db.objectStoreNames.contains('computed_cache')) {
           db.createObjectStore('computed_cache', { keyPath: 'key' });
+        }
+
+        // ── flashcards (NEW in v3) ──
+        if (!db.objectStoreNames.contains('flashcards')) {
+          const cardStore = db.createObjectStore('flashcards', { keyPath: 'id' });
+          cardStore.createIndex('user_id', 'user_id', { unique: false });
+          cardStore.createIndex('deck_id', 'deck_id', { unique: false });
+        }
+
+        // ── flashcard_stats (NEW in v3) ──
+        if (!db.objectStoreNames.contains('flashcard_stats')) {
+          const statsStore = db.createObjectStore('flashcard_stats', { keyPath: 'id' });
+          statsStore.createIndex('user_id', 'user_id', { unique: false });
+          statsStore.createIndex('flashcard_id', 'flashcard_id', { unique: false });
         }
 
         console.log(`[LocalDB] Schema upgraded from v${oldVersion} → v${DB_VERSION}`);
@@ -566,6 +582,8 @@ class LocalDB {
         this.deleteByIndex('mentor_messages', 'user_id', userId),
         this.deleteByIndex('completed_stages', 'user_id', userId),
         this.deleteByIndex('computed_cache', 'user_id', userId),
+        this.deleteByIndex('flashcards', 'user_id', userId),
+        this.deleteByIndex('flashcard_stats', 'user_id', userId),
       ]);
       localStorage.removeItem('ks_emergency_snapshot');
       console.log('[LocalDB] Cleared all local data for user:', userId);
