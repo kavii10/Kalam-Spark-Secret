@@ -424,19 +424,19 @@ public class LlamaPlugin extends Plugin {
         boolean wantsJson = (system != null && !system.isEmpty() && (
                             system.toLowerCase().contains("json") || 
                             system.toLowerCase().contains("schema")
-                           )) || (prompt != null && prompt.toLowerCase().contains("json"));
+                           )) || prompt.toLowerCase().contains("json");
 
         if (wantsJson) {
             // Check if it's career pivot
-            if (prompt != null && (prompt.toLowerCase().contains("pivot") || prompt.toLowerCase().contains("transition"))) {
+            if (prompt.toLowerCase().contains("pivot") || prompt.toLowerCase().contains("transition")) {
                 return generatePivotJson(targetCareer, prompt);
             }
             // Check if it's quiz
-            if ((system != null && system.toLowerCase().contains("quiz")) || (prompt != null && (prompt.toLowerCase().contains("quiz") || prompt.toLowerCase().contains("examiner")))) {
+            if ((system != null && system.toLowerCase().contains("quiz")) || prompt.toLowerCase().contains("quiz") || prompt.toLowerCase().contains("examiner")) {
                 return generateQuizJson(prompt);
             }
             // Check if it's daily tasks / planner
-            if (prompt != null && (prompt.toLowerCase().contains("tasks") || prompt.toLowerCase().contains("task") || prompt.toLowerCase().contains("educator"))) {
+            if (prompt.toLowerCase().contains("tasks") || prompt.toLowerCase().contains("task") || prompt.toLowerCase().contains("educator")) {
                 return generatePlannerTasksJson(targetCareer, prompt);
             }
             // Default: return roadmap JSON
@@ -448,15 +448,6 @@ public class LlamaPlugin extends Plugin {
     }
 
     private String generatePivotJson(String targetCareer, String prompt) {
-        String currentCareer = "your current field";
-        if (prompt.toLowerCase().contains("pivot from")) {
-            int start = prompt.toLowerCase().indexOf("pivot from") + 10;
-            int end = prompt.toLowerCase().indexOf(" to ", start);
-            if (end != -1) {
-                currentCareer = prompt.substring(start, end).trim();
-            }
-        }
-        
         return "{\n" +
                "  \"transferPercentage\": 65,\n" +
                "  \"transferableSkills\": [\"Problem Solving\", \"Project Management\", \"Analytical Thinking\", \"Communication\"],\n" +
@@ -872,7 +863,7 @@ public class LlamaPlugin extends Plugin {
                    "Actionable Next Step: Write a small script daily to solve basic problems (like a calculator or fibonacci sequence generator) and push your progress to GitHub.";
         }
         
-        if (queryLower.contains("web") || queryLower.contains("html") || queryLower.contains("css") || queryLower.contains("js") || queryLower.contains("javascript") || queryLower.contains("react") || queryLower.contains("frontend") || queryLower.contains("backend") || queryLower.contains("fullstack") || queryLower.contains("website") || queryLower.contains("api") || queryLower.contains("database")) {
+        if (queryLower.contains("web") || queryLower.contains("html") || queryLower.contains("css") || queryLower.contains("js") || queryLower.contains("javascript") || queryLower.contains("react") || queryLower.contains("frontend") || queryLower.contains("backend") || queryLower.contains("fullstack") || queryLower.contains("website") || queryLower.contains("api")) {
             return "🔋 Offline AI Mentor:\n\n" +
                    "Web Development is split into frontend (client-side) and backend (server-side). To master full-stack development, focus on:\n\n" +
                    "1. Frontend Core: Learn HTML5 for document structure, CSS3 for layout (Flexbox and Grid) and styling, and JavaScript (ES6+) for interactive logic.\n" +

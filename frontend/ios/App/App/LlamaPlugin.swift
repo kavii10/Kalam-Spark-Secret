@@ -576,7 +576,7 @@ public class LlamaPlugin: CAPPlugin {
             """
         }
         
-        if queryLower.contains("web") || queryLower.contains("html") || queryLower.contains("css") || queryLower.contains("js") || queryLower.contains("javascript") || queryLower.contains("react") || queryLower.contains("frontend") || queryLower.contains("backend") || queryLower.contains("fullstack") || queryLower.contains("website") || queryLower.contains("api") || queryLower.contains("database") {
+        if queryLower.contains("web") || queryLower.contains("html") || queryLower.contains("css") || queryLower.contains("js") || queryLower.contains("javascript") || queryLower.contains("react") || queryLower.contains("frontend") || queryLower.contains("backend") || queryLower.contains("fullstack") || queryLower.contains("website") || queryLower.contains("api") {
             return """
             🔋 Offline AI Mentor:
 
