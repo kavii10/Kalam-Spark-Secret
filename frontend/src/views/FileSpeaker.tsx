@@ -2906,7 +2906,7 @@ The generated content must be extremely detailed, educational, and structured, s
                       </button>
                     </div>
                     <div className="mt-3">
-                      {(IS_NATIVE_MOBILE && (!rec.audioFilename || failedAudioIds[rec.id])) ? (
+                      {(!rec.audioFilename || failedAudioIds[rec.id] || IS_NATIVE_MOBILE || !BACKEND) ? (
                         <LibraryTTSPlayer
                           lines={rec.lines || []}
                           podcastLang={rec.language || 'en'}

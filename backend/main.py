@@ -267,7 +267,7 @@ async def websocket_roadmap(websocket: WebSocket, dream: str, year: str, branch:
         await websocket.send_json({"type": "progress", "msg": f"✓ Found data from {num_sources} sources. Initializing Gemma4 AI..."})
         await asyncio.sleep(0.5)
 
-        await websocket.send_json({"type": "progress", "msg": "⠋ Architecting 4-stage roadmap..."})
+        await websocket.send_json({"type": "progress", "msg": "⠋ Architecting 6-stage roadmap..."})
         t1 = time.time()
 
         roadmap = await generate_roadmap(dream, year, branch, crawled_content)

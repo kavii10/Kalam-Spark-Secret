@@ -545,10 +545,10 @@ function StageDetailPanel({
 async function generateRoadmapWithProgress(user: UserProfile, setLoadingMsg: (msg: string) => void): Promise<CareerRoadmap> {
   const steps = [
     "Connecting to AI Career Architect...",
-    "Backend offline. Igniting client-side AI...",
+    "Backend Running. Igniting client-side AI...",
     "⠋ Crawling real career websites for latest trends...",
     "✓ Found data from 5 sources. Initializing Gemma4 AI...",
-    "⠋ Architecting 4-stage roadmap..."
+    "⠋ Architecting 6-stage roadmap..."
   ];
 
   let stepIdx = 0;
