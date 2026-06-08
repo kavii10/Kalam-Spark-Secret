@@ -6,6 +6,8 @@ export interface LlamaPluginInterface {
   generateCompletion(options: { prompt: string; systemInstruction?: string }): Promise<{ text: string }>;
   checkModelExists(options: { modelPath: string }): Promise<{ exists: boolean }>;
   selectModelFile(): Promise<{ status: string; path: string; size: number }>;
+  speak(options: { text: string; lang: string }): Promise<void>;
+  stopSpeak(): Promise<void>;
 }
 
 const LlamaPluginNative = registerPlugin<LlamaPluginInterface>('LlamaPlugin');
@@ -163,6 +165,42 @@ export const llamaPlugin = {
       if (listener) {
         listener.remove();
       }
+    }
+  },
+
+  async speak(text: string, lang: string, onStatus?: (status: 'start' | 'done' | 'error') => void): Promise<void> {
+    if (!this.isSupported()) return;
+    
+    let listener: any = null;
+    if (onStatus) {
+      try {
+        listener = await (LlamaPluginNative as any).addListener('speakStatus', (data: any) => {
+          if (data && data.status) {
+            onStatus(data.status);
+          }
+        });
+      } catch (e) {
+        console.warn('[LlamaPlugin] Failed to register speak status listener:', e);
+      }
+    }
+
+    try {
+      await LlamaPluginNative.speak({ text, lang });
+    } catch (err) {
+      console.error('[LlamaPlugin] Native speak failed:', err);
+      if (listener) {
+        listener.remove();
+      }
+      throw err;
+    }
+  },
+
+  async stopSpeak(): Promise<void> {
+    if (!this.isSupported()) return;
+    try {
+      await LlamaPluginNative.stopSpeak();
+    } catch (err) {
+      console.error('[LlamaPlugin] Native stopSpeak failed:', err);
     }
   }
 };

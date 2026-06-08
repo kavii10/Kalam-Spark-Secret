@@ -252,13 +252,31 @@ function LibraryTTSPlayer({ lines, podcastLang, host1, host2, durationEst, user 
   const [lineIdx, setLineIdx] = React.useState(0);
   const activeRef = React.useRef(false);
 
+  const cancelSpeech = () => {
+    if (llamaPlugin.isSupported()) {
+      llamaPlugin.stopSpeak();
+    }
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+  };
+
   const playFrom = (startIdx: number) => {
-    window.speechSynthesis.cancel();
+    cancelSpeech();
     activeRef.current = true;
     setPlaying(true);
 
-    const go = () => {
+    const go = async (i: number) => {
       if (!activeRef.current) return;
+      if (i >= lines.length) {
+        setPlaying(false);
+        setLineIdx(0);
+        activeRef.current = false;
+        return;
+      }
+
+      setLineIdx(i);
+
       const langMap: Record<string, string> = {
         en: 'en-US', ta: 'ta-IN', hi: 'hi-IN', te: 'te-IN',
         kn: 'kn-IN', ml: 'ml-IN', bn: 'bn-IN', mr: 'mr-IN',
@@ -267,57 +285,57 @@ function LibraryTTSPlayer({ lines, podcastLang, host1, host2, durationEst, user 
         pt: 'pt-BR', it: 'it-IT', id: 'id-ID', tr: 'tr-TR', vi: 'vi-VN',
       };
       const lang = langMap[podcastLang] || 'en-US';
-      const voices = window.speechSynthesis.getVoices();
-      const lv = voices.filter(v => v.lang.startsWith(lang.split('-')[0]));
 
-      for (let i = startIdx; i < lines.length; i++) {
-        const utt = new SpeechSynthesisUtterance(lines[i].text);
-        utt.lang = lang;
-        const isH1 = lines[i].speaker === host1;
-        if (lv.length >= 2) utt.voice = lv[isH1 ? 0 : 1];
-        else if (lv.length === 1) utt.voice = lv[0];
-        utt.pitch = isH1 ? 0.9 : 1.15;
-        utt.rate = isH1 ? 0.95 : 1.0;
-
-        utt.onstart = () => {
-          if (activeRef.current) {
-            setLineIdx(i);
-          }
-        };
-
-        utt.onend = () => {
-          if (i === lines.length - 1) {
-            setPlaying(false);
-            setLineIdx(0);
-            activeRef.current = false;
-          }
-        };
-
-        utt.onerror = (e) => {
-          console.warn(`[LibraryTTSPlayer] Error on line ${i}:`, e);
-          if (i === lines.length - 1) {
-            setPlaying(false);
-            activeRef.current = false;
-          }
-        };
-
-        window.speechSynthesis.speak(utt);
+      if (llamaPlugin.isSupported()) {
+        try {
+          await llamaPlugin.speak(lines[i].text, lang, (status) => {
+            if (status === 'done' || status === 'error') {
+              go(i + 1);
+            }
+          });
+        } catch (err) {
+          console.warn('[LibraryTTSPlayer] Native TTS error:', err);
+          fallbackSpeech(i, lang);
+        }
+      } else {
+        fallbackSpeech(i, lang);
       }
     };
 
+    const fallbackSpeech = (i: number, lang: string) => {
+      const voices = window.speechSynthesis.getVoices();
+      const lv = voices.filter(v => v.lang.startsWith(lang.split('-')[0]));
+      const utt = new SpeechSynthesisUtterance(lines[i].text);
+      utt.lang = lang;
+      const isH1 = lines[i].speaker === host1;
+      if (lv.length >= 2) utt.voice = lv[isH1 ? 0 : 1];
+      else if (lv.length === 1) utt.voice = lv[0];
+      utt.pitch = isH1 ? 0.9 : 1.15;
+      utt.rate = isH1 ? 0.95 : 1.0;
+
+      utt.onend = () => {
+        go(i + 1);
+      };
+      utt.onerror = (e) => {
+        console.warn(`[LibraryTTSPlayer] Web TTS Error on line ${i}:`, e);
+        go(i + 1);
+      };
+      window.speechSynthesis.speak(utt);
+    };
+
     const voicesNow = window.speechSynthesis.getVoices();
-    if (voicesNow.length > 0) {
-      go();
+    if (voicesNow.length > 0 || llamaPlugin.isSupported()) {
+      go(startIdx);
     } else {
       window.speechSynthesis.onvoiceschanged = () => {
         window.speechSynthesis.onvoiceschanged = null;
-        go();
+        go(startIdx);
       };
-      setTimeout(go, 500);
+      setTimeout(() => go(startIdx), 500);
     }
   };
 
-  const pause = () => { window.speechSynthesis.cancel(); activeRef.current = false; setPlaying(false); };
+  const pause = () => { cancelSpeech(); activeRef.current = false; setPlaying(false); };
   const toggle = () => { if (playing) pause(); else playFrom(lineIdx); };
   const restart = () => { pause(); setLineIdx(0); };
 
@@ -471,15 +489,32 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
   const ttsActiveRef = useRef(false);
 
   // --- MOBILE MODE: Web Speech API playback ---
+  const cancelTTS = () => {
+    if (llamaPlugin.isSupported()) {
+      llamaPlugin.stopSpeak();
+    }
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+  };
+
   const playTTS = (startIdx = 0) => {
     if (!lines || lines.length === 0) return;
-    window.speechSynthesis.cancel();
+    cancelTTS();
     ttsActiveRef.current = true;
     setPlaying(true);
 
-    const go = () => {
+    const go = async (i: number) => {
       if (!ttsActiveRef.current) return;
-      const voices = window.speechSynthesis.getVoices();
+      if (i >= lines.length) {
+        setPlaying(false);
+        setTtsLineIdx(0);
+        ttsActiveRef.current = false;
+        return;
+      }
+
+      setTtsLineIdx(i);
+
       const langCode = podcastLang || 'en';
       const langMap: Record<string, string> = {
         en: 'en-US', ta: 'ta-IN', hi: 'hi-IN', te: 'te-IN',
@@ -489,60 +524,61 @@ function AudioPlayer({ src, host1, host2, linesCount, durationEst, downloadUrl, 
         pt: 'pt-BR', it: 'it-IT', id: 'id-ID', tr: 'tr-TR', vi: 'vi-VN',
       };
       const targetLang = langMap[langCode] || 'en-US';
-      const langVoices = voices.filter(v => v.lang.startsWith(targetLang.split('-')[0]));
 
-      for (let i = startIdx; i < lines.length; i++) {
-        const line = lines[i];
-        const utt = new SpeechSynthesisUtterance(line.text);
-        utt.lang = targetLang;
-        
-        const isHost1 = line.speaker === host1;
-        if (langVoices.length >= 2) utt.voice = langVoices[isHost1 ? 0 : 1];
-        else if (langVoices.length === 1) utt.voice = langVoices[0];
-        
-        utt.pitch = isHost1 ? 0.9 : 1.15;
-        utt.rate = (isHost1 ? 0.95 : 1.0) * speed;
-
-        utt.onstart = () => {
-          if (ttsActiveRef.current) {
-            setTtsLineIdx(i);
-          }
-        };
-
-        utt.onend = () => {
-          if (i === lines.length - 1) {
-            setPlaying(false);
-            setTtsLineIdx(0);
-            ttsActiveRef.current = false;
-          }
-        };
-
-        utt.onerror = (e) => {
-          console.warn(`[AudioPlayer TTS] Error on line ${i}:`, e);
-          if (i === lines.length - 1) {
-            setPlaying(false);
-            ttsActiveRef.current = false;
-          }
-        };
-
-        window.speechSynthesis.speak(utt);
+      if (llamaPlugin.isSupported()) {
+        try {
+          await llamaPlugin.speak(lines[i].text, targetLang, (status) => {
+            if (status === 'done' || status === 'error') {
+              go(i + 1);
+            }
+          });
+        } catch (err) {
+          console.warn('[AudioPlayer TTS] Native TTS error:', err);
+          fallbackSpeech(i, targetLang);
+        }
+      } else {
+        fallbackSpeech(i, targetLang);
       }
     };
 
+    const fallbackSpeech = (i: number, targetLang: string) => {
+      const voices = window.speechSynthesis.getVoices();
+      const langVoices = voices.filter(v => v.lang.startsWith(targetLang.split('-')[0]));
+      const line = lines[i];
+      const utt = new SpeechSynthesisUtterance(line.text);
+      utt.lang = targetLang;
+      
+      const isHost1 = line.speaker === host1;
+      if (langVoices.length >= 2) utt.voice = langVoices[isHost1 ? 0 : 1];
+      else if (langVoices.length === 1) utt.voice = langVoices[0];
+      
+      utt.pitch = isHost1 ? 0.9 : 1.15;
+      utt.rate = (isHost1 ? 0.95 : 1.0) * speed;
+
+      utt.onend = () => {
+        go(i + 1);
+      };
+      utt.onerror = (e) => {
+        console.warn(`[AudioPlayer TTS] Web TTS Error on line ${i}:`, e);
+        go(i + 1);
+      };
+      window.speechSynthesis.speak(utt);
+    };
+
     const voices = window.speechSynthesis.getVoices();
-    if (voices.length > 0) {
-      go();
+    if (voices.length > 0 || llamaPlugin.isSupported()) {
+      go(startIdx);
     } else {
       window.speechSynthesis.onvoiceschanged = () => {
         window.speechSynthesis.onvoiceschanged = null;
-        go();
+        go(startIdx);
       };
-      setTimeout(go, 500);
+      setTimeout(() => go(startIdx), 500);
     }
   };
 
   const pauseTTS = () => {
-    window.speechSynthesis.cancel();
+    cancelTTS();
     ttsActiveRef.current = false;
     setPlaying(false);
   };
@@ -1668,7 +1704,9 @@ Each line: 1-3 natural sentences. Conversational and educational.`;
       patchState(sid, { podcast: podcastData });
 
       // Auto-play with Web Speech API if available
-      if (typeof window !== 'undefined' && window.speechSynthesis) {
+      if (llamaPlugin.isSupported()) {
+        llamaPlugin.stopSpeak();
+      } else if (typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel(); // stop any existing speech
         const voices = window.speechSynthesis.getVoices();
         // Pick a language-appropriate voice if possible
@@ -1826,7 +1864,17 @@ Each line: 1-3 natural sentences. Conversational and educational.`;
 
       // Play answer audio
       if (replyAudioUrl === 'local_tts') {
-        if (typeof window !== 'undefined' && window.speechSynthesis) {
+        if (llamaPlugin.isSupported()) {
+          const langMap: Record<string, string> = {
+            en: 'en-US', ta: 'ta-IN', hi: 'hi-IN', te: 'te-IN',
+            kn: 'kn-IN', ml: 'ml-IN', bn: 'bn-IN', mr: 'mr-IN',
+            es: 'es-ES', fr: 'fr-FR', de: 'de-DE', zh: 'zh-CN',
+            ja: 'ja-JP', ko: 'ko-KR', ar: 'ar-SA', ru: 'ru-RU',
+            pt: 'pt-BR', it: 'it-IT', id: 'id-ID', tr: 'tr-TR', vi: 'vi-VN',
+          };
+          const targetLang = langMap[podcastLang] || 'en-US';
+          llamaPlugin.speak(replyText, targetLang, () => {});
+        } else if (typeof window !== 'undefined' && window.speechSynthesis) {
           window.speechSynthesis.cancel();
           const ut = new SpeechSynthesisUtterance(replyText);
           const langMap: Record<string, string> = {
@@ -2795,7 +2843,17 @@ The generated content must be extremely detailed, educational, and structured, s
                                   {interaction.audio === 'local_tts' || !BACKEND ? (
                                     <button
                                       onClick={() => {
-                                        if (typeof window !== 'undefined' && window.speechSynthesis) {
+                                        if (llamaPlugin.isSupported()) {
+                                          const langMap: Record<string, string> = {
+                                            en: 'en-US', ta: 'ta-IN', hi: 'hi-IN', te: 'te-IN',
+                                            kn: 'kn-IN', ml: 'ml-IN', bn: 'bn-IN', mr: 'mr-IN',
+                                            es: 'es-ES', fr: 'fr-FR', de: 'de-DE', zh: 'zh-CN',
+                                            ja: 'ja-JP', ko: 'ko-KR', ar: 'ar-SA', ru: 'ru-RU',
+                                            pt: 'pt-BR', it: 'it-IT', id: 'id-ID', tr: 'tr-TR', vi: 'vi-VN',
+                                          };
+                                          const targetLang = langMap[podcastLang] || 'en-US';
+                                          llamaPlugin.speak(interaction.a, targetLang, () => {});
+                                        } else if (typeof window !== 'undefined' && window.speechSynthesis) {
                                           window.speechSynthesis.cancel();
                                           const ut = new SpeechSynthesisUtterance(interaction.a);
                                           const langMap: Record<string, string> = {

@@ -1,10 +1,12 @@
 import Foundation
 import Capacitor
+import AVFoundation
 
 @objc(LlamaPlugin)
-public class LlamaPlugin: CAPPlugin {
+public class LlamaPlugin: CAPPlugin, AVSpeechSynthesizerDelegate {
     private var isLoaded = false
     private var loadedModelPath = ""
+    private let speechSynthesizer = AVSpeechSynthesizer()
 
     @objc func loadModel(_ call: CAPPluginCall) {
         guard let modelPath = call.getString("modelPath") else {
@@ -686,5 +688,72 @@ public class LlamaPlugin: CAPPlugin {
 
         Keep experimenting, and feel free to ask more specific questions about coding, system design, or study techniques!
         """
+    }
+
+    // MARK: - Native Text-To-Speech (TTS)
+    
+    @objc func speak(_ call: CAPPluginCall) {
+        guard let text = call.getString("text") else {
+            call.reject("text is required")
+            return
+        }
+        let lang = call.getString("lang") ?? "en-US"
+        
+        let cleanText = cleanMarkdownForSpeech(text)
+        let utterance = AVSpeechUtterance(string: cleanText)
+        utterance.voice = AVSpeechSynthesisVoice(language: lang)
+        
+        // Stop any current speech before playing
+        if speechSynthesizer.isSpeaking {
+            speechSynthesizer.stopSpeaking(at: .immediate)
+        }
+        
+        speechSynthesizer.delegate = self
+        speechSynthesizer.speak(utterance)
+        call.resolve()
+    }
+
+    @objc func stopSpeak(_ call: CAPPluginCall) {
+        if speechSynthesizer.isSpeaking {
+            speechSynthesizer.stopSpeaking(at: .immediate)
+        }
+        call.resolve()
+    }
+
+    private func cleanMarkdownForSpeech(_ text: String) -> String {
+        var clean = text
+        // Remove headers
+        clean = clean.replacingOccurrences(of: "(?m)^#{1,6}\\s+", with: "", options: .regularExpression)
+        // Remove bold/italic markup
+        clean = clean.replacingOccurrences(of: "\\*{1,2}|_{1,2}", with: "", options: .regularExpression)
+        // Remove backticks
+        clean = clean.replacingOccurrences(of: "`", with: "")
+        // Remove code blocks
+        clean = clean.replacingOccurrences(of: "(?s)```[a-zA-Z]*\\n.*?\\n```", with: "", options: .regularExpression)
+        // Remove markdown links
+        clean = clean.replacingOccurrences(of: "\\[(.*?)\\]\\(.*?\\)", with: "$1", options: .regularExpression)
+        // Remove blockquotes
+        clean = clean.replacingOccurrences(of: "(?m)^>\\s*", with: "", options: .regularExpression)
+        // Remove bullet lists
+        clean = clean.replacingOccurrences(of: "(?m)^\\s*[-*+]\\s+", with: "", options: .regularExpression)
+        // Remove numbered lists
+        clean = clean.replacingOccurrences(of: "(?m)^\\s*\\d+\\.\\s+", with: "", options: .regularExpression)
+        // Replace newlines with spaces
+        clean = clean.replacingOccurrences(of: "\\n+", with: " ", options: .regularExpression)
+        return clean.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // MARK: - AVSpeechSynthesizerDelegate
+    
+    public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
+        notifyListeners("speakStatus", data: ["status": "start"])
+    }
+    
+    public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        notifyListeners("speakStatus", data: ["status": "done"])
+    }
+    
+    public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        notifyListeners("speakStatus", data: ["status": "done"])
     }
 }

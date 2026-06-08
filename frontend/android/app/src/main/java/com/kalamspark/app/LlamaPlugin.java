@@ -15,12 +15,100 @@ import android.os.Environment;
 import android.util.Log;
 import java.io.File;
 
+// Import LiteRT-LM SDK classes
+import com.google.ai.edge.litertlm.Engine;
+import com.google.ai.edge.litertlm.EngineConfig;
+import com.google.ai.edge.litertlm.Conversation;
+import com.google.ai.edge.litertlm.Backend;
+import com.google.ai.edge.litertlm.MessageCallback;
+import com.google.ai.edge.litertlm.Message;
+
 @SuppressWarnings({"unused", "ResultOfMethodCallIgnored", "deprecation", "Convert2Lambda", "SdCardPath", "StringConcatenation", "RedundantSuppression", "Convert2TextBlock", "TextBlockMigration"})
 @CapacitorPlugin(name = "LlamaPlugin")
 public class LlamaPlugin extends Plugin {
     private static final String TAG = "LlamaPlugin";
     private boolean isLoaded = false;
     private String selectedModelInternalPath = ""; // path of last user-selected model copied to internal storage
+
+    // LiteRT-LM Engine and Conversation references
+    private Engine engine = null;
+    private Conversation conversation = null;
+
+    // Native Text-To-Speech engine
+    private android.speech.tts.TextToSpeech tts = null;
+
+    @Override
+    public void load() {
+        super.load();
+        // Initialize Text-To-Speech on UI Thread
+        getActivity().runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    tts = new android.speech.tts.TextToSpeech(getContext(), new android.speech.tts.TextToSpeech.OnInitListener() {
+                        @Override
+                        public void onInit(int status) {
+                            if (status == android.speech.tts.TextToSpeech.SUCCESS) {
+                                Log.d(TAG, "TTS native service initialized successfully");
+                                tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
+                                    @Override
+                                    public void onStart(String utteranceId) {
+                                        JSObject data = new JSObject();
+                                        data.put("status", "start");
+                                        notifyListeners("speakStatus", data);
+                                    }
+
+                                    @Override
+                                    public void onDone(String utteranceId) {
+                                        JSObject data = new JSObject();
+                                        data.put("status", "done");
+                                        notifyListeners("speakStatus", data);
+                                    }
+
+                                    @Override
+                                    public void onError(String utteranceId) {
+                                        JSObject data = new JSObject();
+                                        data.put("status", "error");
+                                        notifyListeners("speakStatus", data);
+                                    }
+                                });
+                            } else {
+                                Log.e(TAG, "TTS native service initialization failed (status=" + status + ")");
+                            }
+                        }
+                    });
+                } catch (Exception e) {
+                    Log.e(TAG, "Failed to initialize TTS", e);
+                }
+            }
+        });
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        super.handleOnDestroy();
+        if (tts != null) {
+            try {
+                tts.stop();
+                tts.shutdown();
+            } catch (Exception e) {
+                Log.e(TAG, "Error shutting down TTS", e);
+            }
+            tts = null;
+        }
+        if (conversation != null) {
+            try {
+                conversation.close();
+            } catch (Exception ignored) {}
+            conversation = null;
+        }
+        if (engine != null) {
+            try {
+                engine.close();
+            } catch (Exception ignored) {}
+            engine = null;
+        }
+    }
 
     private String getSavedModelPath() {
         try {
@@ -326,9 +414,9 @@ public class LlamaPlugin extends Plugin {
             File primaryPath = new File(modelPath);
             String detail;
             if (primaryPath.exists() && primaryPath.isFile()) {
-                detail = "File found but appears incomplete (size: " + primaryPath.length() + " bytes). Re-download the GGUF model.";
+                detail = "File found but appears incomplete (size: " + primaryPath.length() + " bytes). Re-download the model.";
             } else {
-                detail = "Model not found. Place \"google_gemma-4-E2B-it-Q2_K.gguf\" in your Downloads folder." +
+                detail = "Model not found. Place model in your Downloads folder." +
                          " Tried: " + String.join(", ", pathsToTry);
             }
             JSObject ret = new JSObject();
@@ -339,16 +427,48 @@ public class LlamaPlugin extends Plugin {
         }
 
         try {
-            // In full JNI integration: nativeInitLlama(resolvedPath);
-            // Currently uses Java fallback — the model "loads" by setting the loaded flag
+            // Unload previous instances first
+            if (conversation != null) {
+                conversation.close();
+                conversation = null;
+            }
+            if (engine != null) {
+                engine.close();
+                engine = null;
+            }
+
+            // Attempt to load using LiteRT-LM Engine
+            EngineConfig engineConfig = new EngineConfig(
+                resolvedFile.getAbsolutePath(),
+                new com.google.ai.edge.litertlm.Backend.CPU(4),
+                null,
+                null,
+                2048,
+                null,
+                null
+            );
+
+            Engine engineInstance = new Engine(engineConfig);
+            engineInstance.initialize();
+            engine = engineInstance;
+            conversation = engineInstance.createConversation(new com.google.ai.edge.litertlm.ConversationConfig());
+
             isLoaded = true;
 
             JSObject ret = new JSObject();
             ret.put("success", true);
             ret.put("message", "Model loaded: " + resolvedFile.getName() + " (" + (resolvedFile.length() / 1024 / 1024) + " MB)");
             call.resolve(ret);
-        } catch (Exception e) {
-            call.resolve(new JSObject().put("success", false).put("message", e.getMessage()));
+        } catch (Throwable e) {
+            Log.w(TAG, "Failed to initialize LiteRT-LM Engine (falling back to Java mock templates)", e);
+            
+            // Set loaded flag so mockup NLP remains active
+            isLoaded = true;
+
+            JSObject ret = new JSObject();
+            ret.put("success", true);
+            ret.put("message", "Model loaded in template mode: " + resolvedFile.getName() + " (For native on-device generation, please load a .bin/.litertlm LiteRT-LM format model file). Error details: " + e.getMessage());
+            call.resolve(ret);
         }
     }
 
@@ -372,7 +492,41 @@ public class LlamaPlugin extends Plugin {
             @Override
             public void run() {
                 try {
-                    String result = nativeGenerate(systemInstruction, prompt);
+                    String result;
+                    if (conversation != null) {
+                        final StringBuilder sb = new StringBuilder();
+                        final java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+                        final Throwable[] errorHolder = new Throwable[1];
+
+                        conversation.sendMessageAsync(prompt, new MessageCallback() {
+                            @Override
+                            public void onMessage(Message message) {
+                                if (message != null) {
+                                    sb.append(message.toString());
+                                }
+                            }
+
+                            @Override
+                            public void onDone() {
+                                latch.countDown();
+                            }
+
+                            @Override
+                            public void onError(Throwable throwable) {
+                                errorHolder[0] = throwable;
+                                latch.countDown();
+                            }
+                        }, java.util.Collections.emptyMap());
+
+                        latch.await();
+
+                        if (errorHolder[0] != null) {
+                            throw new Exception(errorHolder[0]);
+                        }
+                        result = sb.toString();
+                    } else {
+                        result = generateJavaFallback(systemInstruction, prompt);
+                    }
 
                     JSObject ret = new JSObject();
                     ret.put("text", result);
@@ -384,33 +538,69 @@ public class LlamaPlugin extends Plugin {
         });
     }
 
-    // â”€â”€ JNI Native hooks (loaded from libllama.so compiled via CMake) â”€â”€
-    private native String jniGenerate(String systemInstruction, String prompt);
-
-    private String nativeGenerate(String system, String prompt) {
-        try {
-            if (isNativeLibraryLoaded) {
-                return jniGenerate(system, prompt);
-            }
-        } catch (UnsatisfiedLinkError e) {
-            Log.w(TAG, "libllama.so not found. Using Java NLP fallback.");
+    @PluginMethod
+    public void speak(PluginCall call) {
+        String text = call.getString("text");
+        String lang = call.getString("lang", "en-US");
+        if (text == null || text.isEmpty()) {
+            call.reject("text is required");
+            return;
         }
-        return generateJavaFallback(system, prompt);
+
+        getActivity().runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (tts != null) {
+                    try {
+                        java.util.Locale locale = java.util.Locale.forLanguageTag(lang);
+                        tts.setLanguage(locale);
+                        
+                        String cleanText = cleanMarkdownForSpeech(text);
+                        tts.speak(cleanText, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "cap_tts_" + System.currentTimeMillis());
+                        call.resolve();
+                    } catch (Exception e) {
+                        call.reject("Speech playback failed: " + e.getMessage());
+                    }
+                } else {
+                    call.reject("TTS not initialized");
+                }
+            }
+        });
     }
 
-    private static boolean isNativeLibraryLoaded = false;
-    static {
-        try {
-            System.loadLibrary("llama");
-            isNativeLibraryLoaded = true;
-            Log.i("LlamaPlugin", "libllama.so loaded successfully (native inference active).");
-        } catch (UnsatisfiedLinkError e) {
-            Log.w("LlamaPlugin", "libllama.so not available. Using Java NLP fallback (responses will be template-based).");
-        }
+    @PluginMethod
+    public void stopSpeak(PluginCall call) {
+        getActivity().runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (tts != null) {
+                    try {
+                        tts.stop();
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error stopping TTS", e);
+                    }
+                }
+                call.resolve();
+            }
+        });
+    }
+
+    private String cleanMarkdownForSpeech(String text) {
+        if (text == null) return "";
+        return text
+            .replaceAll("(?m)^#{1,6}\\s+", "")
+            .replaceAll("\\*{1,2}|_{1,2}", "")
+            .replaceAll("`", "")
+            .replaceAll("(?s)```[a-zA-Z]*\\n.*?\\n```", "")
+            .replaceAll("\\[(.*?)\\]\\(.*?\\)", "$1")
+            .replaceAll("(?m)^>\\s*", "")
+            .replaceAll("(?m)^\\s*[-*+]\\s+", "")
+            .replaceAll("(?m)^\\s*\\d+\\.\\s+", "")
+            .replaceAll("\\n+", " ")
+            .trim();
     }
 
     // ── Java-level NLP fallback ──
-    // Used when native C++ compilation is skipped or the library is not compiled.
     // In production: compile llama.cpp into libllama.so via CMakeLists.txt
     private String generateJavaFallback(String system, String prompt) {
         if (!isLoaded) {

@@ -567,6 +567,9 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
         audioRef.current.pause();
         audioRef.current = null;
       }
+      if (llamaPlugin.isSupported()) {
+        await llamaPlugin.stopSpeak();
+      }
       if ('speechSynthesis' in window) {
         window.speechSynthesis.cancel();
       }
@@ -578,6 +581,9 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
+    }
+    if (llamaPlugin.isSupported()) {
+      await llamaPlugin.stopSpeak();
     }
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
@@ -622,7 +628,22 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
       }
     }
 
-    // 5. Fallback to Web Speech API
+    // 5. Native platform TTS or Web Speech API fallback
+    if (llamaPlugin.isSupported()) {
+      try {
+        setSpeakingIdx(idx);
+        await llamaPlugin.speak(text, lang, (status) => {
+          if (status === 'done' || status === 'error') {
+            setSpeakingIdx(null);
+          }
+        });
+        return;
+      } catch (err) {
+        console.warn('[MentorChat] Native TTS failed, falling back to Web Speech API', err);
+      }
+    }
+
+    // 6. Fallback to Web Speech API
     fallbackToSpeechSynthesis(idx, text, lang);
   };
 
