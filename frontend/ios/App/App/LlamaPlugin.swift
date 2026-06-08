@@ -48,6 +48,19 @@ public class LlamaPlugin: CAPPlugin, AVSpeechSynthesizerDelegate {
         // Run inference in a background thread to prevent UI freezing
         DispatchQueue.global(qos: .userInitiated).async {
             let result = self.runInference(system: systemInstruction, prompt: prompt)
+            
+            // Simulate typing stream to the listener
+            var tempResult = ""
+            let words = result.components(separatedBy: " ")
+            for word in words {
+                tempResult += word + " "
+                self.notifyListeners("generationProgress", data: [
+                    "token": word + " ",
+                    "partialResult": tempResult
+                ])
+                Thread.sleep(forTimeInterval: 0.015) // small delay to simulate typing
+            }
+            
             call.resolve([
                 "text": result
             ])

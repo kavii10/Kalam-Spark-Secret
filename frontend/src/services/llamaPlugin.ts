@@ -14,6 +14,7 @@ const LlamaPluginNative = registerPlugin<LlamaPluginInterface>('LlamaPlugin');
 
 let isModelLoaded = false;
 let isLoadingModel = false;
+let activeSpeakListener: any = null;
 
 // Model filename
 const MODEL_FILENAME = 'google_gemma-4-E2B-it-Q2_K.gguf';
@@ -122,6 +123,40 @@ export const llamaPlugin = {
     }
   },
 
+  async getCompletionStream(
+    prompt: string,
+    systemInstruction: string,
+    onToken: (text: string) => void
+  ): Promise<string> {
+    if (!this.isSupported()) {
+      throw new Error('Local inference is only supported on mobile devices.');
+    }
+
+    const loaded = await this.ensureModelLoaded();
+    if (!loaded) {
+      throw new Error(`Could not load local model. Place "${MODEL_FILENAME}" in Downloads.`);
+    }
+
+    let listener: any = null;
+    try {
+      listener = await (LlamaPluginNative as any).addListener('generationProgress', (data: any) => {
+        if (data && data.token !== undefined) {
+          onToken(data.token);
+        }
+      });
+
+      const res = await LlamaPluginNative.generateCompletion({ prompt, systemInstruction });
+      return res.text;
+    } catch (err: any) {
+      console.error('[LlamaPlugin] Inference stream error:', err);
+      throw err;
+    } finally {
+      if (listener) {
+        await listener.remove();
+      }
+    }
+  },
+
   async selectModelFile(onProgress?: (progress: number) => void): Promise<boolean> {
     if (!this.isSupported()) return false;
     
@@ -171,12 +206,26 @@ export const llamaPlugin = {
   async speak(text: string, lang: string, onStatus?: (status: 'start' | 'done' | 'error') => void): Promise<void> {
     if (!this.isSupported()) return;
     
-    let listener: any = null;
+    if (activeSpeakListener) {
+      try {
+        await activeSpeakListener.remove();
+      } catch (e) {
+        console.warn('[LlamaPlugin] Failed to remove active speak listener:', e);
+      }
+      activeSpeakListener = null;
+    }
+
     if (onStatus) {
       try {
-        listener = await (LlamaPluginNative as any).addListener('speakStatus', (data: any) => {
+        activeSpeakListener = await (LlamaPluginNative as any).addListener('speakStatus', (data: any) => {
           if (data && data.status) {
             onStatus(data.status);
+            if (data.status === 'done' || data.status === 'error') {
+              if (activeSpeakListener) {
+                activeSpeakListener.remove().catch(() => {});
+                activeSpeakListener = null;
+              }
+            }
           }
         });
       } catch (e) {
@@ -188,8 +237,9 @@ export const llamaPlugin = {
       await LlamaPluginNative.speak({ text, lang });
     } catch (err) {
       console.error('[LlamaPlugin] Native speak failed:', err);
-      if (listener) {
-        listener.remove();
+      if (activeSpeakListener) {
+        activeSpeakListener.remove().catch(() => {});
+        activeSpeakListener = null;
       }
       throw err;
     }

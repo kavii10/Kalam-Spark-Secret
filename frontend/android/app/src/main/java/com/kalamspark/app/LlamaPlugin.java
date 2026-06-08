@@ -492,8 +492,16 @@ public class LlamaPlugin extends Plugin {
             @Override
             public void run() {
                 try {
-                    String result;
-                    if (conversation != null) {
+                    String result = "";
+                    if (engine != null) {
+                        // Recreate the conversation session to prevent context/history pollution
+                        if (conversation != null) {
+                            try {
+                                conversation.close();
+                            } catch (Exception ignored) {}
+                        }
+                        conversation = engine.createConversation(new com.google.ai.edge.litertlm.ConversationConfig());
+
                         final StringBuilder sb = new StringBuilder();
                         final java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
                         final Throwable[] errorHolder = new Throwable[1];
@@ -502,7 +510,14 @@ public class LlamaPlugin extends Plugin {
                             @Override
                             public void onMessage(Message message) {
                                 if (message != null) {
-                                    sb.append(message.toString());
+                                    String text = message.toString();
+                                    sb.append(text);
+                                    
+                                    // Send progress update to frontend
+                                    JSObject data = new JSObject();
+                                    data.put("token", text);
+                                    data.put("partialResult", sb.toString());
+                                    notifyListeners("generationProgress", data);
                                 }
                             }
 
@@ -526,6 +541,20 @@ public class LlamaPlugin extends Plugin {
                         result = sb.toString();
                     } else {
                         result = generateJavaFallback(systemInstruction, prompt);
+                        
+                        // Simulate typing/streaming for the fallback
+                        StringBuilder tempSb = new StringBuilder();
+                        String[] words = result.split(" ");
+                        for (int w = 0; w < words.length; w++) {
+                            tempSb.append(words[w]).append(" ");
+                            JSObject data = new JSObject();
+                            data.put("token", words[w] + " ");
+                            data.put("partialResult", tempSb.toString());
+                            notifyListeners("generationProgress", data);
+                            try {
+                                Thread.sleep(15); // small delay to simulate typing
+                            } catch (InterruptedException ignored) {}
+                        }
                     }
 
                     JSObject ret = new JSObject();
@@ -553,7 +582,17 @@ public class LlamaPlugin extends Plugin {
                 if (tts != null) {
                     try {
                         java.util.Locale locale = java.util.Locale.forLanguageTag(lang);
-                        tts.setLanguage(locale);
+                        int result = tts.setLanguage(locale);
+                        if (result == android.speech.tts.TextToSpeech.LANG_MISSING_DATA || result == android.speech.tts.TextToSpeech.LANG_NOT_SUPPORTED) {
+                            Log.w(TAG, "Language " + lang + " not supported/missing data. Trying language-only fallback.");
+                            String langOnly = lang.split("-")[0];
+                            java.util.Locale fallbackLocale = new java.util.Locale(langOnly);
+                            int resultFallback = tts.setLanguage(fallbackLocale);
+                            if (resultFallback == android.speech.tts.TextToSpeech.LANG_MISSING_DATA || resultFallback == android.speech.tts.TextToSpeech.LANG_NOT_SUPPORTED) {
+                                Log.w(TAG, "Language fallback " + langOnly + " failed. Falling back to default system language.");
+                                tts.setLanguage(java.util.Locale.getDefault());
+                            }
+                        }
                         
                         String cleanText = cleanMarkdownForSpeech(text);
                         tts.speak(cleanText, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "cap_tts_" + System.currentTimeMillis());

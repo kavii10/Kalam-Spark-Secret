@@ -137,7 +137,8 @@ async function callLocalMentor(
   messages: ChatMessage[],
   userText: string,
   user: UserProfile,
-  attachment?: AttachmentState
+  attachment?: AttachmentState,
+  onToken?: (text: string) => void
 ): Promise<string> {
   // Try local/remote FastAPI backend first (always try backend since it might be running on localhost/locally)
   try {
@@ -233,7 +234,9 @@ async function callLocalMentor(
         : `<start_of_turn>user\n${contextLine}<end_of_turn>\n<start_of_turn>model\n`;
 
       // Pass empty systemInstruction — context is already embedded in the user turn above
-      const reply = await llamaPlugin.getCompletion(gemmaPrompt, '');
+      const reply = await llamaPlugin.getCompletionStream(gemmaPrompt, '', (token) => {
+        if (onToken) onToken(token);
+      });
 
       if (reply && reply.trim()) {
         // Strip any leftover intro the model might still generate (safety net)
@@ -398,16 +401,49 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
     // Save to DB
     await dbService.saveMentorMessage(user.id, 'user', userText, currentSessionId);
 
+    // Add empty placeholder message for typing/streaming response
+    setMessages(prev => [...prev, { role: 'ai', text: '', ts: Date.now() }]);
+
     try {
-      const aiText = await callLocalMentor([...messages, userMsg], userText, user, att || undefined);
-      const aiMsg: ChatMessage = { role: 'ai', text: aiText, ts: Date.now() };
-      setMessages(prev => [...prev, aiMsg]);
+      const aiText = await callLocalMentor(
+        [...messages, userMsg],
+        userText,
+        user,
+        att || undefined,
+        (token) => {
+          setMessages(prev => {
+            if (prev.length === 0) return prev;
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last.role === 'ai') {
+              last.text += token;
+            }
+            return next;
+          });
+        }
+      );
+      
+      // Update placeholder message with final sanitized text
+      setMessages(prev => {
+        if (prev.length === 0) return prev;
+        const next = [...prev];
+        const last = next[next.length - 1];
+        if (last.role === 'ai') {
+          last.text = aiText;
+        }
+        return next;
+      });
+
       await dbService.saveMentorMessage(user.id, 'ai', aiText, currentSessionId);
       loadHistory(); // Refresh sidebar
     } catch (error: any) {
       console.error('Chat error:', error);
-      const errorMsg: ChatMessage = { role: 'ai', text: "Sorry, I'm having trouble connecting right now. Please try again later.", ts: Date.now() };
-      setMessages(prev => [...prev, errorMsg]);
+      // Remove empty placeholder if error occurred
+      setMessages(prev => {
+        const next = prev.filter(m => m.text !== '');
+        const errorMsg: ChatMessage = { role: 'ai', text: "Sorry, I'm having trouble connecting right now. Please try again later.", ts: Date.now() };
+        return [...next, errorMsg];
+      });
     } finally {
       setIsTyping(false);
     }
