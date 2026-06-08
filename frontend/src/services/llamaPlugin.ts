@@ -219,13 +219,16 @@ export const llamaPlugin = {
       try {
         activeSpeakListener = await (LlamaPluginNative as any).addListener('speakStatus', (data: any) => {
           if (data && data.status) {
-            onStatus(data.status);
-            if (data.status === 'done' || data.status === 'error') {
+            const currentStatus = data.status;
+            if (currentStatus === 'done' || currentStatus === 'error') {
               if (activeSpeakListener) {
                 activeSpeakListener.remove().catch(() => {});
                 activeSpeakListener = null;
               }
             }
+            setTimeout(() => {
+              onStatus(currentStatus);
+            }, 0);
           }
         });
       } catch (e) {

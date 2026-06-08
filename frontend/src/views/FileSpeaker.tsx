@@ -85,9 +85,75 @@ const LANGUAGE_VOICE_PRESETS: Record<string, { host1: string; host2: string; rec
   vi: { host1: 'vi-VN-NamMinhNeural',     host2: 'vi-VN-HoaiMyNeural',    rec_lang: 'vi-VN' },
 };
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Simple Markdown renderer: bold, italic, code, lists, headings, and citations Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* ─── LaTeX Math Unicode Replacer ─── */
+const mathReplacements: Record<string, string> = {
+  '\\alpha': 'α', '\\beta': 'β', '\\gamma': 'γ', '\\delta': 'δ', '\\epsilon': 'ε',
+  '\\zeta': 'ζ', '\\eta': 'η', '\\theta': 'θ', '\\iota': 'ι', '\\kappa': 'κ',
+  '\\lambda': 'λ', '\\mu': 'μ', '\\nu': 'ν', '\\xi': 'ξ', '\\pi': 'π',
+  '\\rho': 'ρ', '\\sigma': 'σ', '\\tau': 'τ', '\\upsilon': 'υ', '\\phi': 'φ',
+  '\\chi': 'χ', '\\psi': 'ψ', '\\omega': 'ω', '\\Gamma': 'Γ', '\\Delta': 'Δ',
+  '\\Theta': 'Θ', '\\Lambda': 'Λ', '\\Xi': 'Ξ', '\\Pi': 'Π', '\\Sigma': 'Σ',
+  '\\Upsilon': 'Υ', '\\Phi': 'Φ', '\\Psi': 'Ψ', '\\Omega': 'Ω',
+  
+  '\\hbar': 'ħ', '\\partial': '∂', '\\infty': '∞', '\\times': '×', '\\div': '÷',
+  '\\pm': '±', '\\mp': '∓', '\\le': '≤', '\\ge': '≥', '\\ne': '≠',
+  '\\approx': '≈', '\\equiv': '≡', '\\sim': '~', '\\propto': '∝', '\\cdot': '·',
+  '\\sum': '∑', '\\prod': '∏', '\\int': '∫', '\\oint': '∮', '\\nabla': '∇',
+  '\\sqrt': '√', '\\in': '∈', '\\notin': '∉', '\\subset': '⊂', '\\supset': '⊃',
+  '\\subseteq': '⊆', '\\supseteq': '⊇', '\\cap': '∩', '\\cup': '∪',
+  '\\forall': '∀', '\\exists': '∃', '\\emptyset': '∅', '\\to': '→',
+  '\\rightarrow': '→', '\\leftarrow': '←', '\\uparrow': '↑', '\\downarrow': '↓',
+  '\\implies': '⇒', '\\iff': '⇔', '\\|': '‖', '\\langle': '⟨', '\\rangle': '⟩'
+};
+
+const superscripts: Record<string, string> = {
+  '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+  '+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾', 'n': 'ⁿ', 'i': 'ⁱ', 'x': 'ˣ'
+};
+
+const subscripts: Record<string, string> = {
+  '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
+  '+': '₊', '-': '₋', '=': '₌', '(': '₍', ')': '₎', 'a': 'ₐ', 'e': 'ₑ', 'o': 'ₒ', 'x': 'ₓ', 'h': 'ₕ',
+  'k': 'ₖ', 'l': 'ₗ', 'm': 'ₘ', 'n': 'ₙ', 'p': 'ₚ', 's': 'ₛ', 't': 'ₜ'
+};
+
+function cleanMathText(mathText: string): string {
+  let result = mathText;
+  for (const [key, val] of Object.entries(mathReplacements)) {
+    const escapedKey = key.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    result = result.replace(new RegExp(escapedKey, 'g'), val);
+  }
+  result = result.replace(/\^([0-9+\-=()nix]+)/g, (_, p1) => {
+    return p1.split('').map((char: string) => superscripts[char] || char).join('');
+  });
+  result = result.replace(/\^{([^}]+)}/g, (_, p1) => {
+    return p1.split('').map((char: string) => superscripts[char] || char).join('');
+  });
+  result = result.replace(/_([0-9+\-=()aeoxhklmnpst]+)/g, (_, p1) => {
+    return p1.split('').map((char: string) => subscripts[char] || char).join('');
+  });
+  result = result.replace(/_{([^}]+)}/g, (_, p1) => {
+    return p1.split('').map((char: string) => subscripts[char] || char).join('');
+  });
+  result = result.replace(/\\/g, '');
+  return result;
+}
+
+function cleanLatexSimple(text: string): string {
+  if (!text) return '';
+  let cleaned = text.replace(/\$\$(.*?)\$\$/gs, (_, math) => {
+    return cleanMathText(math);
+  });
+  cleaned = cleaned.replace(/\$(.*?)\$/g, (_, math) => {
+    return cleanMathText(math);
+  });
+  return cleaned;
+}
+
+/* ─── Simple Markdown renderer: bold, italic, code, lists, headings, and citations ─── */
 function renderMarkdown(raw: string): React.ReactNode[] {
-  return raw.split('\n').map((line, lineIdx) => {
+  const cleanedRaw = cleanLatexSimple(raw);
+  return cleanedRaw.split('\n').map((line, lineIdx) => {
     // Handle headings
     const h3Match = line.match(/^###\s+(.+)/);
     const h2Match = line.match(/^##\s+(.+)/);
@@ -1416,7 +1482,24 @@ Be accurate and concise. Never invent facts.`;
           const historyStr = historyForApi.map(h => `${h.role === 'ai' ? 'AI' : 'Student'}: ${h.text}`).join('\n');
           const prompt = `Documents:\n${truncatedContext}\n\nHistory:\n${historyStr}\nStudent: ${q}\nAI:`;
           
-          reply = await llamaPlugin.getCompletion(prompt, systemInstruction);
+          // Add empty placeholder message for streaming/typing response
+          setSourceStates(cur => {
+            const s = cur[sid] ?? { chat: [], transforms: [], podcast: null };
+            return { ...cur, [sid]: { ...s, chat: [...s.chat, { role: 'ai', text: '' }] } };
+          });
+
+          reply = await llamaPlugin.getCompletionStream(prompt, systemInstruction, (token) => {
+            setSourceStates(cur => {
+              const s = cur[sid] ?? { chat: [], transforms: [], podcast: null };
+              if (s.chat.length === 0) return cur;
+              const nextChat = [...s.chat];
+              const last = nextChat[nextChat.length - 1];
+              if (last.role === 'ai') {
+                last.text += token;
+              }
+              return { ...cur, [sid]: { ...s, chat: nextChat } };
+            });
+          });
         } catch (localErr) {
           console.error('[FileSpeaker] Local model fallback failed:', localErr);
           // If offline model fails, return a friendly local message rather than crashing
@@ -1430,6 +1513,14 @@ Be accurate and concise. Never invent facts.`;
 
       setSourceStates(cur => {
         const s = cur[sid] ?? { chat: [], transforms: [], podcast: null };
+        if (s.chat.length > 0) {
+          const nextChat = [...s.chat];
+          const last = nextChat[nextChat.length - 1];
+          if (last.role === 'ai') {
+            last.text = reply;
+            return { ...cur, [sid]: { ...s, chat: nextChat } };
+          }
+        }
         return { ...cur, [sid]: { ...s, chat: [...s.chat, { role: 'ai', text: reply }] } };
       });
     } catch (e: any) {
@@ -1833,6 +1924,8 @@ Each line: 1-3 natural sentences. Conversational and educational.`;
         }
       }
 
+      let didStream = false;
+
       // Route 3: Offline local model fallback
       if (!replyText && llamaPlugin.isSupported()) {
         try {
@@ -1843,9 +1936,30 @@ Each line: 1-3 natural sentences. Conversational and educational.`;
           const langName = langNames[podcastLang] || 'English';
           const systemInstruction = `You are ${host1Name}, a friendly podcast host speaking in ${langName}.`;
           const prompt = `A listener just paused the podcast and asked a question.\n\nSCRIPT CONTEXT:\n${script.substring(script.length - 1500)}\n\nQUESTION: "${q}"\n\nAnswer briefly (1-3 sentences) in ${langName}.`;
-          const ansText = await llamaPlugin.getCompletion(prompt, systemInstruction);
+          
+          const cleanRegex = new RegExp(`^\\*?\\*?${host1Name}\\*?\\*?\\s*:\\s*`, 'i');
+          
+          // Append placeholder
+          const tempInteractions = [...(podcast.interactions || []), { q, a: '', audio: 'local_tts' }];
+          patchState(sid, { podcast: { ...podcast, interactions: tempInteractions } });
+          didStream = true;
+
+          const ansText = await llamaPlugin.getCompletionStream(prompt, systemInstruction, (token) => {
+            setSourceStates(cur => {
+              const s = cur[sid] ?? { chat: [], transforms: [], podcast: null };
+              if (!s.podcast || !s.podcast.interactions || s.podcast.interactions.length === 0) return cur;
+              const nextInteractions = [...s.podcast.interactions];
+              const last = { ...nextInteractions[nextInteractions.length - 1] };
+              last.a = (last.a + token).replace(cleanRegex, '');
+              nextInteractions[nextInteractions.length - 1] = last;
+              return {
+                ...cur,
+                [sid]: { ...s, podcast: { ...s.podcast, interactions: nextInteractions } }
+              };
+            });
+          });
+
           if (ansText) {
-            const cleanRegex = new RegExp(`^\\*?\\*?${host1Name}\\*?\\*?\\s*:\\s*`, 'i');
             replyText = ansText.replace(cleanRegex, '').trim();
             replyAudioUrl = 'local_tts';
           }
@@ -1859,8 +1973,30 @@ Each line: 1-3 natural sentences. Conversational and educational.`;
         replyAudioUrl = 'local_tts';
       }
 
-      const newInteractions = [...(podcast.interactions || []), { q, a: replyText, audio: replyAudioUrl }];
-      patchState(sid, { podcast: { ...podcast, interactions: newInteractions } });
+      // Save/Update final interaction
+      setSourceStates(cur => {
+        const s = cur[sid] ?? { chat: [], transforms: [], podcast: null };
+        if (!s.podcast) return cur;
+        const currentInteractions = s.podcast.interactions || [];
+        
+        if (didStream && currentInteractions.length > 0) {
+          const nextInteractions = [...currentInteractions];
+          const last = { ...nextInteractions[nextInteractions.length - 1] };
+          last.a = replyText;
+          last.audio = replyAudioUrl;
+          nextInteractions[nextInteractions.length - 1] = last;
+          return {
+            ...cur,
+            [sid]: { ...s, podcast: { ...s.podcast, interactions: nextInteractions } }
+          };
+        } else {
+          const nextInteractions = [...currentInteractions, { q, a: replyText, audio: replyAudioUrl }];
+          return {
+            ...cur,
+            [sid]: { ...s, podcast: { ...s.podcast, interactions: nextInteractions } }
+          };
+        }
+      });
 
       // Play answer audio
       if (replyAudioUrl === 'local_tts') {

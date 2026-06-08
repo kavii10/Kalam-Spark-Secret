@@ -341,20 +341,15 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
         setTasks(prev => prev.filter(p => p.completed));
       }
       
-      const existingTitles = new Set((forceRegenerate ? [] : baseTasks).map(t => t.title.trim().toLowerCase()));
+      const existingTitles = new Set(
+        baseTasks
+          .filter(t => t.completed || !forceRegenerate)
+          .map(t => t.title.trim().toLowerCase())
+      );
       const target = getTaskTarget();
       const neededTasks = target - activeTasks.length;
 
       if (neededTasks > 0) {
-        if (neededTasks === target && baseTasks.filter(t => t.completed).length > 0 && !forceRegenerate) {
-          for (const t of baseTasks.filter(t => t.completed)) {
-            markTaskUsed(t.title);
-            dbService.deleteTask(t.id).catch(() => {});
-          }
-          setTasks(prev => prev.filter(p => !p.completed));
-          existingTitles.clear();
-        }
-
         const stageIdx = user.currentStageIndex || 0;
         const stage = rm.stages ? (rm.stages[stageIdx] || rm.stages[0]) : null;
         const stageSubjects: string[] = getStageSubjects(stage);

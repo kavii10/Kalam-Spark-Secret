@@ -47,10 +47,68 @@ interface AttachmentState {
 /* ─── Constants ─── */
 const ACCEPTED_FILES = "image/*,video/*,.pdf,.docx,.doc,.txt,.md";
 
+/* ─── LaTeX Math Unicode Replacer ─── */
+const mathReplacements: Record<string, string> = {
+  '\\alpha': 'α', '\\beta': 'β', '\\gamma': 'γ', '\\delta': 'δ', '\\epsilon': 'ε',
+  '\\zeta': 'ζ', '\\eta': 'η', '\\theta': 'θ', '\\iota': 'ι', '\\kappa': 'κ',
+  '\\lambda': 'λ', '\\mu': 'μ', '\\nu': 'ν', '\\xi': 'ξ', '\\pi': 'π',
+  '\\rho': 'ρ', '\\sigma': 'σ', '\\tau': 'τ', '\\upsilon': 'υ', '\\phi': 'φ',
+  '\\chi': 'χ', '\\psi': 'ψ', '\\omega': 'ω', '\\Gamma': 'Γ', '\\Delta': 'Δ',
+  '\\Theta': 'Θ', '\\Lambda': 'Λ', '\\Xi': 'Ξ', '\\Pi': 'Π', '\\Sigma': 'Σ',
+  '\\Upsilon': 'Υ', '\\Phi': 'Φ', '\\Psi': 'Ψ', '\\Omega': 'Ω',
+  
+  '\\hbar': 'ħ', '\\partial': '∂', '\\infty': '∞', '\\times': '×', '\\div': '÷',
+  '\\pm': '±', '\\mp': '∓', '\\le': '≤', '\\ge': '≥', '\\ne': '≠',
+  '\\approx': '≈', '\\equiv': '≡', '\\sim': '~', '\\propto': '∝', '\\cdot': '·',
+  '\\sum': '∑', '\\prod': '∏', '\\int': '∫', '\\oint': '∮', '\\nabla': '∇',
+  '\\sqrt': '√', '\\in': '∈', '\\notin': '∉', '\\subset': '⊂', '\\supset': '⊃',
+  '\\subseteq': '⊆', '\\supseteq': '⊇', '\\cap': '∩', '\\cup': '∪',
+  '\\forall': '∀', '\\exists': '∃', '\\emptyset': '∅', '\\to': '→',
+  '\\rightarrow': '→', '\\leftarrow': '←', '\\uparrow': '↑', '\\downarrow': '↓',
+  '\\implies': '⇒', '\\iff': '⇔', '\\|': '‖', '\\langle': '⟨', '\\rangle': '⟩'
+};
+
+const superscripts: Record<string, string> = {
+  '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+  '+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾', 'n': 'ⁿ', 'i': 'ⁱ', 'x': 'ˣ'
+};
+
+const subscripts: Record<string, string> = {
+  '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄', '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
+  '+': '₊', '-': '₋', '=': '₌', '(': '₍', ')': '₎', 'a': 'ₐ', 'e': 'ₑ', 'o': 'ₒ', 'x': 'ₓ', 'h': 'ₕ',
+  'k': 'ₖ', 'l': 'ₗ', 'm': 'ₘ', 'n': 'ₙ', 'p': 'ₚ', 's': 'ₛ', 't': 'ₜ'
+};
+
+function cleanMathText(mathText: string): string {
+  let result = mathText;
+  
+  for (const [key, val] of Object.entries(mathReplacements)) {
+    const escapedKey = key.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    result = result.replace(new RegExp(escapedKey, 'g'), val);
+  }
+
+  result = result.replace(/\^([0-9+\-=()nix]+)/g, (_, p1) => {
+    return p1.split('').map((char: string) => superscripts[char] || char).join('');
+  });
+  result = result.replace(/\^{([^}]+)}/g, (_, p1) => {
+    return p1.split('').map((char: string) => superscripts[char] || char).join('');
+  });
+
+  result = result.replace(/_([0-9+\-=()aeoxhklmnpst]+)/g, (_, p1) => {
+    return p1.split('').map((char: string) => subscripts[char] || char).join('');
+  });
+  result = result.replace(/_{([^}]+)}/g, (_, p1) => {
+    return p1.split('').map((char: string) => subscripts[char] || char).join('');
+  });
+
+  result = result.replace(/\\/g, ''); 
+  return result;
+}
+
 /* ─── Markdown renderer ─── */
 function renderMd(text: string): string {
   if (!text) return '';
-  return text
+  let html = text
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     // Headings
     .replace(/^### (.+)$/gm, '<strong style="display:block;font-size:0.9em;font-weight:700;margin-top:8px;margin-bottom:2px">$1</strong>')
@@ -72,6 +130,16 @@ function renderMd(text: string): string {
     .replace(/(<li[^>]*>[\s\S]*?<\/li>\n?)+/g, m => `<ul style="margin:6px 0;padding:0">${m}</ul>`)
     // Line breaks (only for non-block elements)
     .replace(/\n/g, '<br>');
+
+  // Clean LaTeX math block/inline
+  html = html.replace(/\$\$(.*?)\$\$/gs, (_, math) => {
+    return `<span class="math-block" style="display:block;text-align:center;margin:8px 0;font-family:serif;font-style:italic;">${cleanMathText(math)}</span>`;
+  });
+  html = html.replace(/\$(.*?)\$/g, (_, math) => {
+    return `<span class="math-inline" style="font-family:serif;font-style:italic;padding:0 2px;">${cleanMathText(math)}</span>`;
+  });
+
+  return html;
 }
 
 /* ─── File → base64 + metadata helper ─── */
@@ -331,11 +399,29 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
     return () => document.removeEventListener('click', handleOutsideClick);
   }, [menuOpenSessionId]);
 
+  const lastSessionIdRef = useRef(currentSessionId);
+
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      const container = scrollRef.current;
+      const sessionChanged = lastSessionIdRef.current !== currentSessionId;
+      lastSessionIdRef.current = currentSessionId;
+
+      if (sessionChanged) {
+        container.scrollTop = container.scrollHeight;
+        return;
+      }
+
+      const lastMessage = messages[messages.length - 1];
+      const isUserMsg = lastMessage && lastMessage.role === 'user';
+      const isNewResponse = lastMessage && lastMessage.role === 'ai' && lastMessage.text.length <= 5;
+      const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+
+      if (isUserMsg || isNewResponse || isNearBottom) {
+        container.scrollTop = container.scrollHeight;
+      }
     }
-  }, [messages, isTyping]);
+  }, [messages, isTyping, currentSessionId]);
 
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true);
