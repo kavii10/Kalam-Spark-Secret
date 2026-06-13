@@ -221,7 +221,16 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
     motivation: '',
     year: '',   // label built from educationLevel + gradeOrSemester
     dream: '',
+    schoolClass: '',
+    schoolName: '',
+    collegeName: '',  // ← was missing, caused blank screen when typing in college stream
+    collegeDegree: '',
+    collegeYear: '',
+    collegeSem: '',
+    collegeStream: '',
+    academicStrengths: '',
   });
+
 
   // Dream validation state
   const [dreamSuggestion, setDreamSuggestion] = useState<string | null>(null);
@@ -229,43 +238,6 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const [targetYearError, setTargetYearError] = useState('');
   const [bgError, setBgError] = useState('');
-
-  const validateGradeInput = (level: string, grade: string) => {
-    if (!level || !grade) {
-      setBgError('');
-      return;
-    }
-    const g = grade.toLowerCase();
-    const numMatch = g.match(/\d+/);
-    const num = numMatch ? parseInt(numMatch[0], 10) : 0;
-
-    if (level === 'school') {
-      if (num > 12 || g.includes('year') || g.includes('sem')) {
-        setBgError('School students should enter a class between 1 and 12 (e.g., "Class 10").');
-      } else {
-        setBgError('');
-      }
-    } else if (level === 'college') {
-      // For Undergraduates, 12 is definitely school class, not year.
-      if (num >= 11 || g.includes('class')) {
-        setBgError('Undergraduates should enter their Year (1-5) or Semester (1-10). "12th" belongs to School.');
-      } else if (num > 0 && !g.includes('year') && !g.includes('sem')) {
-        setBgError('Please specify if this is a "Year" or "Semester" (e.g., "2nd Year" or "Sem 4").');
-      } else {
-        setBgError('');
-      }
-    } else if (level === 'graduate') {
-      if (num > 3 && g.includes('year')) {
-        setBgError('Postgraduate degrees usually last 1-3 years.');
-      } else if (num > 0 && !g.includes('year') && !g.includes('sem') && !g.includes('mtech') && !g.includes('mba') && !g.includes('ms')) {
-        setBgError('Please specify your Degree and Year (e.g., "MBA 1st Year").');
-      } else {
-        setBgError('');
-      }
-    } else {
-      setBgError('');
-    }
-  };
 
   const handleDreamChange = (val: string) => {
     setForm({ ...form, dream: val });
@@ -321,17 +293,94 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
   const handleNext = () => {
     if (step === 1) { setStep(2); return; }
     if (step === 2) {
-      // Build year label from educationLevel + gradeOrSemester
-      const yearLabel = form.gradeOrSemester || form.educationLevel;
-      setForm(f => ({ ...f, year: yearLabel }));
+      let yearLabel = '';
+      let gradeOrSemesterLabel = '';
+      let collegeNameLabel = '';
+      let motivationLabel = '';
+      let branchLabel = '';
+
+      if (form.educationLevel === 'school') {
+        gradeOrSemesterLabel = form.schoolClass;
+        collegeNameLabel = form.schoolName;
+        yearLabel = form.schoolClass;
+        branchLabel = form.branch;
+        motivationLabel = '';
+      } else if (form.educationLevel === 'college') {
+        gradeOrSemesterLabel = `${form.collegeDegree} - ${form.collegeStream}`;
+        collegeNameLabel = form.collegeName;
+        branchLabel = form.collegeStream;
+        yearLabel = `${form.collegeDegree} - ${form.collegeYear} (${form.collegeSem})`;
+        motivationLabel = form.academicStrengths;
+      } else if (form.educationLevel === 'graduate') {
+        gradeOrSemesterLabel = `${form.collegeDegree} - ${form.collegeStream}`;
+        collegeNameLabel = form.collegeName;
+        branchLabel = form.collegeStream;
+        yearLabel = `${form.collegeDegree} - ${form.collegeYear} (${form.collegeSem})`;
+        motivationLabel = form.academicStrengths;
+      } else if (form.educationLevel === 'self-learner') {
+        gradeOrSemesterLabel = 'Self-Learner';
+        collegeNameLabel = '';
+        branchLabel = form.branch;
+        yearLabel = 'Self-Learner / Working';
+        motivationLabel = form.academicStrengths;
+      }
+
+      setForm(f => ({
+        ...f,
+        year: yearLabel,
+        gradeOrSemester: gradeOrSemesterLabel,
+        collegeName: collegeNameLabel,
+        branch: branchLabel,
+        motivation: motivationLabel,
+        city: '',
+      }));
       setStep(3);
       return;
     }
     if (step === 3) { setCameFromDiscovery(false); goToSummaryStep(); return; }
     if (step === 4) { setStep(5); return; }
     if (step === 5) {
-      const yearLabel = form.gradeOrSemester || form.educationLevel;
-      onComplete({ ...form, year: yearLabel });
+      let yearLabel = '';
+      let gradeOrSemesterLabel = '';
+      let collegeNameLabel = '';
+      let motivationLabel = '';
+      let branchLabel = '';
+
+      if (form.educationLevel === 'school') {
+        gradeOrSemesterLabel = form.schoolClass;
+        collegeNameLabel = form.schoolName;
+        yearLabel = form.schoolClass;
+        branchLabel = form.branch;
+        motivationLabel = '';
+      } else if (form.educationLevel === 'college') {
+        gradeOrSemesterLabel = `${form.collegeDegree} - ${form.collegeStream}`;
+        collegeNameLabel = form.collegeName;
+        branchLabel = form.collegeStream;
+        yearLabel = `${form.collegeDegree} - ${form.collegeYear} (${form.collegeSem})`;
+        motivationLabel = form.academicStrengths;
+      } else if (form.educationLevel === 'graduate') {
+        gradeOrSemesterLabel = `${form.collegeDegree} - ${form.collegeStream}`;
+        collegeNameLabel = form.collegeName;
+        branchLabel = form.collegeStream;
+        yearLabel = `${form.collegeDegree} - ${form.collegeYear} (${form.collegeSem})`;
+        motivationLabel = form.academicStrengths;
+      } else if (form.educationLevel === 'self-learner') {
+        gradeOrSemesterLabel = 'Self-Learner';
+        collegeNameLabel = '';
+        branchLabel = form.branch;
+        yearLabel = 'Self-Learner / Working';
+        motivationLabel = form.academicStrengths;
+      }
+
+      onComplete({
+        ...form,
+        year: yearLabel,
+        gradeOrSemester: gradeOrSemesterLabel,
+        collegeName: collegeNameLabel,
+        branch: branchLabel,
+        motivation: motivationLabel,
+        city: '',
+      });
     }
   };
 
@@ -354,11 +403,22 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
     if (step === 1 && !form.name.trim()) return true;
     if (step === 2) {
       if (!form.educationLevel) return true;
-      if (form.educationLevel !== 'self-learner' && !form.gradeOrSemester.trim()) return true;
-      if (form.educationLevel === 'school' && !form.schoolBoard) return true;
-      if (!form.branch.trim()) return true;
+      if (form.educationLevel === 'school') {
+        if (!form.schoolClass) return true;
+        if (!form.schoolBoard) return true;
+        if (!form.schoolName.trim()) return true;
+        if (!form.branch.trim()) return true;
+      } else if (form.educationLevel === 'college' || form.educationLevel === 'graduate') {
+        if (!form.collegeDegree.trim()) return true;
+        if (!form.collegeStream.trim()) return true;
+        if (!form.collegeName.trim()) return true;
+        if (!form.collegeYear) return true;
+        if (!form.collegeSem) return true;
+      } else if (form.educationLevel === 'self-learner') {
+        if (!form.branch.trim()) return true;
+      }
       if (!form.targetYear) return true;
-      if (!!targetYearError || !!bgError) return true;
+      if (!!targetYearError) return true;
     }
     if (step === 3 && !form.dream.trim()) return true;
     if (step === 4 && summaryLoading) return true;
@@ -494,8 +554,20 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
                       value={form.educationLevel}
                       onChange={(val) => {
                         const level = val as 'school' | 'college' | 'graduate' | 'self-learner' | '';
-                        setForm({ ...form, educationLevel: level });
-                        validateGradeInput(level, form.gradeOrSemester);
+                        setForm({
+                          ...form,
+                          educationLevel: level,
+                          schoolBoard: '',
+                          schoolClass: '',
+                          schoolName: '',
+                          collegeName: '',
+                          collegeDegree: '',
+                          collegeYear: '',
+                          collegeSem: '',
+                          collegeStream: '',
+                          academicStrengths: '',
+                          branch: '',
+                        });
                       }}
                       options={[
                         { label: t('ob_high_school', lang), value: 'school' },
@@ -508,144 +580,329 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
                     />
                   </div>
 
-                  {/* Conditional: School board */}
+                  {/* ── SCHOOL SPECIFIC FIELDS ── */}
                   {form.educationLevel === 'school' && (
+                    <>
+                      {/* School Board */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>{t('ob_school_board', lang)}</p>
+                        <CustomSelect
+                          value={form.schoolBoard}
+                          onChange={(val) => setForm({ ...form, schoolBoard: val })}
+                          options={['CBSE', 'State Board (Tamil Nadu)', 'State Board (Karnataka)', 'State Board (Andhra Pradesh)', 'State Board (Kerala)', 'State Board (Maharashtra)', 'State Board (UP)', 'ICSE / ISC', 'IB (International)', 'Other'].map(b => ({
+                            label: b,
+                            value: b
+                          }))}
+                          placeholder={t('ob_choose_board', lang)}
+                          isLight={isLight}
+                        />
+                      </div>
+
+                      {/* Class */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Class</p>
+                        <CustomSelect
+                          value={form.schoolClass}
+                          onChange={(val) => setForm({ ...form, schoolClass: val })}
+                          options={Array.from({ length: 12 }, (_, i) => ({
+                            label: `Class ${i + 1}`,
+                            value: `Class ${i + 1}`
+                          }))}
+                          placeholder="Select your class..."
+                          isLight={isLight}
+                        />
+                      </div>
+
+                      {/* School Name */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>School Name</p>
+                        <input
+                          type="text"
+                          value={form.schoolName}
+                          onChange={(e) => setForm({ ...form, schoolName: e.target.value })}
+                          placeholder="e.g. Delhi Public School"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+
+                      {/* Favourite Subject */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Favourite subject / stream</p>
+                        <input
+                          type="text"
+                          value={form.branch}
+                          onChange={(e) => setForm({ ...form, branch: e.target.value })}
+                          placeholder="e.g. Mathematics, Science"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* ── COLLEGE (UNDER-GRADUATE) SPECIFIC FIELDS ── */}
+                  {form.educationLevel === 'college' && (
+                    <>
+                      {/* College Degree */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>College Degree</p>
+                        <input
+                          type="text"
+                          value={form.collegeDegree}
+                          onChange={(e) => setForm({ ...form, collegeDegree: e.target.value })}
+                          placeholder="e.g. B.Tech, B.Sc, MBBS"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+
+                      {/* College Stream */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>College Stream / Major</p>
+                        <input
+                          type="text"
+                          value={form.collegeStream}
+                          onChange={(e) => setForm({ ...form, collegeStream: e.target.value })}
+                          placeholder="e.g. CSE, AIDS, Doctor, ECE"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+
+                      {/* College Name */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>College / University Name</p>
+                        <input
+                          type="text"
+                          value={form.collegeName}
+                          onChange={(e) => setForm({ ...form, collegeName: e.target.value })}
+                          placeholder="e.g. IIT Madras"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+
+                      {/* College Year (Max 4) */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>College Year</p>
+                        <CustomSelect
+                          value={form.collegeYear}
+                          onChange={(val) => setForm({ ...form, collegeYear: val })}
+                          options={[
+                            { label: '1st Year', value: '1st Year' },
+                            { label: '2nd Year', value: '2nd Year' },
+                            { label: '3rd Year', value: '3rd Year' },
+                            { label: '4th Year', value: '4th Year' }
+                          ]}
+                          placeholder="Select your college year..."
+                          isLight={isLight}
+                        />
+                      </div>
+
+                      {/* Semester (1 or 2) */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Semester</p>
+                        <CustomSelect
+                          value={form.collegeSem}
+                          onChange={(val) => setForm({ ...form, collegeSem: val })}
+                          options={[
+                            { label: 'Semester 1', value: 'Semester 1' },
+                            { label: 'Semester 2', value: 'Semester 2' }
+                          ]}
+                          placeholder="Select semester..."
+                          isLight={isLight}
+                        />
+                      </div>
+
+                      {/* Academic Strengths */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Academic Strengths / Focus Areas (optional)</p>
+                        <input
+                          type="text"
+                          value={form.academicStrengths}
+                          onChange={(e) => setForm({ ...form, academicStrengths: e.target.value })}
+                          placeholder="e.g. Web Development, Math, Data Structures"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* ── POST-GRADUATE SPECIFIC FIELDS ── */}
+                  {form.educationLevel === 'graduate' && (
+                    <>
+                      {/* Postgraduate Degree */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Postgraduate Degree</p>
+                        <input
+                          type="text"
+                          value={form.collegeDegree}
+                          onChange={(e) => setForm({ ...form, collegeDegree: e.target.value })}
+                          placeholder="e.g. M.Tech, MBA, MS"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+
+                      {/* Postgraduate Stream */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Postgraduate Stream / Major</p>
+                        <input
+                          type="text"
+                          value={form.collegeStream}
+                          onChange={(e) => setForm({ ...form, collegeStream: e.target.value })}
+                          placeholder="e.g. CSE, AIDS, Finance"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+
+                      {/* College Name */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>College / University Name</p>
+                        <input
+                          type="text"
+                          value={form.collegeName}
+                          onChange={(e) => setForm({ ...form, collegeName: e.target.value })}
+                          placeholder="e.g. IIT Madras"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+
+                      {/* Postgraduate Year (Max 2) */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Postgraduate Year</p>
+                        <CustomSelect
+                          value={form.collegeYear}
+                          onChange={(val) => setForm({ ...form, collegeYear: val })}
+                          options={[
+                            { label: '1st Year', value: '1st Year' },
+                            { label: '2nd Year', value: '2nd Year' }
+                          ]}
+                          placeholder="Select postgraduate year..."
+                          isLight={isLight}
+                        />
+                      </div>
+
+                      {/* Semester (1 or 2) */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Semester</p>
+                        <CustomSelect
+                          value={form.collegeSem}
+                          onChange={(val) => setForm({ ...form, collegeSem: val })}
+                          options={[
+                            { label: 'Semester 1', value: 'Semester 1' },
+                            { label: 'Semester 2', value: 'Semester 2' }
+                          ]}
+                          placeholder="Select semester..."
+                          isLight={isLight}
+                        />
+                      </div>
+
+                      {/* Academic Strengths */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Academic Strengths / Focus Areas (optional)</p>
+                        <input
+                          type="text"
+                          value={form.academicStrengths}
+                          onChange={(e) => setForm({ ...form, academicStrengths: e.target.value })}
+                          placeholder="e.g. Machine Learning, Finance Analysis"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* ── SELF-LEARNER / WORKING SPECIFIC FIELDS ── */}
+                  {form.educationLevel === 'self-learner' && (
+                    <>
+                      {/* Current Field / Stream */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Current Field / Stream</p>
+                        <input
+                          type="text"
+                          value={form.branch}
+                          onChange={(e) => setForm({ ...form, branch: e.target.value })}
+                          placeholder="e.g. Software Testing, Marketing, Arts"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+
+                      {/* Skills & Strengths */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Skills & Strengths (optional)</p>
+                        <input
+                          type="text"
+                          value={form.academicStrengths}
+                          onChange={(e) => setForm({ ...form, academicStrengths: e.target.value })}
+                          placeholder="e.g. Python, Public Speaking"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Study Hours */}
+                  {form.educationLevel && (
                     <div>
-                      <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>{t('ob_school_board', lang)}</p>
-                      <CustomSelect
-                        value={form.schoolBoard}
-                        onChange={(val) => setForm({ ...form, schoolBoard: val })}
-                        options={['CBSE', 'State Board (Tamil Nadu)', 'State Board (Karnataka)', 'State Board (Andhra Pradesh)', 'State Board (Kerala)', 'State Board (Maharashtra)', 'State Board (UP)', 'ICSE / ISC', 'IB (International)', 'Other'].map(b => ({
-                          label: b,
-                          value: b
-                        }))}
-                        placeholder={t('ob_choose_board', lang)}
-                        isLight={isLight}
+                      <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>{t('ob_study_hours', lang)}: <span className="font-bold" style={{ color: isLight ? '#92400e' : undefined }}>{form.studyHoursPerDay}h / day</span></p>
+                      <input
+                        type="range" min={1} max={10} value={form.studyHoursPerDay}
+                        onChange={(e) => setForm({ ...form, studyHoursPerDay: Number(e.target.value) })}
+                        className="w-full accent-orange-500 cursor-pointer"
                       />
+                      <div className="flex justify-between text-[9px] text-gold-500/30">
+                        <span>1h</span><span>5h</span><span>10h</span>
+                      </div>
                     </div>
                   )}
 
-                  {/* Grade / Semester / Year */}
-                  {form.educationLevel !== 'self-learner' && (
+                  {/* Target Year */}
+                  {form.educationLevel && (
                     <div>
-                      <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>
-                        {form.educationLevel === 'school' ? 'Class' : 
-                         form.educationLevel === 'college' ? 'Year / Semester' : 
-                         form.educationLevel === 'graduate' ? 'Degree & Year' : 
-                         t('ob_grade_semester', lang)}
-                      </p>
+                      <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>{t('ob_target_year', lang)}</p>
                       <input
-                        type="text"
-                        value={form.gradeOrSemester}
+                        type="number"
+                        value={form.targetYear}
                         onChange={(e) => {
                           const val = e.target.value;
-                          setForm({ ...form, gradeOrSemester: val });
-                          validateGradeInput(form.educationLevel, val);
+                          setForm({ ...form, targetYear: val });
+                          const yr = parseInt(val, 10);
+                          const currentYear = new Date().getFullYear();
+                          const maxYear = currentYear + 50;
+                          if (val) {
+                            if (isNaN(yr) || yr < currentYear) {
+                              setTargetYearError(`Please enter a future year (${currentYear} or later).`);
+                            } else if (yr > maxYear) {
+                              setTargetYearError(`Goal must be achievable within 50 years (by ${maxYear}).`);
+                            } else {
+                              setTargetYearError('');
+                            }
+                          } else {
+                            setTargetYearError('');
+                          }
                         }}
-                        placeholder={
-                          form.educationLevel === 'school' ? 'e.g. Class 10' :
-                          form.educationLevel === 'college' ? 'e.g. 2nd Year or Sem 4' :
-                          form.educationLevel === 'graduate' ? 'e.g. MBA 1st Year' :
-                          t('ob_enter_grade', lang)
-                        }
+                        min={new Date().getFullYear()}
+                        max={new Date().getFullYear() + 50}
+                        placeholder={`e.g. ${new Date().getFullYear() + 2}`}
                         className={inputClass}
-                        style={bgError ? { ...inputStyle, borderColor: '#ef4444' } : inputStyle}
+                        style={targetYearError
+                          ? { ...inputStyle, borderColor: '#ef4444' }
+                          : inputStyle}
                       />
-                      {bgError && (
+                      {targetYearError && (
                         <p className="text-[11px] mt-1.5 ml-1 text-red-500 flex items-center gap-1 leading-tight">
-                          ⚠️ {bgError}
+                          ⚠️ {targetYearError}
                         </p>
                       )}
                     </div>
                   )}
-
-                  {/* Subject */}
-                  <div>
-                    <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>{t('ob_study_field', lang)}</p>
-                    <input
-                      type="text"
-                      value={form.branch}
-                      onChange={(e) => setForm({ ...form, branch: e.target.value })}
-                      placeholder={t('ob_field_placeholder', lang)}
-                      className={inputClass}
-                      style={inputStyle}
-                    />
-                  </div>
-
-                  {/* Study Hours */}
-                  <div>
-                    <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>{t('ob_study_hours', lang)}: <span className="font-bold" style={{ color: isLight ? '#92400e' : undefined }}>{form.studyHoursPerDay}h / day</span></p>
-                    <input
-                      type="range" min={1} max={10} value={form.studyHoursPerDay}
-                      onChange={(e) => setForm({ ...form, studyHoursPerDay: Number(e.target.value) })}
-                      className="w-full accent-orange-500 cursor-pointer"
-                    />
-                    <div className="flex justify-between text-[9px] text-gold-500/30">
-                      <span>1h</span><span>5h</span><span>10h</span>
-                    </div>
-                  </div>
-
-                  {/* Target Year */}
-                  <div>
-                    <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>{t('ob_target_year', lang)}</p>
-                    <input
-                      type="number"
-                      value={form.targetYear}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setForm({ ...form, targetYear: val });
-                        const yr = parseInt(val, 10);
-                        const currentYear = new Date().getFullYear();
-                        const maxYear = currentYear + 50;
-                        if (val) {
-                          if (isNaN(yr) || yr < currentYear) {
-                            setTargetYearError(`Please enter a future year (${currentYear} or later).`);
-                          } else if (yr > maxYear) {
-                            setTargetYearError(`Goal must be achievable within 50 years (by ${maxYear}).`);
-                          } else {
-                            setTargetYearError('');
-                          }
-                        } else {
-                          setTargetYearError('');
-                        }
-                      }}
-                      min={new Date().getFullYear()}
-                      max={new Date().getFullYear() + 50}
-                      placeholder={`e.g. ${new Date().getFullYear() + 2}`}
-                      className={inputClass}
-                      style={targetYearError
-                        ? { ...inputStyle, borderColor: '#ef4444' }
-                        : inputStyle}
-                    />
-                    {targetYearError && (
-                      <p className="text-[11px] mt-1.5 ml-1 text-red-500 flex items-center gap-1 leading-tight">
-                        ⚠️ {targetYearError}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* City */}
-                  <div>
-                    <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>{t('ob_city', lang)}</p>
-                    <input
-                      type="text" value={form.city}
-                      onChange={(e) => setForm({ ...form, city: e.target.value })}
-                      placeholder={t('ob_city_placeholder', lang)}
-                      className={inputClass} style={inputStyle}
-                    />
-                  </div>
-
-                  {/* Motivation */}
-                  <div>
-                    <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>{t('ob_motivation', lang)}</p>
-                    <textarea
-                      value={form.motivation}
-                      onChange={(e) => setForm({ ...form, motivation: e.target.value })}
-                      placeholder={t('ob_motivation_placeholder', lang)}
-                      className={`${inputClass} min-h-[70px] resize-none`}
-                      style={inputStyle}
-                    />
-                  </div>
                 </div>
               </div>
             )}
@@ -655,7 +912,7 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
               <div className="space-y-4 fade-up">
                 <div className="flex items-center gap-2 mb-1">
                   <Briefcase className="text-orange-500" size={15} />
-                  <h2 className="text-sm font-semibold" style={{ color: headClr }}>Your dream career</h2>
+                  <h2 className="text-sm font-semibold" style={{ color: headClr }}>Enter your career dream</h2>
                 </div>
                 <div className="relative">
                   <textarea
@@ -711,13 +968,26 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
                   </div>
                 )}
 
-                <button
-                  onClick={() => setShowDiscovery(true)}
-                  className="w-full py-3 rounded-xl text-xs font-medium transition-all flex items-center justify-center gap-2 text-purple-300"
-                  style={{ background: 'rgba(124,58,237,0.10)', border: '1px solid rgba(124,58,237,0.25)' }}
+                <div
+                  className="p-4 rounded-xl flex flex-col items-center justify-center text-center gap-2.5 relative overflow-hidden transition-all duration-300 hover:scale-[1.01] mt-2"
+                  style={isLight 
+                    ? { background: 'linear-gradient(135deg, rgba(168,85,247,0.08) 0%, rgba(244,63,94,0.08) 100%)', border: '1px solid rgba(168,85,247,0.35)' }
+                    : { background: 'linear-gradient(135deg, rgba(168,85,247,0.15) 0%, rgba(244,63,94,0.15) 100%)', border: '1px solid rgba(168,85,247,0.5)', boxShadow: '0 0 15px rgba(168,85,247,0.15)' }}
                 >
-                  <Lightbulb size={13} /> Not sure? Take the Dream Discovery Quiz
-                </button>
+                  <p className="text-[11px] font-bold tracking-wider uppercase flex items-center gap-1" style={{ color: isLight ? '#7e22ce' : '#d8b4fe' }}>
+                    <Sparkles size={11} className="text-yellow-400 animate-pulse" /> Not sure about your career dream?
+                  </p>
+                  <p className="text-[10px] max-w-xs leading-relaxed" style={{ color: isLight ? '#4b5563' : 'rgba(253,230,138,0.7)' }}>
+                    Answer a few simple questions to find the perfect career path tailored to your interests and skills!
+                  </p>
+                  <button
+                    onClick={() => setShowDiscovery(true)}
+                    className="mt-1 px-5 py-2.5 rounded-lg text-xs font-bold transition-all shadow-md flex items-center gap-1.5 hover:opacity-90 active:scale-95"
+                    style={{ background: 'linear-gradient(90deg, #a855f7 0%, #ec4899 100%)', color: 'white' }}
+                  >
+                    <Lightbulb size={13} className="text-yellow-200 fill-yellow-200/20" /> Take the Dream Discovery Quiz
+                  </button>
+                </div>
               </div>
             )}
 

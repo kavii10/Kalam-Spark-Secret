@@ -1,0 +1,50 @@
+﻿{
+  "name": "Kalam Spark — AI Career Architect",
+  "short_name": "Kalam Spark",
+  "description": "AI-powered career roadmap and personalised learning companion for students and self-learners.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#06030f",
+  "theme_color": "#ff8c42",
+  "orientation": "portrait-primary",
+  "lang": "en",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "/assets/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "My Roadmap",
+      "url": "/#/roadmap",
+      "description": "View your career roadmap"
+    },
+    {
+      "name": "Task List",
+      "url": "/#/planner",
+      "description": "View your daily tasks"
+    },
+    {
+      "name": "AI Mentor",
+      "url": "/#/mentor",
+      "description": "Chat with your AI mentor"
+    }
+  ]
+}

@@ -27,7 +27,9 @@ import {
   RotateCcw,
   Compass,
   Radio,
-  Volume2
+  Volume2,
+  Download,
+  Smartphone,
 } from "lucide-react";
 
 import Dashboard from "./views/Dashboard";
@@ -960,6 +962,65 @@ const AppContent = ({
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copying' | 'done'>('idle');
   const [copyProgress, setCopyProgress] = useState(0);
 
+  // ── PWA Install Prompt ────────────────────────────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(false);
+
+  useEffect(() => {
+    // Detect iOS
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    setIsIOS(ios);
+
+    // Detect if already installed as standalone PWA
+    const standalone =
+      (window.navigator as any).standalone === true ||
+      window.matchMedia('(display-mode: standalone)').matches;
+    setIsInstalled(standalone);
+
+    // Only show on web (not inside Capacitor native app)
+    if (Capacitor.isNativePlatform() || standalone) return;
+
+    // Android Chrome: capture the install prompt
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+      setShowInstallBanner(true);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+
+    // iOS: show the banner after a short delay so user can see the app first
+    if (ios) {
+      const timer = setTimeout(() => setShowInstallBanner(true), 3000);
+      return () => { clearTimeout(timer); window.removeEventListener('beforeinstallprompt', handler); };
+    }
+
+    // Hide after install
+    const onInstalled = () => { setShowInstallBanner(false); setIsInstalled(true); };
+    window.addEventListener('appinstalled', onInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (installPrompt) {
+      // Android Chrome — show native install dialog
+      installPrompt.prompt();
+      const { outcome } = await installPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setShowInstallBanner(false);
+        setIsInstalled(true);
+      }
+      setInstallPrompt(null);
+    }
+    // iOS — banner already shows instructions, nothing else to do
+  };
+
   useEffect(() => {
     if (showSettingsModal && Capacitor.isNativePlatform()) {
       llamaPlugin.checkModelExists().then(exists => {
@@ -1145,6 +1206,24 @@ const AppContent = ({
               <span>{user.xp || 0} XP</span>
             </div>
 
+            {/* Install App Badge (First place, before Stage) */}
+            {!Capacitor.isNativePlatform() && !isInstalled && (
+              <button
+                onClick={handleInstallClick}
+                title={isIOS ? 'Tap Share → Add to Home Screen to install' : 'Install Kalam Spark App'}
+                className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-semibold text-gold-300 transition-all active:scale-95 select-none hover:bg-white/5"
+                style={{
+                  background: "rgba(211,156,59,0.08)",
+                  border: "1px solid rgba(211,156,59,0.25)",
+                  boxShadow: "0 0 12px rgba(211,156,59,0.08)",
+                }}
+              >
+                <Smartphone size={13} className="text-gold-400" />
+                <span className="hidden sm:inline">Install App</span>
+                <span className="sm:hidden">Install</span>
+              </button>
+            )}
+
             {/* Stage Badge */}
             <div
               className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-semibold text-gold-300"
@@ -1193,6 +1272,7 @@ const AppContent = ({
                 </span>
               </button>
             )}
+
 
             {/* Settings Button */}
             <button
@@ -1270,6 +1350,32 @@ const AppContent = ({
               <X size={20} />
             </button>
             <h2 className="heading-gold font-cinzel text-xl font-bold mb-6 flex items-center gap-2"><Settings size={18} /> Settings</h2>
+
+            {/* PWA Install Card — only on web, only if installable */}
+            {!Capacitor.isNativePlatform() && !isInstalled && (
+              <div
+                className="flex items-center gap-3 p-4 rounded-xl mb-5 cursor-pointer transition-all active:scale-[0.98]"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(255,140,66,0.12), rgba(124,58,237,0.1))',
+                  border: '1px solid rgba(255,140,66,0.35)',
+                  boxShadow: '0 0 20px rgba(255,140,66,0.08)',
+                }}
+                onClick={() => { setShowSettingsModal(false); handleInstallClick(); }}
+              >
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,140,66,0.15)', border: '1px solid rgba(255,140,66,0.3)' }}>
+                  <Smartphone size={20} className="text-orange-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-gold-200">{isIOS ? 'Add to Home Screen' : 'Install App'}</p>
+                  <p className="text-[10px] text-gold-500/60 mt-0.5">
+                    {isIOS
+                      ? 'Tap Share (⎙) → "Add to Home Screen" in Safari'
+                      : 'Install on your phone for offline access'}
+                  </p>
+                </div>
+                {!isIOS && <Download size={16} className="text-gold-400 flex-shrink-0" />}
+              </div>
+            )}
             
             <div className="flex flex-col items-center gap-3 p-5 mb-5 rounded-xl text-center" style={{ background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.2)" }}>
               <div className="relative group cursor-pointer w-20 h-20 rounded-full border border-gold-500/30 bg-black overflow-hidden flex items-center justify-center mx-auto"
@@ -1428,34 +1534,105 @@ const AppContent = ({
             </div>
 
             {Capacitor.isNativePlatform() && (
-              <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-black/40 border border-gold-500/20 mb-5 text-left">
-                <span className="text-xs uppercase font-mono tracking-wider text-gold-400 font-bold mb-1">Local AI (Offline Mode)</span>
-                <p className="text-[10px] text-gold-500/60 leading-relaxed mb-2">
-                  Place <strong>google_gemma-4-E2B-it-Q2_K.gguf</strong> in your Downloads folder, or select it below to copy to app private storage.
-                </p>
-                {copyStatus === 'copying' ? (
-                  <div className="w-full bg-black/50 border border-gold-500/10 rounded-lg p-2.5 text-center">
-                    <span className="text-xs font-mono text-gold-300 animate-pulse">Copying Model: {copyProgress}%</span>
-                    <div className="w-full bg-black/80 rounded-full h-1.5 mt-2 overflow-hidden border border-gold-500/10">
-                      <div className="bg-gradient-to-r from-orange-500 to-gold-500 h-1.5 rounded-full transition-all duration-300" style={{ width: `${copyProgress}%` }} />
+              <div className="flex flex-col mb-5 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,140,66,0.25)', background: 'rgba(0,0,0,0.35)' }}>
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3" style={{ background: 'rgba(255,140,66,0.08)', borderBottom: '1px solid rgba(255,140,66,0.15)' }}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🧠</span>
+                    <div>
+                      <p className="text-sm font-bold text-gold-200">Offline AI Brain</p>
+                      <p className="text-[10px] text-gold-500/50">Works without internet</p>
                     </div>
                   </div>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between text-xs text-gold-300">
-                      <span>Status:</span>
-                      <span className={modelExists ? "text-emerald-400 font-bold flex items-center gap-1" : "text-amber-400 font-medium flex items-center gap-1"}>
-                        {modelExists ? "Ready" : "Not Found"}
-                      </span>
+                  {/* Status Badge */}
+                  {copyStatus !== 'copying' && (
+                    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${modelExists ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'}`}>
+                      <span>{modelExists ? '✓' : '!'}</span>
+                      <span>{modelExists ? 'Active' : 'Not Set Up'}</span>
                     </div>
-                    <button
-                      onClick={handlePickModel}
-                      className="w-full py-2 bg-gradient-to-r from-orange-500/20 to-gold-500/10 hover:from-orange-500/30 hover:to-gold-500/20 text-gold-200 border border-orange-500/30 hover:border-orange-500/50 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all"
-                    >
-                      {modelExists ? "Re-Select Model File" : "Select Model File"}
-                    </button>
-                  </div>
-                )}
+                  )}
+                </div>
+
+                <div className="px-4 py-3 flex flex-col gap-3">
+                  {/* What this does */}
+                  <p className="text-[11px] text-gold-400/70 leading-relaxed">
+                    {modelExists
+                      ? '✅ Your AI brain is ready! The app can now generate roadmaps, tasks & answers fully offline — no internet needed.'
+                      : 'Set up a local AI model once, and Kalam Spark will work fully offline — generate roadmaps, get answers and create tasks without any internet connection.'}
+                  </p>
+
+                  {copyStatus === 'copying' ? (
+                    /* Progress state */
+                    <div className="flex flex-col gap-2 p-3 rounded-lg" style={{ background: 'rgba(255,140,66,0.06)', border: '1px solid rgba(255,140,66,0.15)' }}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-gold-300">Loading Model...</span>
+                        <span className="text-xs font-bold text-orange-400">{copyProgress}%</span>
+                      </div>
+                      <div className="w-full bg-black/60 rounded-full h-2 overflow-hidden">
+                        <div className="bg-gradient-to-r from-orange-500 to-gold-400 h-2 rounded-full transition-all duration-300" style={{ width: `${copyProgress}%` }} />
+                      </div>
+                      <p className="text-[10px] text-gold-500/50 text-center">Please wait, this may take a minute…</p>
+                    </div>
+                  ) : !modelExists ? (
+                    /* Setup steps */
+                    <div className="flex flex-col gap-2">
+                      {/* Step 1 */}
+                      <div className="flex items-start gap-3 p-2.5 rounded-lg" style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.2)' }}>
+                        <div className="w-6 h-6 rounded-full bg-purple-600/40 border border-purple-500/40 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <span className="text-[10px] font-bold text-purple-300">1</span>
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-xs font-semibold text-purple-200 mb-0.5">Download the AI Model</p>
+                          <p className="text-[10px] text-purple-300/60 leading-relaxed">Get the <strong className="text-purple-200">Gemma 4B</strong> model file <span className="text-purple-300/50">(~700 MB)</span> from Hugging Face and save it to your <strong className="text-purple-200">Downloads</strong> folder.</p>
+                          <a
+                            href="https://huggingface.co/google/gemma-4-E2B-it-GGUF/resolve/main/google_gemma-4-E2B-it-Q2_K.gguf"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 mt-1.5 text-[10px] font-bold text-purple-300 hover:text-purple-200 underline transition-colors"
+                          >
+                            ↗ Open Download Link
+                          </a>
+                        </div>
+                      </div>
+                      {/* Step 2 */}
+                      <div className="flex items-start gap-3 p-2.5 rounded-lg" style={{ background: 'rgba(255,140,66,0.06)', border: '1px solid rgba(255,140,66,0.18)' }}>
+                        <div className="w-6 h-6 rounded-full bg-orange-500/30 border border-orange-500/40 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <span className="text-[10px] font-bold text-orange-300">2</span>
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-xs font-semibold text-gold-200 mb-0.5">Load it into Kalam Spark</p>
+                          <p className="text-[10px] text-gold-400/60 leading-relaxed">After downloading, tap the button below to select the <strong className="text-gold-300">.gguf</strong> file from your device storage.</p>
+                        </div>
+                      </div>
+                      {/* Load button */}
+                      <button
+                        onClick={handlePickModel}
+                        className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all active:scale-95"
+                        style={{ background: 'linear-gradient(135deg, rgba(255,140,66,0.25), rgba(124,58,237,0.2))', border: '1px solid rgba(255,140,66,0.4)', color: '#fde68a' }}
+                      >
+                        <span>📂</span> Select Model File (.gguf)
+                      </button>
+                    </div>
+                  ) : (
+                    /* Model ready state */
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-3 p-2.5 rounded-lg" style={{ background: 'rgba(16,185,129,0.07)', border: '1px solid rgba(16,185,129,0.2)' }}>
+                        <span className="text-2xl">🎉</span>
+                        <div>
+                          <p className="text-xs font-semibold text-emerald-300">Gemma 4B Model Ready</p>
+                          <p className="text-[10px] text-emerald-400/60">All offline features are now available</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={handlePickModel}
+                        className="w-full py-2 rounded-lg text-[11px] font-semibold transition-all"
+                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(253,230,138,0.5)' }}
+                      >
+                        Replace Model File
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

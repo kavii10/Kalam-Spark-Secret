@@ -17,7 +17,7 @@
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const DB_NAME = 'KalamSparkDB';
-const DB_VERSION = 3;                    // bump when schema changes
+const DB_VERSION = 4;                    // bump when schema changes
 const SCHEMA_VERSION = 2;               // stored on every record
 const TASK_EXPIRY_DAYS = 30;            // auto-delete tasks older than this
 const MAX_LOCAL_MENTOR_MSGS = 200;      // keep only the latest N messages locally
@@ -33,7 +33,8 @@ export type LocalStoreName =
   | 'sync_queue'
   | 'computed_cache'
   | 'flashcards'
-  | 'flashcard_stats';   // NEW: pre-computed dashboard values
+  | 'flashcard_stats'
+  | 'task_revisions';   // NEW: pre-computed dashboard values
 
 // ─── Device ID — stable per-install identifier ───────────────────────────────
 function getDeviceId(): string {
@@ -166,6 +167,13 @@ class LocalDB {
           const statsStore = db.createObjectStore('flashcard_stats', { keyPath: 'id' });
           statsStore.createIndex('user_id', 'user_id', { unique: false });
           statsStore.createIndex('flashcard_id', 'flashcard_id', { unique: false });
+        }
+
+        // ── task_revisions (NEW in v4) ──
+        if (!db.objectStoreNames.contains('task_revisions')) {
+          const revStore = db.createObjectStore('task_revisions', { keyPath: 'id' });
+          revStore.createIndex('user_id', 'user_id', { unique: false });
+          revStore.createIndex('next_review', 'next_review', { unique: false });
         }
 
         console.log(`[LocalDB] Schema upgraded from v${oldVersion} → v${DB_VERSION}`);

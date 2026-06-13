@@ -50,11 +50,12 @@ function markTaskUsed(title: string) {
   localStorage.setItem(VARIETY_KEY, JSON.stringify(map));
 }
 
-function wasUsedRecently(title: string): boolean {
+function wasUsedRecently(title: string, windowMs?: number): boolean {
   const map = getVarietyMap();
   const ts = map[title.trim().toLowerCase()];
   if (!ts) return false;
-  return Date.now() - ts < 7 * 24 * 60 * 60 * 1000;
+  // Default: 24-hour window (so same resource can repeat the next day)
+  return Date.now() - ts < (windowMs ?? 24 * 60 * 60 * 1000);
 }
 
 // ─── Shared Styles ───────────────────────────────────────────────────────────
@@ -360,40 +361,43 @@ export default function Planner({ user, setUser, onXpGain }: { user: any; setUse
 
         let pool: { title: string; type: string }[] = [];
         
-        const booksList = cached.books || [];
-        const videosList = cached.videos || [];
-        const papersList = cached.papers || [];
-        const newsList = cached.news || [];
-        
-        const offset = cached.resourceOffset || 0;
-        const maxLen = Math.max(booksList.length, videosList.length, papersList.length, newsList.length);
-        let currentOffset = offset;
-        if (maxLen > 0 && currentOffset >= maxLen) {
-          currentOffset = 0;
-        }
-        
-        const slicedBooks = booksList.slice(currentOffset, currentOffset + 5);
-        const slicedVideos = videosList.slice(currentOffset, currentOffset + 5);
-        const slicedPapers = papersList.slice(currentOffset, currentOffset + 2);
-        const slicedNews = newsList.slice(currentOffset, currentOffset + 2);
+        const isOnline = networkService.isOnline();
+        if (isOnline) {
+          const booksList = cached.books || [];
+          const videosList = cached.videos || [];
+          const papersList = cached.papers || [];
+          const newsList = cached.news || [];
+          
+          const offset = cached.resourceOffset || 0;
+          const maxLen = Math.max(booksList.length, videosList.length, papersList.length, newsList.length);
+          let currentOffset = offset;
+          if (maxLen > 0 && currentOffset >= maxLen) {
+            currentOffset = 0;
+          }
+          
+          const slicedBooks = booksList.slice(currentOffset, currentOffset + 5);
+          const slicedVideos = videosList.slice(currentOffset, currentOffset + 5);
+          const slicedPapers = papersList.slice(currentOffset, currentOffset + 2);
+          const slicedNews = newsList.slice(currentOffset, currentOffset + 2);
 
-        for (const b of slicedBooks) {
-          pool.push({ title: `Read Book: ${b.title}`, type: 'theory' });
-        }
-        for (const v of slicedVideos) {
-          pool.push({ title: `Watch Lecture: ${v.title}`, type: 'hands-on' });
-        }
-        for (const p of slicedPapers) {
-          pool.push({ title: `Study Research Paper: ${p.title}`, type: 'theory' });
-        }
-        for (const n of slicedNews) {
-          pool.push({ title: `Review News: ${n.title}`, type: 'review' });
-        }
+          for (const b of slicedBooks) {
+            pool.push({ title: `Read Book: ${b.title}`, type: 'theory' });
+          }
+          for (const v of slicedVideos) {
+            pool.push({ title: `Watch Lecture: ${v.title}`, type: 'hands-on' });
+          }
+          for (const p of slicedPapers) {
+            pool.push({ title: `Study Research Paper: ${p.title}`, type: 'theory' });
+          }
+          for (const n of slicedNews) {
+            pool.push({ title: `Review News: ${n.title}`, type: 'review' });
+          }
 
-        if (pool.length > 0) {
-          cached.resourceOffset = currentOffset + 5;
-          rm.cachedResources = cached;
-          await dbService.saveRoadmap(user, rm);
+          if (pool.length > 0) {
+            cached.resourceOffset = currentOffset + 5;
+            rm.cachedResources = cached;
+            await dbService.saveRoadmap(user, rm);
+          }
         }
 
         if (pool.length === 0) {
@@ -459,6 +463,14 @@ Return a JSON array of exactly ${neededTasks} tasks.`;
           } catch { /* silent */ }
         }
 
+        // ── Dedup: collect ALL titles already in use (today's tasks + recently used) ──
+        // Load current DB tasks to catch any that weren't in `baseTasks` (e.g. loaded async)
+        let dbTaskTitles: Set<string> = new Set();
+        try {
+          const dbTasks = await dbService.getTasks(user.id);
+          for (const t of dbTasks) dbTaskTitles.add(t.title.trim().toLowerCase());
+        } catch { /* silent */ }
+
         const addedTasks: DailyTask[] = [];
         const dreamWords = user.dream.toLowerCase().split(/\s+/).filter((w: string) => w.length > 2);
         const subjectWords = stageSubjects.join(' ').toLowerCase().split(/\s+/).filter((w: string) => w.length > 2);
@@ -468,20 +480,24 @@ Return a JSON array of exactly ${neededTasks} tasks.`;
           if (addedTasks.length >= neededTasks) break;
           const key = candidate.title.trim().toLowerCase();
 
-          const isDirectResource = candidate.title.startsWith('Read Book:') || 
-                                   candidate.title.startsWith('Watch Lecture:') || 
-                                   candidate.title.startsWith('Study Research Paper:') || 
+          // Skip if this title is already in today's task list OR the DB
+          if (existingTitles.has(key) || dbTaskTitles.has(key)) continue;
+
+          // Skip if used within the last 24 hours (applies to ALL tasks including books/videos)
+          if (wasUsedRecently(candidate.title)) continue;
+
+          const isDirectResource = candidate.title.startsWith('Read Book:') ||
+                                   candidate.title.startsWith('Watch Lecture:') ||
+                                   candidate.title.startsWith('Study Research Paper:') ||
                                    candidate.title.startsWith('Review News:');
 
-          if (!isDirectResource && wasUsedRecently(candidate.title)) continue;
-
-          const isRelevant = isDirectResource || 
-                             requiredKeywords.some(kw => key.includes(kw)) || 
+          const isRelevant = isDirectResource ||
+                             requiredKeywords.some(kw => key.includes(kw)) ||
                              key.split(/\s+/).some(w => requiredKeywords.includes(w));
           if (!isRelevant && pool.length > neededTasks && candidate.type !== 'current-affairs') continue;
 
-          if (existingTitles.has(key)) continue;
           existingTitles.add(key);
+          dbTaskTitles.add(key); // prevent double-add within this loop
           const task: DailyTask = {
             id: Math.random().toString(36).substr(2, 9),
             title: candidate.title,
@@ -490,9 +506,7 @@ Return a JSON array of exactly ${neededTasks} tasks.`;
             date: new Date().toISOString()
           };
           dbService.saveTask(user.id, task);
-          if (!isDirectResource) {
-            markTaskUsed(candidate.title);
-          }
+          markTaskUsed(candidate.title); // mark ALL tasks including books/videos
           addedTasks.push(task);
         }
         if (addedTasks.length > 0) {

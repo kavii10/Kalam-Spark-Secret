@@ -39,7 +39,8 @@ export type SyncOpType =
   | 'save_reward'
   | 'save_flashcard'
   | 'save_flashcard_stats'
-  | 'delete_flashcard';
+  | 'delete_flashcard'
+  | 'save_task_revision';
 
 export interface SyncOperation {
   id: string;
@@ -121,6 +122,12 @@ class OfflineSyncService {
     // Dedup save_flashcard_stats by stats id or flashcard id
     if (type === 'save_flashcard_stats' && payload?.id) {
       const old = queue.find(op => op.type === 'save_flashcard_stats' && op.payload?.id === payload.id);
+      if (old) await localDB.dequeueSyncOp(old.id);
+    }
+
+    // Dedup save_task_revision by revision id
+    if (type === 'save_task_revision' && payload?.id) {
+      const old = queue.find(op => op.type === 'save_task_revision' && op.payload?.id === payload.id);
       if (old) await localDB.dequeueSyncOp(old.id);
     }
 
@@ -324,6 +331,12 @@ class OfflineSyncService {
 
       case 'delete_flashcard': {
         const { error } = await supabase.from('flashcards').update({ active: false, updated_at: new Date().toISOString() }).eq('id', dbPayload.id);
+        if (error) throw error;
+        break;
+      }
+
+      case 'save_task_revision': {
+        const { error } = await supabase.from('task_revisions').upsert(dbPayload, { onConflict: 'id' });
         if (error) throw error;
         break;
       }

@@ -1002,8 +1002,9 @@ export default function Resources({ user }: { user: UserProfile }) {
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSearch()}
-            placeholder="Search books, videos, papers, news…"
-            className="resource-search-input flex-1 bg-transparent text-sm text-gold-200 placeholder-gold-500/30 outline-none"
+            placeholder={networkService.isOnline() ? "Search books, videos, papers, news…" : "Search is disabled offline"}
+            disabled={!networkService.isOnline()}
+            className="resource-search-input flex-1 bg-transparent text-sm text-gold-200 placeholder-gold-500/30 outline-none disabled:opacity-50"
           />
           {searchQuery && (
             <button onClick={clearSearch} className="text-gold-500/40 hover:text-gold-300 transition-colors">
@@ -1014,7 +1015,7 @@ export default function Resources({ user }: { user: UserProfile }) {
         <div className="flex gap-2">
           <button
             onClick={handleSearch}
-            disabled={isSearching || !searchQuery.trim()}
+            disabled={isSearching || !searchQuery.trim() || !networkService.isOnline()}
             className="btn-primary flex-1 sm:flex-initial flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-40"
           >
             {isSearching ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
@@ -1069,6 +1070,12 @@ export default function Resources({ user }: { user: UserProfile }) {
       </div>
 
       {/* ── Tab Content ── */}
+      {!networkService.isOnline() && ['books', 'videos', 'papers', 'news'].includes(activeTab) && (
+        <div className="p-4 rounded-xl flex items-center gap-3 bg-red-500/10 border border-red-500/20 text-red-350 text-xs mb-4">
+          <AlertCircle size={16} className="shrink-0 text-red-400" />
+          <span>You are offline. Only cached resources are visible. Connect to the internet to load new recommendations or search.</span>
+        </div>
+      )}
       {isSearching ? (
         <div className="h-40 flex flex-col items-center justify-center gap-3">
           <Loader2 className="animate-spin text-gold-400" size={24} />
@@ -1082,7 +1089,7 @@ export default function Resources({ user }: { user: UserProfile }) {
                 title="Books" icon={Library} iconColor="text-amber-400"
                 items={displayed.books}
                 renderCard={(item, i) => <div key={i} className="relative group"><BookCard item={item} /><ResourceActions item={item} roadmap={roadmap!} onUpdate={updateRoadmap} /></div>}
-                emptyMsg="No books found for this topic"
+                emptyMsg={!networkService.isOnline() ? "You cannot load books offline. Please check your internet connection." : "No books found for this topic"}
               />
             </div>
           )}
@@ -1093,7 +1100,7 @@ export default function Resources({ user }: { user: UserProfile }) {
                 title="Video Lectures" icon={GraduationCap} iconColor="text-red-400"
                 items={displayed.videos}
                 renderCard={(item, i) => <div key={i} className="relative group"><VideoCard item={item} /><ResourceActions item={item} roadmap={roadmap!} onUpdate={updateRoadmap} /></div>}
-                emptyMsg="No video lectures found"
+                emptyMsg={!networkService.isOnline() ? "You cannot load videos offline. Please check your internet connection." : "No video lectures found"}
               />
             </div>
           )}
@@ -1104,7 +1111,7 @@ export default function Resources({ user }: { user: UserProfile }) {
                 title="Research Papers" icon={Atom} iconColor="text-orange-400"
                 items={displayed.papers}
                 renderCard={(item, i) => <div key={i} className="relative group"><PaperCard item={item} /><ResourceActions item={item} roadmap={roadmap!} onUpdate={updateRoadmap} /></div>}
-                emptyMsg="No research papers found"
+                emptyMsg={!networkService.isOnline() ? "You cannot load research papers offline. Please check your internet connection." : "No research papers found"}
               />
             </div>
           )}
@@ -1128,12 +1135,12 @@ export default function Resources({ user }: { user: UserProfile }) {
                   return (
                           <div key={i} className="relative group">
                             <CardType item={item} />
-                            <div className="absolute top-2 left-2 z-10 pointer-events-none">
+                            <div className="absolute top-2 right-2 flex gap-1.5 items-center z-10">
                               <span className="px-2 py-1 text-[9px] font-bold uppercase tracking-wider rounded-md bg-black/60 text-white backdrop-blur border border-white/10 shadow-lg" style={{ color: CardType === BookCard ? '#f59e0b' : CardType === VideoCard ? '#ef4444' : CardType === PaperCard ? '#f97316' : '#10b981' }}>
                                 {CardType === BookCard ? 'Book' : CardType === VideoCard ? 'Video' : CardType === PaperCard ? 'Paper' : 'News'}
                               </span>
+                              <ResourceActions item={item} roadmap={roadmap!} onUpdate={updateRoadmap} inStack={true} />
                             </div>
-                            <ResourceActions item={item} roadmap={roadmap!} onUpdate={updateRoadmap} />
                           </div>
                         );
                 }}
@@ -1312,12 +1319,10 @@ export default function Resources({ user }: { user: UserProfile }) {
                           return (
                             <div key={i} className="relative group">
                               <CardType item={item} />
-                              <div className="absolute top-2 left-2 z-10 pointer-events-none">
+                              <div className="absolute top-2 right-2 flex gap-1.5 items-center z-10">
                                 <span className="px-2 py-1 text-[9px] font-bold uppercase tracking-wider rounded-md bg-black/60 text-white backdrop-blur border border-white/10 shadow-lg" style={{ color: CardType === BookCard ? '#f59e0b' : CardType === VideoCard ? '#ef4444' : CardType === PaperCard ? '#f97316' : '#10b981' }}>
                                   {CardType === BookCard ? 'Book' : CardType === VideoCard ? 'Video' : CardType === PaperCard ? 'Paper' : 'News'}
                                 </span>
-                              </div>
-                              <div className="absolute top-2 right-2 flex gap-1 z-10">
                                 <button 
                                   onClick={(e) => { 
                                     e.preventDefault(); 
@@ -1352,7 +1357,7 @@ export default function Resources({ user }: { user: UserProfile }) {
                 title="Industry News" icon={Rss} iconColor="text-emerald-400"
                 items={displayed.news}
                 renderCard={(item, i) => <div key={i} className="relative group"><NewsCard item={item} /><ResourceActions item={item} roadmap={roadmap!} onUpdate={updateRoadmap} /></div>}
-                emptyMsg="No news articles found"
+                emptyMsg={!networkService.isOnline() ? "You cannot load news offline. Please check your internet connection." : "No news articles found"}
               />
             </div>
           )}

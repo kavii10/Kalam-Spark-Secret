@@ -289,7 +289,7 @@ async def _call_llm_chat(messages: list[dict], max_tokens: int = 1500, temperatu
 ROADMAP_SCHEMA = """
 {
   "dream": "Career title",
-  "summary": "3-4 sentence inspiring and detailed roadmap summary",
+  "summary": "Exactly 2 complete sentences: sentence 1 describes what this career is and what the student will do; sentence 2 states what they will achieve by following this roadmap. Be specific and inspiring. No more than 40 words total.",
   "stages": [
     {
       "id": "stage-1",
@@ -375,6 +375,27 @@ def _build_prompt(dream: str, year: str, branch: str, crawled_content: str, lang
         if language != "en" else ""
     )
 
+    # Smart stage tailoring instructions based on school vs college vs other
+    tailoring_instruction = ""
+    year_lower = year.lower()
+    if "class" in year_lower or "grade" in year_lower or "school" in year_lower:
+        tailoring_instruction = f"""
+- The student is in SCHOOL (specifically {year}).
+- Stage 1 and Stage 2 MUST focus on building the correct foundation within their current class and school subjects. Specify exactly which school subjects (e.g., Mathematics, Physics, Chemistry, English, etc.) they need to be strong in at their current class level ({year}) and what foundational concepts they must master to eventually achieve their dream career.
+- Include advice on how to align their school studies and any target exams with their dream career.
+"""
+    elif "sem" in year_lower or "year" in year_lower or "college" in year_lower or "degree" in year_lower or "b.tech" in year_lower or "m.tech" in year_lower or "mba" in year_lower or "msc" in year_lower or "bsc" in year_lower or "mbbs" in year_lower:
+        tailoring_instruction = f"""
+- The student is in COLLEGE (specifically {year} for {branch}).
+- Tailor the early stages to their specific degree and year/semester ({year}). Specify the exact college subjects, core academic courses, and university projects they should focus on to align with their dream career.
+- If their college major/branch ({branch}) is different from their dream career, specify how they should balance their college curriculum while self-studying or transitioning/pivoting in the early stages.
+"""
+    else:
+        tailoring_instruction = f"""
+- The student is a SELF-LEARNER or WORKING professional.
+- Focus the first stages on leveraging their existing background in {branch} and bridging the gap between their current skills and the skills required for the dream career.
+"""
+
     return f"""Create a detailed 6-stage career roadmap for a student whose dream career is to become a {dream}. The student's current education level is {year} and their current field/branch of study is {branch}.{language_instruction}
 
 STUDENT PROFILE:
@@ -386,16 +407,18 @@ STUDENT PROFILE:
 
 REQUIREMENTS:
 1. Generate EXACTLY 6 progressive stages from their current level ({year} in {branch}) to successfully landing a role as a {dream}.
-2. Ensure the roadmap is highly accurate and practical for {dream}.
+2. TAILOR THE ROADMAP STAGES & FOUNDATION TO THEIR CURRENT EDUCATIONAL STAGE:
+{tailoring_instruction}
+3. Ensure the roadmap is highly accurate and practical for {dream}.
    - Focus on Target Career: Base the roadmap stages, subjects, concepts, and skills strictly on the target dream career ({dream}). If the target career is unrelated to their current branch of study ({branch}), do NOT include subjects, tools, or concepts from {branch}. Focus exclusively on the requirements of the target career {dream}.
    - Note on terminology: If the target career is 'Doctor', 'Physician', or a medical practitioner, this refers EXCLUSIVELY to a medical doctor (e.g., MBBS, MD, DO) practicing medicine. Under no circumstances should you generate an academic PhD or academic doctoral program roadmap unless the career is explicitly specified as a PhD/academic doctorate.
    - Cross-Disciplinary Transition handling: If the student is transitioning from an unrelated current field/branch (e.g. Mathematics, Computer Science, AI, Engineering) to a completely different field (e.g. Medicine/Doctor, Law, Creative Arts), the roadmap MUST focus on the transition/pivot process in the early stages.
-3. Each stage MUST have:
+4. Each stage MUST have:
    - Minimum 10 highly specific subjects/topics (e.g., "Organic Chemistry", "Linear Algebra", "Pediatric Medicine" — do NOT use generic titles like "Chemistry" or "Core Concepts").
    - 4-6 specific learnable items/concepts in the 'concepts' array that map directly to checkboxes for student progress (e.g., "Learn vector spaces", "Identify anatomic structures").
    - 6 skills, 3 projects, 100+ word description.
-4. Use real professional tools, technologies, methodologies, and frameworks specific to {dream}.
-5. Realistic durations for a student at the {year} level to transition.
+5. Use real professional tools, technologies, methodologies, and frameworks specific to {dream}.
+6. Realistic durations for a student at the {year} level to transition.
 
 OUTPUT INSTRUCTIONS - CRITICAL:
 - Return ONLY valid JSON object. Start with {{ and end with }}.

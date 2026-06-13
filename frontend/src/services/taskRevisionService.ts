@@ -5,6 +5,22 @@
  */
 
 import { supabase } from "./supabaseClient";
+import { localDB, DEVICE_ID } from "./localDB";
+import { networkService } from "./networkService";
+import { offlineSyncService, SyncOpType } from "./offlineSyncService";
+
+async function syncToSupabase(type: SyncOpType, payload: any): Promise<void> {
+  const enriched = { ...payload, _device_id: DEVICE_ID };
+  if (networkService.isOnline()) {
+    try {
+      await offlineSyncService.executeOne(type, enriched);
+    } catch (e) {
+      await offlineSyncService.enqueue(type, enriched);
+    }
+  } else {
+    await offlineSyncService.enqueue(type, enriched);
+  }
+}
 
 export interface TaskRevision {
   id: string;
@@ -65,27 +81,17 @@ class TaskRevisionService {
   /** Enqueue a newly completed task for revision */
   async enqueueTask(userId: string, taskId: string, taskTitle: string, taskType: string): Promise<void> {
     try {
-      // Use maybeSingle to avoid error if no row exists
-      const { data: existing, error: checkError } = await supabase
-        .from("task_revisions")
-        .select("id")
-        .eq("user_id", userId)
-        .eq("task_id", taskId)
-        .maybeSingle();
+      const rowId = `tr_${userId.slice(0,5)}_${taskId}`;
 
-      if (checkError) {
-        console.error("Error checking existing revision:", checkError);
-      }
-      if (existing) {
+      // Check locally in IndexedDB first
+      const localExisting = await localDB.get('task_revisions', rowId);
+      if (localExisting) {
         console.log("Task already in revision queue:", taskTitle);
         return;
       }
 
       const now = new Date();
-      // Use the actual task ID or a stable generated one
-      const rowId = `tr_${userId.slice(0,5)}_${taskId}`; 
-      
-      const { error } = await supabase.from("task_revisions").upsert({
+      const localPayload = {
         id: rowId,
         user_id: userId,
         task_id: taskId,
@@ -99,13 +105,14 @@ class TaskRevisionService {
         last_quiz_score: null,
         total_reviews: 0,
         created_at: now.toISOString(),
-      }, { onConflict: 'id' });
+      };
 
-      if (error) {
-        console.error("Error enqueueing task revision:", error);
-      } else {
-        console.log("Successfully enqueued task for revision:", taskTitle);
-      }
+      // 1. Write to local IndexedDB
+      await localDB.put('task_revisions', localPayload, true);
+
+      // 2. Sync to Supabase in background
+      await syncToSupabase('save_task_revision', localPayload);
+      console.log("Successfully enqueued task for revision:", taskTitle);
     } catch (e) {
       console.error("Unexpected error in enqueueTask:", e);
     }
@@ -113,71 +120,105 @@ class TaskRevisionService {
 
   /** Get tasks due for review now */
   async getDueTasks(userId: string): Promise<TaskRevision[]> {
-    const now = new Date();
-    const { data, error } = await supabase
-      .from("task_revisions")
-      .select("*")
-      .eq("user_id", userId)
-      .lte("next_review", now.toISOString())
-      .order("next_review", { ascending: true });
+    if (networkService.isOnline()) {
+      try {
+        const now = new Date();
+        const { data, error } = await supabase
+          .from("task_revisions")
+          .select("*")
+          .eq("user_id", userId)
+          .lte("next_review", now.toISOString())
+          .order("next_review", { ascending: true });
 
-    if (error) { console.error(error); return []; }
-    return (data || []).map(this.mapRow);
+        if (!error && data) {
+          await localDB.putMany('task_revisions', data, false);
+        }
+      } catch (e) {
+        console.warn("[TaskRevisionService] Error pre-fetching due tasks from Supabase, falling back to local:", e);
+      }
+    }
+
+    // Load from local IndexedDB
+    const allLocal = await localDB.getAll<any>('task_revisions', 'user_id', userId);
+    const now = new Date();
+    const due = allLocal.filter(r => new Date(r.next_review || r.nextReview) <= now);
+    
+    // Sort by next_review ascending
+    due.sort((a, b) => new Date(a.next_review || a.nextReview).getTime() - new Date(b.next_review || b.nextReview).getTime());
+    return due.map(this.mapRow);
   }
 
   /** Get ALL revisions for calendar / analytics */
   async getAllRevisions(userId: string): Promise<TaskRevision[]> {
-    const { data, error } = await supabase
-      .from("task_revisions")
-      .select("*")
-      .eq("user_id", userId)
-      .order("next_review", { ascending: true });
+    if (networkService.isOnline()) {
+      try {
+        const { data, error } = await supabase
+          .from("task_revisions")
+          .select("*")
+          .eq("user_id", userId)
+          .order("next_review", { ascending: true });
 
-    if (error) { console.error(error); return []; }
-    return (data || []).map(this.mapRow);
+        if (!error && data) {
+          await localDB.putMany('task_revisions', data, false);
+        }
+      } catch (e) {
+        console.warn("[TaskRevisionService] Error pre-fetching all revisions from Supabase, falling back to local:", e);
+      }
+    }
+
+    // Load from local IndexedDB
+    const allLocal = await localDB.getAll<any>('task_revisions', 'user_id', userId);
+    allLocal.sort((a, b) => new Date(a.next_review || a.nextReview).getTime() - new Date(b.next_review || b.nextReview).getTime());
+    return allLocal.map(this.mapRow);
   }
 
   /** Update revision after a quiz. scorePercent = 0-100 */
   async recordReview(revisionId: string, scorePercent: number): Promise<void> {
-    const { data, error } = await supabase
-      .from("task_revisions")
-      .select("*")
-      .eq("id", revisionId)
-      .single();
+    try {
+      const local = await localDB.get<any>('task_revisions', revisionId);
+      if (!local) return;
 
-    if (error || !data) return;
+      const grade = scoreToGrade(scorePercent);
+      const interval = this.fsrsInterval(local.stability, local.difficulty, grade);
+      const newStability = this.fsrsStability(local.stability, grade, interval);
+      const newDifficulty = this.fsrsDifficulty(local.difficulty, grade);
+      const now = new Date();
 
-    const grade = scoreToGrade(scorePercent);
-    const interval = this.fsrsInterval(data.stability, data.difficulty, grade);
-    const newStability = this.fsrsStability(data.stability, grade, interval);
-    const newDifficulty = this.fsrsDifficulty(data.difficulty, grade);
-    const now = new Date();
+      const updatedPayload = {
+        ...local,
+        stability: newStability,
+        difficulty: newDifficulty,
+        repetition_count: (local.repetition_count !== undefined ? local.repetition_count : local.repetitionCount) + 1,
+        next_review: this.addDays(now, interval).toISOString(),
+        last_review: now.toISOString(),
+        last_quiz_score: scorePercent,
+        total_reviews: (local.total_reviews !== undefined ? local.total_reviews : local.totalReviews) + 1,
+      };
 
-    await supabase.from("task_revisions").update({
-      stability: newStability,
-      difficulty: newDifficulty,
-      repetition_count: data.repetition_count + 1,
-      next_review: this.addDays(now, interval).toISOString(),
-      last_review: now.toISOString(),
-      last_quiz_score: scorePercent,
-      total_reviews: data.total_reviews + 1,
-    }).eq("id", revisionId);
+      // 1. Write to local IndexedDB
+      await localDB.put('task_revisions', updatedPayload, true);
+
+      // 2. Sync to Supabase in background
+      await syncToSupabase('save_task_revision', updatedPayload);
+    } catch (e) {
+      console.error("Error in recordReview:", e);
+    }
   }
 
   private mapRow = (r: any): TaskRevision => ({
     id: r.id,
-    userId: r.user_id,
-    taskId: r.task_id,
-    taskTitle: r.task_title,
-    taskType: r.task_type,
+    userId: r.user_id || r.userId,
+    taskId: r.task_id || r.taskId,
+    taskTitle: r.task_title || r.taskTitle,
+    taskType: r.task_type || r.taskType,
     stability: r.stability,
     difficulty: r.difficulty,
-    repetitionCount: r.repetition_count,
-    nextReview: new Date(r.next_review),
-    lastReview: r.last_review ? new Date(r.last_review) : null,
-    lastQuizScore: r.last_quiz_score,
-    totalReviews: r.total_reviews,
-    createdAt: new Date(r.created_at),
+    repetitionCount: r.repetition_count !== undefined ? r.repetition_count : r.repetitionCount,
+    nextReview: new Date(r.next_review || r.nextReview),
+    lastReview: (r.last_review || r.lastReview) ? new Date(r.last_review || r.lastReview) : null,
+    lastQuizScore: r.last_quiz_score !== undefined ? r.last_quiz_score : r.lastQuizScore,
+    totalReviews: r.total_reviews !== undefined ? r.total_reviews : r.totalReviews,
+    createdAt: new Date(r.created_at || r.createdAt),
   });
 }
 

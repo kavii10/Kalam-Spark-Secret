@@ -53,7 +53,7 @@ const en: Translations = {
   ob_setup_journey: "Let's set up your journey", ob_whats_name: "What's your name?",
   ob_your_background: 'Your background', ob_education_level: 'Education level',
   ob_choose_level: 'Choose your level...', ob_middle_school: 'Middle School (Class 6–8)',
-  ob_high_school: 'High School (Class 9–12)', ob_college: 'Under-Graduate',
+  ob_high_school: 'School', ob_college: 'Under-Graduate',
   ob_self_learner: 'Self-Learner / Working', ob_graduate: 'Post-Graduate',
   ob_school_board: 'School Board', ob_choose_board: 'Choose board...',
   ob_grade_semester: 'Class / Year / Semester', ob_enter_grade: 'e.g. Class 10, 2nd Year B.Tech...',

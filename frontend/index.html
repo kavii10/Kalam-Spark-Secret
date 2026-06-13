@@ -7,6 +7,24 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
     <title>Kalam Spark - AI Career Architect</title>
+
+    <!-- ── PWA: Manifest & Theme ─────────────────────────────────────────── -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#ff8c42" />
+
+    <!-- PWA: Mobile Web App (Android Chrome) -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="Kalam Spark" />
+
+    <!-- PWA: Apple (iOS Safari "Add to Home Screen") -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Kalam Spark" />
+    <link rel="apple-touch-icon" href="/assets/logo.png" />
+
+    <!-- SEO / Social -->    
+    <meta name="description" content="AI-powered career roadmap and personalised learning companion for students and self-learners." />
+    <meta name="keywords" content="career roadmap, AI learning, study planner, kalam spark" />
     <script src="/tailwind.js"></script>
     <script>
       tailwind.config = {
@@ -500,5 +518,32 @@
 
     <div id="root"></div>
     <script type="module" src="/src/index.tsx"></script>
+
+    <!-- ── PWA: Service Worker Registration ─────────────────────────────── -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/sw.js', { scope: '/' })
+            .then(function (reg) {
+              console.log('[SW] Registered, scope:', reg.scope);
+              // Listen for a new service worker waiting to activate
+              reg.addEventListener('updatefound', function () {
+                var newWorker = reg.installing;
+                if (newWorker) {
+                  newWorker.addEventListener('statechange', function () {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                      // New version available — dispatch custom event so React can show an update banner
+                      window.dispatchEvent(new CustomEvent('sw-update-available'));
+                    }
+                  });
+                }
+              });
+            })
+            .catch(function (err) {
+              console.warn('[SW] Registration failed:', err);
+            });
+        });
+      }
+    </script>
   </body>
 </html>

@@ -913,18 +913,20 @@ export default function RoadmapView({
       {/* Header */}
       <div className="mb-2">
         <p className="text-gold-400/50 text-xs font-semibold uppercase tracking-widest mb-2">Your personalized career plan</p>
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-          <div>
+        <div className="flex flex-row items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
             <h2 className="heading-gold font-cinzel text-3xl lg:text-4xl font-bold">
               Kalam — {user.dream || 'AI Engineer'}
             </h2>
             {roadmap?.summary && (
-              <p className="text-gold-300/40 text-sm mt-2 max-w-xl leading-relaxed">{roadmap.summary}</p>
+              <p className="text-gold-300/50 text-sm mt-2 leading-relaxed max-w-none">
+                {roadmap.summary}
+              </p>
             )}
           </div>
-          <button 
-            onClick={() => setShowPivotModal(true)} 
-            className="btn-primary text-xs px-4 py-2 shrink-0 flex items-center gap-2 rounded-xl"
+          <button
+            onClick={() => setShowPivotModal(true)}
+            className="btn-primary text-xs px-4 py-2 shrink-0 flex items-center gap-2 rounded-xl mt-1"
             style={{ backgroundImage: 'linear-gradient(135deg, #7c3aed 0%, #9333ea 100%)', boxShadow: '0 4px 15px rgba(124,58,237,0.2)' }}
           >
             <Zap size={14} className="text-purple-200" /> Career Pivot
