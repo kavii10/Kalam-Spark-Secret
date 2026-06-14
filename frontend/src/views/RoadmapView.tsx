@@ -581,12 +581,20 @@ export default function RoadmapView({
   user,
   setUser,
   onXpGain,
-  onStageAdvance
+  onStageAdvance,
+  cachedRoadmap,
+  setCachedRoadmap,
+  cachedCompletedStages,
+  setCachedCompletedStages
 }: {
   user: UserProfile;
   setUser: React.Dispatch<React.SetStateAction<UserProfile>>;
   onXpGain?: (amount: number) => void;
   onStageAdvance?: (newIndex: number) => void;
+  cachedRoadmap?: CareerRoadmap | null;
+  setCachedRoadmap?: (rm: CareerRoadmap | null) => void;
+  cachedCompletedStages?: string[];
+  setCachedCompletedStages?: (stages: string[]) => void;
 }) {
   const [roadmap, setRoadmap] = useState<CareerRoadmap | null>(null);
   const [loading, setLoading] = useState(false);
@@ -622,24 +630,63 @@ export default function RoadmapView({
 
   useEffect(() => {
     const init = async () => {
+      if (!user.id || !user.dream) {
+        return;
+      }
+
+      const normalizeDream = (d: string) => (d || "").trim().toLowerCase();
+      const userDreamClean = normalizeDream(user.dream);
+
+      // 1. Try React Parent State Cache first (completely instant navigation)
+      const forceRefresh = localStorage.getItem("kalamspark_force_refresh") === "true";
+      if (!forceRefresh && cachedRoadmap && cachedRoadmap.stages && cachedRoadmap.stages.length > 0) {
+        const cachedDreamClean = normalizeDream(cachedRoadmap.dream);
+        const isDreamMatch = !cachedDreamClean || cachedDreamClean === userDreamClean;
+        
+        if (isDreamMatch) {
+          setRoadmap(cachedRoadmap);
+          if (cachedCompletedStages) {
+            setCompletedStages(cachedCompletedStages);
+            setActiveStageIndex(Math.max(user.currentStageIndex, cachedCompletedStages.length));
+          }
+          setLoading(false);
+          return;
+        }
+      }
+
       setLoading(true);
       setError(null);
       try {
-        const forceRefresh = localStorage.getItem("kalamspark_force_refresh") === "true";
         if (forceRefresh) {
           localStorage.removeItem("kalamspark_force_refresh");
         }
-        const existing = await dbService.getRoadmap(user.id);
         
-        if (!forceRefresh && existing && existing.stages && existing.stages.length > 0 && existing.stages[0].id !== 'fallback-stage-1' && existing.dream?.toLowerCase() === user.dream.trim().toLowerCase()) {
-          const clean = sanitizeRoadmap(existing, user.dream, user.branch);
-          setRoadmap(clean);
-          await dbService.saveRoadmap(user, clean);
-          const completed = await dbService.getCompletedStages(user.id);
-          setCompletedStages(completed);
-          setActiveStageIndex(Math.max(user.currentStageIndex, completed.length));
-          setLoading(false);
-          return;
+        // 2. Try Local DB / Supabase Cache
+        const existing = await dbService.getRoadmap(user.id);
+        const existingDreamClean = normalizeDream(existing?.dream);
+        const isDreamMatch = !existingDreamClean || existingDreamClean === userDreamClean;
+        const hasExistingStages = existing && existing.stages && existing.stages.length > 0 && existing.stages[0].id !== 'fallback-stage-1';
+
+        if (hasExistingStages && (!forceRefresh || !networkService.isOnline())) {
+          // If dream matches, or if offline (cannot regenerate, so must use existing), use the cache
+          if (!forceRefresh && isDreamMatch || !networkService.isOnline()) {
+            const clean = sanitizeRoadmap(existing, user.dream, user.branch);
+            setRoadmap(clean);
+            if (setCachedRoadmap) setCachedRoadmap(clean);
+
+            await dbService.saveRoadmap(user, clean);
+            const completed = await dbService.getCompletedStages(user.id);
+            setCompletedStages(completed);
+            if (setCachedCompletedStages) setCachedCompletedStages(completed);
+
+            setActiveStageIndex(Math.max(user.currentStageIndex, completed.length));
+            setLoading(false);
+
+            if (!networkService.isOnline() && !isDreamMatch) {
+              showToast("Showing cached roadmap from previous dream (offline).");
+            }
+            return;
+          }
         }
 
         // Direct Client-Side Generation
@@ -651,6 +698,7 @@ export default function RoadmapView({
 
         setLoadingMsg('Generating roadmap on-device...');
         setCompletedStages([]);
+        if (setCachedCompletedStages) setCachedCompletedStages([]);
         setConceptProgress({});
         localStorage.removeItem('kalamspark_concept_progress');
         await dbService.clearCompletedStages(user.id);
@@ -663,6 +711,8 @@ export default function RoadmapView({
             clean.watchLater = existing.watchLater || [];
           }
           setRoadmap(clean);
+          if (setCachedRoadmap) setCachedRoadmap(clean);
+
           await dbService.saveRoadmap(user, clean);
           setLoading(false);
         } catch (fallbackErr: any) {
@@ -686,7 +736,7 @@ export default function RoadmapView({
         activeWs.close();
       }
     };
-  }, [user.id, user.dream, user.branch, user.year, retryCount]);
+  }, [user.id, user.dream, user.branch, user.year, retryCount, cachedRoadmap, cachedCompletedStages]);
   
   // Sequential completion logic is now handled manually to prevent auto-completion bugs from stale data.
 
@@ -704,6 +754,7 @@ export default function RoadmapView({
 
     const updated = [...completedStages, id];
     setCompletedStages(updated);
+    if (setCachedCompletedStages) setCachedCompletedStages(updated);
 
     if (onXpGain) onXpGain(100);
     dbService.saveCompletedStage(user.id, id);
@@ -793,6 +844,7 @@ export default function RoadmapView({
       // 1. Remove this stage from completedStages state and db
       const updatedStages = completedStages.filter(id => id !== stageId);
       setCompletedStages(updatedStages);
+      if (setCachedCompletedStages) setCachedCompletedStages(updatedStages);
       await dbService.removeCompletedStage(user.id, stageId);
 
       // 2. Clear progress for both concepts and projects of this stage in state and localStorage

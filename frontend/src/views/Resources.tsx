@@ -632,13 +632,16 @@ export default function Resources({ user }: { user: UserProfile }) {
 
   // ── Fetch curriculum resources ───────────────────────────────────────────────
   const fetchCurriculum = useCallback(async () => {
+    const currentUser = userRef.current;
+    if (!currentUser.id || !currentUser.dream) {
+      return;
+    }
+
     setLoading(true);
     setLoadError(false);
     setIsOfflineAndNoCache(false);
     setSearchMode(false);
     setSearchQuery('');
-
-    const currentUser = userRef.current;
 
     try {
       let rm = await dbService.getRoadmap(currentUser.id);

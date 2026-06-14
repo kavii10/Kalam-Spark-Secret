@@ -44,7 +44,7 @@ import CareerPivot from "./views/CareerPivot";
 import Opportunities from "./views/Opportunities";
 import FileSpeaker from "./views/FileSpeaker";
 import LoginScreen from "./views/LoginScreen";
-import { UserProfile, Reward } from "./types";
+import { UserProfile, Reward, CareerRoadmap } from "./types";
 import { dbService } from './services/dbService';
 import { supabase } from './services/supabaseClient';
 import { getCurrentLang, type LangCode } from "./i18n";
@@ -1311,6 +1311,10 @@ const AppContent = ({
                     onStageAdvance={(newIndex: number) =>
                       setUser((prev) => ({ ...prev, currentStageIndex: Math.max(prev.currentStageIndex, newIndex) }))
                     }
+                    cachedRoadmap={cachedRoadmap}
+                    setCachedRoadmap={setCachedRoadmap}
+                    cachedCompletedStages={cachedCompletedStages}
+                    setCachedCompletedStages={setCachedCompletedStages}
                   />
                 }
               />
@@ -1720,6 +1724,8 @@ export default function App() {
   });
 
   const [sessionLoadingMsg, setSessionLoadingMsg] = useState('Verifying session...');
+  const [cachedRoadmap, setCachedRoadmap] = useState<CareerRoadmap | null>(null);
+  const [cachedCompletedStages, setCachedCompletedStages] = useState<string[]>([]);
 
   // Tracks which user's profile has already been loaded from Supabase this session.
   // Stores the user ID string when loaded, null when not. Used to prevent the
