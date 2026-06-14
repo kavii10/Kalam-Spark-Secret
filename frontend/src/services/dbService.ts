@@ -197,145 +197,63 @@ export const dbService = {
     // 1. Write to IndexedDB with dirty flag
     await localDB.put('roadmaps', payload, true);
 
-    // 2. Write to fast localStorage cache
-    try {
-      localStorage.setItem(`kalamspark_roadmap_cache_${user.id}`, JSON.stringify(payload));
-    } catch (e) {
-      console.warn('[dbService] failed to save roadmap to localStorage:', e);
-    }
-
-    // 3. Update emergency snapshot
+    // 2. Update emergency snapshot
     localDB.writeEmergencySnapshot(user.id).catch(() => {});
 
-    // 4. Sync to Supabase in background
+    // 3. Sync to Supabase in background
     await syncToSupabase('save_roadmap', payload);
   },
 
-  async getRoadmap(userId: string, onBackgroundSync?: (remoteData: any) => void): Promise<any | null> {
-    // 1. Try localStorage first (fastest)
-    let localPayload: any = null;
+  async getRoadmap(userId: string): Promise<any | null> {
+    // 1. Try IndexedDB (with conflict resolution on fallback)
+    const local = await localDB.get<any>('roadmaps', userId);
+    if (local?.roadmap_data) return local.roadmap_data;
+
+    // 2. Fallback to Supabase
+    if (!networkService.isOnline()) return null;
     try {
-      const cached = localStorage.getItem(`kalamspark_roadmap_cache_${userId}`);
-      if (cached) {
-        localPayload = JSON.parse(cached);
-      }
-    } catch (e) {}
+      const { data, error } = await supabase.from(TABLES.ROADMAPS).select('roadmap_data, updated_at').eq('user_id', userId).single();
+      if (error || !data) return null;
 
-    // 2. Try IndexedDB
-    if (!localPayload) {
-      localPayload = await localDB.get<any>('roadmaps', userId);
-      if (localPayload) {
-        try {
-          localStorage.setItem(`kalamspark_roadmap_cache_${userId}`, JSON.stringify(localPayload));
-        } catch (e) {}
+      // Conflict resolution: if we have a local version, compare timestamps
+      const { winner, remoteWon } = localDB.resolveConflict(local, data);
+      if (remoteWon || !local) {
+        await localDB.put('roadmaps', {
+          user_id: userId,
+          roadmap_data: data.roadmap_data,
+          updated_at: data.updated_at || nowISO(),
+        }, false); // dirty=false since it came from Supabase
       }
+      return data.roadmap_data;
+    } catch (e) {
+      return null;
     }
-
-    // If local version exists, return it immediately, and check Supabase in background
-    if (localPayload?.roadmap_data) {
-      if (networkService.isOnline()) {
-        (async () => {
-          try {
-            const { data: remoteData, error } = await supabase
-              .from(TABLES.ROADMAPS)
-              .select('roadmap_data, updated_at')
-              .eq('user_id', userId)
-              .maybeSingle();
-
-            if (!error && remoteData) {
-              const { remoteWon } = localDB.resolveConflict(localPayload, remoteData);
-              if (remoteWon) {
-                console.log('[dbService] Background roadmap sync: remote won, updating local cache.');
-                const payload = {
-                  user_id: userId,
-                  roadmap_data: remoteData.roadmap_data,
-                  updated_at: remoteData.updated_at || nowISO(),
-                };
-                await localDB.put('roadmaps', payload, false);
-                localStorage.setItem(`kalamspark_roadmap_cache_${userId}`, JSON.stringify(payload));
-                if (onBackgroundSync) {
-                  onBackgroundSync(remoteData.roadmap_data);
-                }
-              }
-            }
-          } catch (e) {
-            console.warn('[dbService] Background roadmap check failed:', e);
-          }
-        })();
-      }
-      return localPayload.roadmap_data;
-    }
-
-    // 3. Fallback: If no local copy exists, fetch from Supabase (blocking)
-    if (networkService.isOnline()) {
-      try {
-        const { data: remoteData, error } = await supabase
-          .from(TABLES.ROADMAPS)
-          .select('roadmap_data, updated_at')
-          .eq('user_id', userId)
-          .maybeSingle();
-
-        if (!error && remoteData) {
-          const payload = {
-            user_id: userId,
-            roadmap_data: remoteData.roadmap_data,
-            updated_at: remoteData.updated_at || nowISO(),
-          };
-          await localDB.put('roadmaps', payload, false);
-          try {
-            localStorage.setItem(`kalamspark_roadmap_cache_${userId}`, JSON.stringify(payload));
-          } catch (e) {}
-          return remoteData.roadmap_data;
-        }
-      } catch (e) {
-        console.warn('[dbService] getRoadmap Supabase fetch failed:', e);
-      }
-    }
-
-    return null;
   },
 
   // ── COMPLETED STAGES ─────────────────────────────────────────────────────────
 
   async getCompletedStages(userId: string): Promise<string[]> {
-    // 1. Get the local completed stages
+    // 1. Try IndexedDB
     const local = await localDB.getAll<any>('completed_stages', 'user_id', userId);
+    if (local.length > 0) return local.map((s: any) => s.stage_id);
 
-    // 2. If online, sync completed stages from Supabase
-    if (networkService.isOnline()) {
-      try {
-        const { data: remoteData, error } = await supabase
-          .from(TABLES.PROGRESS)
-          .select('stage_id, completed_at')
-          .eq('user_id', userId);
-
-        if (!error && remoteData) {
-          const remoteStageIds = remoteData.map((item: any) => item.stage_id);
-          const localStageIds = local.map((s: any) => s.stage_id);
-
-          const setsEqual = remoteStageIds.length === localStageIds.length &&
-            remoteStageIds.every((id: string) => localStageIds.includes(id));
-
-          if (!setsEqual || local.length === 0) {
-            // Re-sync local IndexedDB
-            await localDB.deleteByIndex('completed_stages', 'user_id', userId);
-            const records = remoteData.map((item: any) => ({
-              key: `${userId}__${item.stage_id}`,
-              user_id: userId,
-              stage_id: item.stage_id,
-              completed_at: item.completed_at || nowISO(),
-              updatedAt: item.completed_at || nowISO(),
-            }));
-            await localDB.putMany('completed_stages', records, false);
-            return remoteStageIds;
-          }
-        }
-      } catch (e) {
-        console.warn('[dbService] getCompletedStages Supabase sync failed, falling back to local cache:', e);
-      }
+    // 2. Fallback to Supabase
+    if (!networkService.isOnline()) return [];
+    try {
+      const { data, error } = await supabase.from(TABLES.PROGRESS).select('stage_id, completed_at').eq('user_id', userId);
+      if (error || !data) return [];
+      const records = data.map((item: any) => ({
+        key: `${userId}__${item.stage_id}`,
+        user_id: userId,
+        stage_id: item.stage_id,
+        completed_at: item.completed_at || nowISO(),
+        updatedAt: item.completed_at || nowISO(),
+      }));
+      await localDB.putMany('completed_stages', records, false);
+      return data.map((item: any) => item.stage_id);
+    } catch (e) {
+      return [];
     }
-
-    return local.map((s: any) => s.stage_id);
   },
 
   async saveCompletedStage(userId: string, stageId: string): Promise<void> {
@@ -549,13 +467,6 @@ export const dbService = {
       if (roadmapRes.status === 'fulfilled' && roadmapRes.value.data) {
         const rd = roadmapRes.value.data;
         await localDB.put('roadmaps', { user_id: userId, roadmap_data: rd.roadmap_data, updated_at: rd.updated_at || nowISO() }, false);
-        try {
-          localStorage.setItem(`kalamspark_roadmap_cache_${userId}`, JSON.stringify({
-            user_id: userId,
-            roadmap_data: rd.roadmap_data,
-            updated_at: rd.updated_at || nowISO(),
-          }));
-        } catch (e) {}
       }
 
       if (tasksRes.status === 'fulfilled' && tasksRes.value.data?.length) {
@@ -637,15 +548,6 @@ export const dbService = {
       'ks_emergency_snapshot',
     ];
     keysToRemove.forEach(k => localStorage.removeItem(k));
-
-    // Clear dynamic roadmap cache keys
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('kalamspark_roadmap_cache_')) {
-        localStorage.removeItem(key);
-      }
-    }
-
     sessionStorage.removeItem('kalamspark_radar');
     sessionStorage.removeItem('fs_import_url');
   },

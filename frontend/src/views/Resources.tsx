@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   BookOpen, Youtube, Newspaper, FlaskConical, Search, RefreshCw,
   ExternalLink, Loader2, ChevronLeft, ChevronRight, AlertCircle,
-  X, Library, GraduationCap, Atom, Rss, Bookmark, Plus, ListVideo, FolderPlus, Check, Trash2, Volume2, Folder, FolderOpen, WifiOff
+  X, Library, GraduationCap, Atom, Rss, Bookmark, Plus, ListVideo, FolderPlus, Check, Trash2, Volume2, Folder, FolderOpen
 } from 'lucide-react';
-import { UserProfile, CareerRoadmap, StageCache } from '../types';
+import { UserProfile, CareerRoadmap } from '../types';
 import {
   fetchDirectResources, searchAllResources,
   BookResource, VideoResource, PaperResource, NewsResource, ResourceData
@@ -12,32 +12,6 @@ import {
 import { dbService } from '../services/dbService';
 import { useNavigate } from 'react-router-dom';
 import { networkService } from '../services/networkService';
-
-// ─── Inline Toast Banner ───────────────────────────────────────────────────────────────────
-function ToastBanner({ message, onClose }: { message: string; onClose: () => void }) {
-  useEffect(() => {
-    const t = setTimeout(onClose, 3500);
-    return () => clearTimeout(t);
-  }, [onClose]);
-  return (
-    <div
-      className="fixed top-20 left-1/2 z-[9000] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl"
-      style={{
-        transform: 'translateX(-50%)',
-        background: 'linear-gradient(135deg, rgba(30,15,60,0.97), rgba(15,7,30,0.97))',
-        border: '1px solid rgba(245,158,11,0.45)',
-        boxShadow: '0 8px 40px rgba(245,158,11,0.15), 0 2px 8px rgba(0,0,0,0.5)',
-        maxWidth: '90vw',
-      }}
-    >
-      <WifiOff size={16} style={{ color: '#fbbf24', flexShrink: 0 }} />
-      <p className="text-sm font-medium" style={{ color: '#fde68a' }}>{message}</p>
-      <button onClick={onClose} className="ml-2 text-gold-500/50 hover:text-gold-300 transition-colors">
-        <X size={14} />
-      </button>
-    </div>
-  );
-}
 
 // ─── Glassmorphism card base style ─────────────────────────────────────────────
 const gc: React.CSSProperties = {
@@ -602,37 +576,15 @@ function getLocalResourcesPlaceholder(dream: string, stageTitle: string): any {
 }
 
 // ─── Main Component ─────────────────────────────────────────────────────────────
-export default function Resources({
-  user,
-  cachedResources,
-  setCachedResources
-}: {
-  user: UserProfile;
-  cachedResources: StageCache | null;
-  setCachedResources: (r: StageCache | null) => void;
-}) {
+export default function Resources({ user }: { user: UserProfile }) {
   const [activeTab, setActiveTab] = useState<Tab>('books');
-
-  const currentUser = user;
-  const stageIdx = Math.min(currentUser.currentStageIndex, 5);
-
-  const hasMatchingCache = !!(
-    cachedResources &&
-    cachedResources.cachedForDream === currentUser.dream &&
-    cachedResources.cachedForStage === stageIdx &&
-    Array.isArray(cachedResources.books) &&
-    cachedResources.books.length > 0
-  );
-
-  const [loading, setLoading] = useState(!hasMatchingCache);
-  const [dataReady, setDataReady] = useState(hasMatchingCache);
-  const [initialized, setInitialized] = useState(hasMatchingCache);
+  const [loading, setLoading] = useState(true);
+  // `dataReady` is only true after we have real data (or confirmed empty) — prevents the single-book flash
+  const [dataReady, setDataReady] = useState(false);
+  const [initialized, setInitialized] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [roadmap, setRoadmap] = useState<CareerRoadmap | null>(null);
-  const [data, setData] = useState<ResourceData>(() => {
-    if (hasMatchingCache) return cachedResources!;
-    return { books: [], videos: [], papers: [], news: [] };
-  });
+  const [data, setData] = useState<ResourceData>({ books: [], videos: [], papers: [], news: [] });
   const isLight = user.settings?.theme === 'light';
   const [isOfflineAndNoCache, setIsOfflineAndNoCache] = useState(false);
   const navigate = useNavigate();
@@ -646,19 +598,6 @@ export default function Resources({
   const userRef = useRef(user);
   useEffect(() => { userRef.current = user; }, [user]);
 
-  // Track live network status reactively
-  const [isOffline, setIsOffline] = useState(!networkService.isOnline());
-  useEffect(() => {
-    const onOnline  = () => setIsOffline(false);
-    const onOffline = () => setIsOffline(true);
-    window.addEventListener('online',  onOnline);
-    window.addEventListener('offline', onOffline);
-    return () => {
-      window.removeEventListener('online',  onOnline);
-      window.removeEventListener('offline', onOffline);
-    };
-  }, []);
-
   // Update Roadmap helper – stable via useCallback
   const updateRoadmap = useCallback(async (rm: CareerRoadmap) => {
     setRoadmap(rm);
@@ -671,7 +610,6 @@ export default function Resources({
   const [searchMode, setSearchMode] = useState(false);
   const [searchResults, setSearchResults] = useState<ResourceData>({ books: [], videos: [], papers: [], news: [] });
   const searchRef = useRef<HTMLInputElement>(null);
-  const [toast, setToast] = useState<string | null>(null);
 
   // ── Helper: Extract clean, search-ready subjects from a stage ────────────────
   // Prefers stage.subjects (e.g. "Linear Algebra", "Calculus", "Python Programming")
@@ -692,8 +630,9 @@ export default function Resources({
     return (stage?.concepts || []).filter((c: string) => c && c.trim().length > 0);
   };
 
-  // ── Fetch curriculum resources — smart: shows cached data instantly, fetches only when needed ──
+  // ── Fetch curriculum resources ───────────────────────────────────────────────
   const fetchCurriculum = useCallback(async () => {
+    setLoading(true);
     setLoadError(false);
     setIsOfflineAndNoCache(false);
     setSearchMode(false);
@@ -723,6 +662,7 @@ export default function Resources({
       //   1. No cache exists
       //   2. The user has pivoted careers (dream mismatch)
       //   3. The user has moved to a new stage in the roadmap
+      //   4. The stage subjects changed (old cache built from stage title or wrong subjects)
       //
       // IMPORTANT: Use stage.subjects ("Linear Algebra", "Calculus", "Python") as the
       // primary source. Do NOT use stage.title ("Foundations of Math") or raw concepts
@@ -730,81 +670,78 @@ export default function Resources({
       const stageSubjects: string[] = getStageSubjects(stage);
       const dreamMismatch = cached?.cachedForDream && cached.cachedForDream !== currentUser.dream;
       const stageMismatch = cached?.cachedForStage !== undefined && cached.cachedForStage !== stageIdx;
+      // Subjects mismatch: old cache built from stage title or different/no subjects
+      const cachedSubs: string[] = (cached as any)?.cachedSubjects || [];
+      // Use a set-based comparison so subject order doesn't falsely trigger a refetch
+      const subjectsMismatch = stageSubjects.length > 0 && (
+        cachedSubs.length === 0 ||
+        cachedSubs.length !== stageSubjects.length ||
+        stageSubjects.some(s => !cachedSubs.includes(s))
+      );
+      const loadCount = (rm as any)._loadMoreCount || 0;
+      const sparseCache = cached && loadCount === 0 && (
+        (!Array.isArray(cached.books) || cached.books.length === 0) &&
+        (!Array.isArray(cached.videos) || cached.videos.length === 0)
+      );
 
-      // ── Fast path: valid cache exists — show instantly, no spinner ───────────
-      if (cached && !dreamMismatch && !stageMismatch && Array.isArray(cached.books) && cached.books.length > 0) {
-        setRoadmap({ ...rm });
-        setData(cached as ResourceData);
-        setCachedResources(cached as StageCache);
-        setDataReady(true);
-        setLoading(false);
-        setInitialized(true);
-        return;
-      }
-
-      // ── Slow path: need to fetch — show spinner now ──────────────────────────
-      setLoading(true);
-
-      const isOnline = networkService.isOnline();
-      if (isOnline) {
-        try {
-          // Pass '' as stageTopic so fetchDirectResources uses concepts/subjects only (not the generic stage title)
-          // stageSubjects contains either stage.concepts (preferred) or stage.subjects as fallback
-          const fetched = await fetchDirectResources(
-            currentUser.dream, '', stageSubjects, currentUser.year
-          );
-          // Sort resources so stage-subject matches appear first
-          const stageSubjectsLower = stageSubjects.map((s: string) => s.toLowerCase());
-          const scoreItem = (title: string) => {
-            const t = title.toLowerCase();
-            return stageSubjectsLower.some(s => t.includes(s)) ? 0 : 1;
-          };
-          cached = {
-            books:  (Array.isArray(fetched.books)  ? fetched.books  : []).filter((b: any) => b?.link?.startsWith('http')).sort((a: any, b: any) => scoreItem(a.title) - scoreItem(b.title)).slice(0, 10),
-            videos: (Array.isArray(fetched.videos) ? fetched.videos : []).filter((v: any) => v?.link?.startsWith('http')).sort((a: any, b: any) => scoreItem(a.title) - scoreItem(b.title)).slice(0, 10),
-            papers: (Array.isArray(fetched.papers) ? fetched.papers : []).filter((p: any) => p?.link?.startsWith('http')).sort((a: any, b: any) => scoreItem(a.title) - scoreItem(b.title)).slice(0, 10),
-            news:   (Array.isArray(fetched.news)   ? fetched.news   : []).filter((n: any) => n?.link?.startsWith('http')).slice(0, 10),
-            cachedForDream: currentUser.dream,
-            cachedForStage: stageIdx,
-            cachedSubjects: stageSubjects,
-          } as any;
-          rm = { ...rm, cachedResources: cached, _loadMoreCount: 0 };
-          await dbService.saveRoadmap(currentUser, rm);
-        } catch (fetchErr) {
-          console.warn('[Resources] Fetch direct failed online, trying cache fallback...', fetchErr);
-        }
-      }
-
-      // If we failed to fetch or are offline, use placeholder fallbacks:
-      // NOTE: We use the local placeholder only as a LAST resort — not when cached data already exists
-      if (!cached || !cached.books || cached.books.length === 0) {
-        if (rm.cachedResources && rm.cachedResources.books && rm.cachedResources.books.length > 0) {
-          cached = rm.cachedResources;
-        } else {
-          if (!networkService.isOnline()) {
-            // No cache at all and offline — only now show the blocking screen
-            setIsOfflineAndNoCache(true);
-            setLoading(false);
-            setInitialized(true);
-            setDataReady(true);
-            return;
-          } else {
-            // Use first subject as placeholder label; fall back to stage title
-            // Use the most specific subject name available (not a checklist item)
-            const placeholderLabel = stageSubjects.find(s => s.length < 30) || stageSubjects[0] || stage.title || 'Foundations';
-            cached = getLocalResourcesPlaceholder(currentUser.dream || 'Professional', placeholderLabel);
-            rm = { ...rm, cachedResources: cached };
+      if (!cached || dreamMismatch || stageMismatch || sparseCache || subjectsMismatch) {
+        const isOnline = networkService.isOnline();
+        if (isOnline) {
+          try {
+            // Pass '' as stageTopic so fetchDirectResources uses concepts/subjects only (not the generic stage title)
+            // stageSubjects contains either stage.concepts (preferred) or stage.subjects as fallback
+            const fetched = await fetchDirectResources(
+              currentUser.dream, '', stageSubjects, currentUser.year
+            );
+            // Sort resources so stage-subject matches appear first
+            const stageSubjectsLower = stageSubjects.map((s: string) => s.toLowerCase());
+            const scoreItem = (title: string) => {
+              const t = title.toLowerCase();
+              return stageSubjectsLower.some(s => t.includes(s)) ? 0 : 1;
+            };
+            cached = {
+              books:  (Array.isArray(fetched.books)  ? fetched.books  : []).filter((b: any) => b?.link?.startsWith('http')).sort((a: any, b: any) => scoreItem(a.title) - scoreItem(b.title)).slice(0, 10),
+              videos: (Array.isArray(fetched.videos) ? fetched.videos : []).filter((v: any) => v?.link?.startsWith('http')).sort((a: any, b: any) => scoreItem(a.title) - scoreItem(b.title)).slice(0, 10),
+              papers: (Array.isArray(fetched.papers) ? fetched.papers : []).filter((p: any) => p?.link?.startsWith('http')).sort((a: any, b: any) => scoreItem(a.title) - scoreItem(b.title)).slice(0, 10),
+              news:   (Array.isArray(fetched.news)   ? fetched.news   : []).filter((n: any) => n?.link?.startsWith('http')).slice(0, 10),
+              cachedForDream: currentUser.dream,
+              cachedForStage: stageIdx,
+              cachedSubjects: stageSubjects,
+            } as any;
+            rm = { ...rm, cachedResources: cached, _loadMoreCount: 0 };
             await dbService.saveRoadmap(currentUser, rm);
+          } catch (fetchErr) {
+            console.warn('[Resources] Fetch direct failed online, trying cache fallback...', fetchErr);
+          }
+        }
+
+        // If we failed to fetch or are offline, use placeholder fallbacks:
+        // NOTE: We use the local placeholder only as a LAST resort — not when cached data already exists
+        if (!cached || !cached.books || cached.books.length === 0) {
+          if (rm.cachedResources && rm.cachedResources.books && rm.cachedResources.books.length > 0) {
+            cached = rm.cachedResources;
+          } else {
+            if (!networkService.isOnline()) {
+              setIsOfflineAndNoCache(true);
+              setLoading(false);
+              setInitialized(true);
+              setDataReady(true);
+              return;
+            } else {
+              // Use first subject as placeholder label; fall back to stage title
+              // Use the most specific subject name available (not a checklist item)
+              const placeholderLabel = stageSubjects.find(s => s.length < 30) || stageSubjects[0] || stage.title || 'Foundations';
+              cached = getLocalResourcesPlaceholder(currentUser.dream || 'Professional', placeholderLabel);
+              rm = { ...rm, cachedResources: cached };
+              await dbService.saveRoadmap(currentUser, rm);
+            }
           }
         }
       }
 
-
-
       setRoadmap({ ...rm });
       // Set data and mark as ready in a single batch — prevents partial render with empty data
       setData(cached as ResourceData);
-      setCachedResources(cached as StageCache);
       setDataReady(true);
     } catch (e) {
       console.error('fetchCurriculum error:', e);
@@ -814,7 +751,7 @@ export default function Resources({
       setLoading(false);
       setInitialized(true);
     }
-  }, [user.currentStageIndex, user.id, user.dream, user.year, user.branch, setCachedResources]);
+  }, [user.currentStageIndex, user.id, user.dream, user.year, user.branch]);
 
   useEffect(() => {
     let active = true;
@@ -827,31 +764,13 @@ export default function Resources({
         console.warn('[Resources] Init timeout hit — showing UI with available data');
       }
     }, 15000);
-
-    // If already initialized in this session AND stage hasn't changed, skip the full reload
-    if (hasMatchingCache) {
-      setData(cachedResources!);
-      setLoading(false);
-      setDataReady(true);
-      setInitialized(true);
-      clearTimeout(timeout);
-      return () => { active = false; clearTimeout(timeout); };
-    }
-
     if (active) fetchCurriculum();
     return () => { active = false; clearTimeout(timeout); };
-  }, [fetchCurriculum, hasMatchingCache, cachedResources]);
+  }, [fetchCurriculum]);
 
   // ── Load next batch — REPLACES current data with fresh resources ─────────────
   const loadNextBatch = useCallback(async () => {
     if (!roadmap || !Array.isArray(roadmap.stages) || roadmap.stages.length === 0) return;
-
-    // Block if offline — show toast and keep existing resources visible
-    if (!networkService.isOnline()) {
-      setToast('📡 You’re offline — connect to the internet to load new resources.');
-      return;
-    }
-
     setLoading(true);
     const currentUser = userRef.current;
 
@@ -899,22 +818,17 @@ export default function Resources({
       await dbService.saveRoadmap(currentUser, updatedRm);
       setRoadmap(updatedRm);
       setData(freshData as ResourceData);
-      setCachedResources(freshData as StageCache);
     } catch (e) {
       console.error('loadNextBatch error:', e);
     } finally {
       setLoading(false);
     }
-  }, [roadmap, setCachedResources]);
+  }, [roadmap]);
 
   // ── Search ────────────────────────────────────────────────────────────────────
   const handleSearch = async () => {
     const q = searchQuery.trim();
     if (!q) { setSearchMode(false); return; }
-    if (!networkService.isOnline()) {
-      setToast('📡 You\'re offline — search requires an internet connection.');
-      return;
-    }
     setIsSearching(true);
     setSearchMode(true);
     try {
@@ -1028,23 +942,6 @@ export default function Resources({
 
   return (
     <div className="space-y-6 fade-up">
-      {/* Toast notification */}
-      {toast && <ToastBanner message={toast} onClose={() => setToast(null)} />}
-
-      {/* Offline banner — only when offline but resources are showing */}
-      {isOffline && !isOfflineAndNoCache && (
-        <div
-          className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-medium"
-          style={{
-            background: 'rgba(245,158,11,0.08)',
-            border: '1px solid rgba(245,158,11,0.25)',
-            color: '#fbbf24',
-          }}
-        >
-          <WifiOff size={13} className="shrink-0" />
-          <span>You’re offline — showing your saved resources. Connect to load fresh content.</span>
-        </div>
-      )}
 
       {/* ── Header ── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1105,9 +1002,8 @@ export default function Resources({
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSearch()}
-            placeholder={networkService.isOnline() ? "Search books, videos, papers, news…" : "Search is disabled offline"}
-            disabled={!networkService.isOnline()}
-            className="resource-search-input flex-1 bg-transparent text-sm text-gold-200 placeholder-gold-500/30 outline-none disabled:opacity-50"
+            placeholder="Search books, videos, papers, news…"
+            className="resource-search-input flex-1 bg-transparent text-sm text-gold-200 placeholder-gold-500/30 outline-none"
           />
           {searchQuery && (
             <button onClick={clearSearch} className="text-gold-500/40 hover:text-gold-300 transition-colors">
@@ -1118,7 +1014,7 @@ export default function Resources({
         <div className="flex gap-2">
           <button
             onClick={handleSearch}
-            disabled={isSearching || !searchQuery.trim() || !networkService.isOnline()}
+            disabled={isSearching || !searchQuery.trim()}
             className="btn-primary flex-1 sm:flex-initial flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-40"
           >
             {isSearching ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
@@ -1173,12 +1069,6 @@ export default function Resources({
       </div>
 
       {/* ── Tab Content ── */}
-      {!networkService.isOnline() && ['books', 'videos', 'papers', 'news'].includes(activeTab) && (
-        <div className="p-4 rounded-xl flex items-center gap-3 bg-red-500/10 border border-red-500/20 text-red-350 text-xs mb-4">
-          <AlertCircle size={16} className="shrink-0 text-red-400" />
-          <span>You are offline. Only cached resources are visible. Connect to the internet to load new recommendations or search.</span>
-        </div>
-      )}
       {isSearching ? (
         <div className="h-40 flex flex-col items-center justify-center gap-3">
           <Loader2 className="animate-spin text-gold-400" size={24} />
@@ -1192,7 +1082,7 @@ export default function Resources({
                 title="Books" icon={Library} iconColor="text-amber-400"
                 items={displayed.books}
                 renderCard={(item, i) => <div key={i} className="relative group"><BookCard item={item} /><ResourceActions item={item} roadmap={roadmap!} onUpdate={updateRoadmap} /></div>}
-                emptyMsg={!networkService.isOnline() ? "You cannot load books offline. Please check your internet connection." : "No books found for this topic"}
+                emptyMsg="No books found for this topic"
               />
             </div>
           )}
@@ -1203,7 +1093,7 @@ export default function Resources({
                 title="Video Lectures" icon={GraduationCap} iconColor="text-red-400"
                 items={displayed.videos}
                 renderCard={(item, i) => <div key={i} className="relative group"><VideoCard item={item} /><ResourceActions item={item} roadmap={roadmap!} onUpdate={updateRoadmap} /></div>}
-                emptyMsg={!networkService.isOnline() ? "You cannot load videos offline. Please check your internet connection." : "No video lectures found"}
+                emptyMsg="No video lectures found"
               />
             </div>
           )}
@@ -1214,7 +1104,7 @@ export default function Resources({
                 title="Research Papers" icon={Atom} iconColor="text-orange-400"
                 items={displayed.papers}
                 renderCard={(item, i) => <div key={i} className="relative group"><PaperCard item={item} /><ResourceActions item={item} roadmap={roadmap!} onUpdate={updateRoadmap} /></div>}
-                emptyMsg={!networkService.isOnline() ? "You cannot load research papers offline. Please check your internet connection." : "No research papers found"}
+                emptyMsg="No research papers found"
               />
             </div>
           )}
@@ -1238,12 +1128,12 @@ export default function Resources({
                   return (
                           <div key={i} className="relative group">
                             <CardType item={item} />
-                            <div className="absolute top-2 right-2 flex gap-1.5 items-center z-10">
+                            <div className="absolute top-2 left-2 z-10 pointer-events-none">
                               <span className="px-2 py-1 text-[9px] font-bold uppercase tracking-wider rounded-md bg-black/60 text-white backdrop-blur border border-white/10 shadow-lg" style={{ color: CardType === BookCard ? '#f59e0b' : CardType === VideoCard ? '#ef4444' : CardType === PaperCard ? '#f97316' : '#10b981' }}>
                                 {CardType === BookCard ? 'Book' : CardType === VideoCard ? 'Video' : CardType === PaperCard ? 'Paper' : 'News'}
                               </span>
-                              <ResourceActions item={item} roadmap={roadmap!} onUpdate={updateRoadmap} inStack={true} />
                             </div>
+                            <ResourceActions item={item} roadmap={roadmap!} onUpdate={updateRoadmap} />
                           </div>
                         );
                 }}
@@ -1422,10 +1312,12 @@ export default function Resources({
                           return (
                             <div key={i} className="relative group">
                               <CardType item={item} />
-                              <div className="absolute top-2 right-2 flex gap-1.5 items-center z-10">
+                              <div className="absolute top-2 left-2 z-10 pointer-events-none">
                                 <span className="px-2 py-1 text-[9px] font-bold uppercase tracking-wider rounded-md bg-black/60 text-white backdrop-blur border border-white/10 shadow-lg" style={{ color: CardType === BookCard ? '#f59e0b' : CardType === VideoCard ? '#ef4444' : CardType === PaperCard ? '#f97316' : '#10b981' }}>
                                   {CardType === BookCard ? 'Book' : CardType === VideoCard ? 'Video' : CardType === PaperCard ? 'Paper' : 'News'}
                                 </span>
+                              </div>
+                              <div className="absolute top-2 right-2 flex gap-1 z-10">
                                 <button 
                                   onClick={(e) => { 
                                     e.preventDefault(); 
@@ -1460,7 +1352,7 @@ export default function Resources({
                 title="Industry News" icon={Rss} iconColor="text-emerald-400"
                 items={displayed.news}
                 renderCard={(item, i) => <div key={i} className="relative group"><NewsCard item={item} /><ResourceActions item={item} roadmap={roadmap!} onUpdate={updateRoadmap} /></div>}
-                emptyMsg={!networkService.isOnline() ? "You cannot load news offline. Please check your internet connection." : "No news articles found"}
+                emptyMsg="No news articles found"
               />
             </div>
           )}

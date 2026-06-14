@@ -581,25 +581,17 @@ export default function RoadmapView({
   user,
   setUser,
   onXpGain,
-  onStageAdvance,
-  cachedRoadmap,
-  setCachedRoadmap,
-  cachedCompletedStages,
-  setCachedCompletedStages,
+  onStageAdvance
 }: {
   user: UserProfile;
   setUser: React.Dispatch<React.SetStateAction<UserProfile>>;
   onXpGain?: (amount: number) => void;
   onStageAdvance?: (newIndex: number) => void;
-  cachedRoadmap?: CareerRoadmap | null;
-  setCachedRoadmap?: (r: CareerRoadmap | null) => void;
-  cachedCompletedStages?: string[];
-  setCachedCompletedStages?: (s: string[]) => void;
 }) {
-  const [roadmap, setRoadmapLocal] = useState<CareerRoadmap | null>(cachedRoadmap ?? null);
+  const [roadmap, setRoadmap] = useState<CareerRoadmap | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('');
-  const [completedStages, setCompletedStagesLocal] = useState<string[]>(cachedCompletedStages ?? []);
+  const [completedStages, setCompletedStages] = useState<string[]>([]);
   const [activeStageIndex, setActiveStageIndex] = useState(user.currentStageIndex);
   const [selectedStage, setSelectedStage] = useState<any | null>(null);
   const [celebration, setCelebration] = useState(false);
@@ -608,34 +600,10 @@ export default function RoadmapView({
   const [retryCount, setRetryCount] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const showToast = (msg: string) => setToast(msg);
-  const [isOffline, setIsOffline] = useState(!networkService.isOnline());
-
-  // Track live network status
-  useEffect(() => {
-    const onOnline  = () => setIsOffline(false);
-    const onOffline = () => setIsOffline(true);
-    window.addEventListener('online',  onOnline);
-    window.addEventListener('offline', onOffline);
-    return () => {
-      window.removeEventListener('online',  onOnline);
-      window.removeEventListener('offline', onOffline);
-    };
-  }, []);
   const [conceptProgress, setConceptProgress] = useState<Record<string, string[]>>(() => {
     const saved = localStorage.getItem('kalamspark_concept_progress');
     return saved ? JSON.parse(saved) : {};
   });
-
-  // Sync local roadmap state up to the parent cache so it survives navigation
-  const setRoadmap = (r: CareerRoadmap | null) => {
-    setRoadmapLocal(r);
-    setCachedRoadmap?.(r);
-  };
-
-  const setCompletedStages = (s: string[]) => {
-    setCompletedStagesLocal(s);
-    setCachedCompletedStages?.(s);
-  };
 
   useEffect(() => {
     localStorage.setItem('kalamspark_concept_progress', JSON.stringify(conceptProgress));
@@ -654,42 +622,17 @@ export default function RoadmapView({
 
   useEffect(() => {
     const init = async () => {
+      setLoading(true);
       setError(null);
-
-      if (!user.id || !user.dream) {
-        console.log("[RoadmapView] User ID or dream is empty, waiting for initialization...", user);
-        return;
-      }
-
-      const cleanDream = (d: string) => d.toLowerCase().replace(/\s+/g, ' ').trim();
-      const forceRefresh = localStorage.getItem("kalamspark_force_refresh") === "true";
-      if (forceRefresh) {
-        localStorage.removeItem("kalamspark_force_refresh");
-        // Dream pivot — clear cache and regenerate
-        setRoadmap(null);
-        setCompletedStages([]);
-      } else if (cachedRoadmap && cleanDream(cachedRoadmap.dream || '') === cleanDream(user.dream)) {
-        // Already loaded in memory — just restore active index and bail out
-        setActiveStageIndex(Math.max(user.currentStageIndex, (cachedCompletedStages ?? []).length));
-        return;
-      }
-
       try {
-        const existing = await dbService.getRoadmap(user.id, (remoteRoadmap) => {
-          console.log("[RoadmapView] Background roadmap update: remote won, updating UI state.");
-          const clean = { ...sanitizeRoadmap(remoteRoadmap, user.dream, user.branch), dream: user.dream };
-          setRoadmap(clean);
-          dbService.getCompletedStages(user.id).then(completed => {
-            setCompletedStages(completed);
-            setActiveStageIndex(Math.max(user.currentStageIndex, completed.length));
-          }).catch(() => {});
-        });
-
-        const isDreamDifferent = existing && existing.dream && cleanDream(existing.dream) !== cleanDream(user.dream);
-        const shouldGenerate = forceRefresh || !existing || !existing.stages || existing.stages.length === 0 || existing.stages[0].id === 'fallback-stage-1' || isDreamDifferent;
-
-        if (!shouldGenerate) {
-          const clean = { ...sanitizeRoadmap(existing, user.dream, user.branch), dream: user.dream };
+        const forceRefresh = localStorage.getItem("kalamspark_force_refresh") === "true";
+        if (forceRefresh) {
+          localStorage.removeItem("kalamspark_force_refresh");
+        }
+        const existing = await dbService.getRoadmap(user.id);
+        
+        if (!forceRefresh && existing && existing.stages && existing.stages.length > 0 && existing.stages[0].id !== 'fallback-stage-1' && existing.dream?.toLowerCase() === user.dream.trim().toLowerCase()) {
+          const clean = sanitizeRoadmap(existing, user.dream, user.branch);
           setRoadmap(clean);
           await dbService.saveRoadmap(user, clean);
           const completed = await dbService.getCompletedStages(user.id);
@@ -699,23 +642,8 @@ export default function RoadmapView({
           return;
         }
 
-        // Direct Client-Side Generation (Now show the architecting loader)
-        setLoading(true);
-
+        // Direct Client-Side Generation
         if (!networkService.isOnline()) {
-          // If we have an existing roadmap in DB, show it even though we're offline
-          if (existing && existing.stages && existing.stages.length > 0 && existing.stages[0].id !== 'fallback-stage-1') {
-            const clean = { ...sanitizeRoadmap(existing, user.dream, user.branch), dream: user.dream };
-            setRoadmap(clean);
-            const completed = await dbService.getCompletedStages(user.id);
-            setCompletedStages(completed);
-            setActiveStageIndex(Math.max(user.currentStageIndex, completed.length));
-            setLoading(false);
-            // Show a non-blocking offline toast
-            showToast('📡 Offline — showing your saved roadmap. Connect to update.');
-            return;
-          }
-          // No cache at all — must block with error
           setError("📡 No Internet Connection — Connect to the internet to generate your personalized roadmap.");
           setLoading(false);
           return null;
@@ -729,7 +657,7 @@ export default function RoadmapView({
 
         try {
           const fallback = await generateRoadmapWithProgress(user, setLoadingMsg);
-          const clean = { ...sanitizeRoadmap(fallback, user.dream, user.branch), dream: user.dream };
+          const clean = sanitizeRoadmap(fallback, user.dream, user.branch);
           if (existing) {
             clean.playlists = existing.playlists || [];
             clean.watchLater = existing.watchLater || [];
@@ -758,7 +686,6 @@ export default function RoadmapView({
         activeWs.close();
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.id, user.dream, user.branch, user.year, retryCount]);
   
   // Sequential completion logic is now handled manually to prevent auto-completion bugs from stale data.
@@ -946,21 +873,6 @@ export default function RoadmapView({
     <>
       {/* In-App Toast */}
       {toast && <ToastBanner message={toast} onClose={() => setToast(null)} />}
-
-      {/* Offline Banner — shows when offline but roadmap is loaded from cache */}
-      {isOffline && roadmap && (
-        <div
-          className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl mb-2 text-xs font-medium"
-          style={{
-            background: 'rgba(245,158,11,0.08)',
-            border: '1px solid rgba(245,158,11,0.25)',
-            color: '#fbbf24',
-          }}
-        >
-          <span className="text-base">📡</span>
-          <span>You’re offline — showing your saved roadmap. Connect to sync changes or pivot your career.</span>
-        </div>
-      )}
       {/* Career Pivot Modal - Rendered outside the fade-up div to prevent fixed positioning bugs */}
       {showPivotModal && (
         <div className="fixed inset-0 z-[200] flex items-start justify-center p-4 sm:p-6 bg-black/70 backdrop-blur-md overflow-y-auto" onClick={() => setShowPivotModal(false)}>
@@ -1001,26 +913,18 @@ export default function RoadmapView({
       {/* Header */}
       <div className="mb-2">
         <p className="text-gold-400/50 text-xs font-semibold uppercase tracking-widest mb-2">Your personalized career plan</p>
-        <div className="flex flex-row items-start justify-between gap-4">
-          <div className="flex-1 min-w-0">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          <div>
             <h2 className="heading-gold font-cinzel text-3xl lg:text-4xl font-bold">
               Kalam — {user.dream || 'AI Engineer'}
             </h2>
             {roadmap?.summary && (
-              <p className="text-gold-300/50 text-sm mt-2 leading-relaxed max-w-none">
-                {roadmap.summary}
-              </p>
+              <p className="text-gold-300/40 text-sm mt-2 max-w-xl leading-relaxed">{roadmap.summary}</p>
             )}
           </div>
-          <button
-            onClick={() => {
-              if (!networkService.isOnline()) {
-                showToast('📡 Offline — connect to the internet to change your career path.');
-                return;
-              }
-              setShowPivotModal(true);
-            }}
-            className="btn-primary text-xs px-4 py-2 shrink-0 flex items-center gap-2 rounded-xl mt-1"
+          <button 
+            onClick={() => setShowPivotModal(true)} 
+            className="btn-primary text-xs px-4 py-2 shrink-0 flex items-center gap-2 rounded-xl"
             style={{ backgroundImage: 'linear-gradient(135deg, #7c3aed 0%, #9333ea 100%)', boxShadow: '0 4px 15px rgba(124,58,237,0.2)' }}
           >
             <Zap size={14} className="text-purple-200" /> Career Pivot

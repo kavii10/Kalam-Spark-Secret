@@ -44,7 +44,7 @@ import CareerPivot from "./views/CareerPivot";
 import Opportunities from "./views/Opportunities";
 import FileSpeaker from "./views/FileSpeaker";
 import LoginScreen from "./views/LoginScreen";
-import { UserProfile, Reward, CareerRoadmap, StageCache } from "./types";
+import { UserProfile, Reward } from "./types";
 import { dbService } from './services/dbService';
 import { supabase } from './services/supabaseClient';
 import { getCurrentLang, type LangCode } from "./i18n";
@@ -969,10 +969,6 @@ const AppContent = ({
   const [isIOS, setIsIOS] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
 
-  // ── Roadmap Cache — persists across page navigation ───────────────────────
-  const [cachedRoadmap, setCachedRoadmap] = useState<CareerRoadmap | null>(null);
-  const [cachedCompletedStages, setCachedCompletedStages] = useState<string[]>([]);
-  const [cachedResources, setCachedResources] = useState<StageCache | null>(null);
 
   useEffect(() => {
     // Detect iOS
@@ -1311,10 +1307,6 @@ const AppContent = ({
                   <RoadmapView
                     user={user}
                     setUser={setUser}
-                    cachedRoadmap={cachedRoadmap}
-                    setCachedRoadmap={setCachedRoadmap}
-                    cachedCompletedStages={cachedCompletedStages}
-                    setCachedCompletedStages={setCachedCompletedStages}
                     onXpGain={(amount: number) => setUser((prev) => ({ ...prev, xp: (prev.xp || 0) + amount }))}
                     onStageAdvance={(newIndex: number) =>
                       setUser((prev) => ({ ...prev, currentStageIndex: Math.max(prev.currentStageIndex, newIndex) }))
@@ -1333,16 +1325,7 @@ const AppContent = ({
 
                 }
               />
-              <Route
-                path="/resources"
-                element={
-                  <Resources
-                    user={user}
-                    cachedResources={cachedResources}
-                    setCachedResources={setCachedResources}
-                  />
-                }
-              />
+              <Route path="/resources" element={<Resources user={user} />} />
               <Route
                 path="/revision"
                 element={
