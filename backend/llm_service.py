@@ -15,14 +15,10 @@ from json_repair import try_parse_json, repair_json_string
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 GEMINI_API_KEY     = os.getenv("GEMINI_API_KEY", "")  # Google AI Studio key
 
-# ── Local LLM via Ollama (fallback when cloud providers fail)
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "gemma4:e4b")  # gemma 4 e4b via Ollama
-
-# ── Gemma 4 model IDs — STRICT ENFORCEMENT (no other models allowed)
-OPENROUTER_MODEL    = "google/gemma-4-31b-it:free"    # Gemma 4 31B via OpenRouter
-OPENROUTER_FALLBACK = "google/gemma-4-26b-it:free"    # Gemma 4 26B via OpenRouter
-GEMINI_GEMMA_MODEL  = "gemma-4-31b-it"               # Gemma 4 31B via Google AI Studio
+# ── Cloud AI Model IDs (Lightweight and free tier optimized)
+OPENROUTER_MODEL    = "google/gemma-2-9b-it:free"     # Lightweight free model via OpenRouter
+OPENROUTER_FALLBACK = "meta-llama/llama-3.1-8b-instruct:free" # Lightweight fallback model
+GEMINI_GEMMA_MODEL  = "gemini-1.5-flash"              # Ultra-fast, lightweight model via Google AI Studio
 
 # Language name map
 LANGUAGE_NAMES = {
@@ -43,40 +39,7 @@ LANGUAGE_NAMES = {
 
 
 async def _call_ollama(prompt: str, max_tokens: int = 3000, temperature: float = 0.3, json_mode: bool = False) -> str:
-    """
-    Call the local Ollama Gemma4 model as a last-resort fallback.
-    Requires: Ollama installed + 'ollama serve' running + gemma4:e4b pulled.
-    """
-    print(f"[LLM] [WARNING] All cloud providers failed. Trying local Ollama ({OLLAMA_MODEL})...")
-    try:
-        body: dict = {
-            "model": OLLAMA_MODEL,
-            "prompt": prompt,
-            "stream": False,
-            "options": {
-                "temperature": temperature,
-                "num_predict": max_tokens,
-                "top_p": 0.85,
-                "repeat_penalty": 1.15,
-                "num_gpu": 32,
-            },
-        }
-        if json_mode:
-            body["format"] = "json"  # Forces Gemma4 to output valid JSON
-
-        async with httpx.AsyncClient(timeout=300.0) as client:  # Long timeout — local model can be slow
-            resp = await client.post(f"{OLLAMA_BASE_URL}/api/generate", json=body)
-            resp.raise_for_status()
-            text = resp.json().get("response", "").strip()
-            print(f"[LLM] Ollama (local) [OK] ({len(text)} chars)")
-            return text
-    except httpx.ConnectError:
-        raise RuntimeError(
-            "All cloud AI providers and local Ollama have failed. "
-            "Start Ollama with 'ollama serve' and pull gemma4:e4b, or add API keys to .env."
-        )
-    except Exception as e:
-        raise RuntimeError(f"[LLM] Ollama (local) failed: {e}")
+    raise RuntimeError("Local model (Ollama) fallback has been disabled to prioritize lightweight cloud APIs.")
 
 
 async def _call_llm(prompt: str, max_tokens: int = 3000, temperature: float = 0.3, json_mode: bool = False) -> str:
@@ -198,8 +161,8 @@ async def _call_llm_chat(messages: list[dict], max_tokens: int = 1500, temperatu
                                 print(f"[LLM] Retrying without responseMimeType...")
                                 continue  # Try next iteration (attempt_num=1)
                             else:
-                                print(f"[LLM] Both attempts failed. Falling back to Ollama...")
-                                raise ValueError("Gemma 4 returned instructions instead of JSON even without responseMimeType")
+                                print(f"[LLM] Both attempts failed.")
+                                raise ValueError("Model returned instructions instead of JSON even without responseMimeType")
                     
                     return text
                     
@@ -208,78 +171,14 @@ async def _call_llm_chat(messages: list[dict], max_tokens: int = 1500, temperatu
                     print(f"[LLM] Google AI Studio attempt {attempt_num + 1} failed: {e} — retrying without JSON mode...")
                     continue  # Try next iteration
                 else:
-                    print(f"[LLM] Google AI Studio chat failed: {e} — trying local Ollama...")
-                    break  # Exit loop, move to Ollama
+                    print(f"[LLM] Google AI Studio chat failed: {e}")
+                    raise RuntimeError(f"Google AI Studio chat failed: {e}")
 
-    # ── 3. Ollama (local Gemma 4 e4b — last resort)
-    # Build flat prompt for /api/generate fallback
-    flat_prompt = "\n\n".join(
-        f"{'ASSISTANT' if m['role'] == 'assistant' else m['role'].upper()}: {m['content']}"
-        for m in messages if 'content' in m
-    ) + "\n\nASSISTANT:"
-
-    print(f"[LLM] [WARNING] All cloud chat providers failed. Trying local Ollama ({OLLAMA_MODEL})...")
-
-
-    try:
-        ollama_chat_body: dict = {
-            "model": OLLAMA_MODEL,
-            "messages": messages,
-            "stream": False,
-            "options": {
-                "temperature": temperature,
-                "top_p": 0.9,
-                "num_gpu": 32,
-                "num_predict": max_tokens,   # ← CRITICAL: was missing, caused 149-char truncation
-            }
-        }
-        if json_mode:
-            ollama_chat_body["format"] = "json"
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            resp = await client.post(
-                f"{OLLAMA_BASE_URL}/api/chat",
-                json=ollama_chat_body,
-            )
-            resp.raise_for_status()
-            text = resp.json().get("message", {}).get("content", "").strip()
-            if text:
-                print(f"[LLM] Ollama /api/chat [OK] ({len(text)} chars)")
-                return text
-            raise ValueError("Empty response from /api/chat")
-    except httpx.ConnectError:
-        raise RuntimeError(
-            "All cloud AI providers and local Ollama have failed. "
-            "Start Ollama with 'ollama serve' and pull gemma4:e4b, or add API keys to .env."
-        )
-    except Exception as chat_err:
-        print(f"[LLM] Ollama /api/chat failed ({chat_err}). Trying /api/generate fallback...")
-        try:
-            ollama_gen_body: dict = {
-                "model": OLLAMA_MODEL,
-                "prompt": flat_prompt,
-                "stream": False,
-                "options": {"temperature": temperature, "top_p": 0.9, "num_gpu": 32, "num_predict": max_tokens}
-            }
-            if json_mode:
-                ollama_gen_body["format"] = "json"
-            async with httpx.AsyncClient(timeout=180.0) as client:
-                resp = await client.post(
-                    f"{OLLAMA_BASE_URL}/api/generate",
-                    json=ollama_gen_body,
-                )
-                resp.raise_for_status()
-                text = resp.json().get("response", "").strip()
-                if text:
-                    print(f"[LLM] Ollama /api/generate [OK] ({len(text)} chars)")
-                    return text
-                raise ValueError("Empty response from /api/generate")
-        except httpx.ConnectError:
-            raise RuntimeError(
-                "All cloud AI providers and local Ollama have failed. "
-                "Start Ollama with 'ollama serve' and pull gemma4:e4b, or add API keys to .env."
-            )
-        except Exception as gen_err:
-            raise RuntimeError(f"All AI providers failed. Last Ollama error: {gen_err}")
+    # Fallback error when all cloud providers fail
+    raise RuntimeError(
+        "All cloud AI providers failed or are not configured. "
+        "Please check your API keys (OPENROUTER_API_KEY / GEMINI_API_KEY) in the environment settings."
+    )
 
 
 
@@ -794,35 +693,20 @@ async def generate_opportunities(dream: str, branch: str, year: str, current_ski
 # Health check (no longer needs Ollama)
 # ──────────────────────────────────────────────
 async def check_ollama() -> dict:
-    """Returns cloud AI status + checks if local Ollama is available."""
+    """Returns cloud AI status."""
     providers = []
     if OPENROUTER_API_KEY:
-        providers.append("OpenRouter (Gemma 4 31B / 26B)")
+        providers.append("OpenRouter (Lightweight Cloud Models)")
     if GEMINI_API_KEY:
-        providers.append("Google AI Studio (Gemma 4 31B)")
-
-    # Check local Ollama availability
-    ollama_local = {"running": False, "model_available": False}
-    try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get(f"{OLLAMA_BASE_URL}/api/tags")
-            if resp.status_code == 200:
-                models = resp.json().get("models", [])
-                model_names = [m.get("name", "") for m in models]
-                has_gemma4 = any("gemma4" in n.lower() or "gemma" in n.lower() for n in model_names)
-                ollama_local = {"running": True, "model_available": has_gemma4, "models": model_names}
-                if has_gemma4:
-                    providers.append(f"Ollama (local: {OLLAMA_MODEL})")
-    except Exception:
-        pass  # Ollama not running locally — that's fine
+        providers.append("Google AI Studio (Gemini 1.5 Flash)")
 
     return {
         "running": len(providers) > 0,
         "model_available": len(providers) > 0,
-        "model_name": "Gemma4 (Cloud + Local fallback)",
+        "model_name": "Gemini 1.5 Flash (Cloud)",
         "providers": providers,
-        "mode": "cloud+local",
-        "ollama_local": ollama_local,
+        "mode": "cloud",
+        "ollama_local": {"running": False, "model_available": False},
     }
 
 
