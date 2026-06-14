@@ -647,6 +647,14 @@ export default function RoadmapView({
         if (isDreamMatch) {
           if (active) {
             setRoadmap(cachedRoadmap);
+            if (cachedRoadmap.conceptProgress) {
+              setConceptProgress(cachedRoadmap.conceptProgress);
+              localStorage.setItem('kalamspark_concept_progress', JSON.stringify(cachedRoadmap.conceptProgress));
+            }
+            if (cachedRoadmap.projectProgress) {
+              setProjectProgress(cachedRoadmap.projectProgress);
+              localStorage.setItem('kalamspark_project_progress', JSON.stringify(cachedRoadmap.projectProgress));
+            }
             if (cachedCompletedStages) {
               setCompletedStages(cachedCompletedStages);
               setActiveStageIndex(Math.max(user.currentStageIndex, cachedCompletedStages.length));
@@ -657,16 +665,8 @@ export default function RoadmapView({
         }
       }
 
-      if (active) {
-        setLoading(true);
-        setError(null);
-      }
       try {
-        if (forceRefresh) {
-          localStorage.removeItem("kalamspark_force_refresh");
-        }
-        
-        // 2. Try Local DB / Supabase Cache
+        // 2. Try Local DB / Supabase Cache (Instant read before setting loading state)
         const existing = await dbService.getRoadmap(user.id);
         const existingDreamClean = normalizeDream(existing?.dream);
         const isDreamMatch = !existingDreamClean || existingDreamClean === userDreamClean;
@@ -676,12 +676,29 @@ export default function RoadmapView({
           // If dream matches, or if offline (cannot regenerate, so must use existing), use the cache
           if (!forceRefresh && isDreamMatch || !networkService.isOnline()) {
             const clean = sanitizeRoadmap(existing, user.dream, user.branch);
+            
+            // Rehydrate conceptProgress and projectProgress with localStorage fallback
+            const localSavedConcepts = localStorage.getItem('kalamspark_concept_progress');
+            const localSavedProjects = localStorage.getItem('kalamspark_project_progress');
+            const fallbackConcepts = localSavedConcepts ? JSON.parse(localSavedConcepts) : {};
+            const fallbackProjects = localSavedProjects ? JSON.parse(localSavedProjects) : {};
+
+            const loadedConcepts = existing.conceptProgress || fallbackConcepts;
+            const loadedProjects = existing.projectProgress || fallbackProjects;
+
             if (active) {
               setRoadmap(clean);
+              setConceptProgress(loadedConcepts);
+              setProjectProgress(loadedProjects);
+              localStorage.setItem('kalamspark_concept_progress', JSON.stringify(loadedConcepts));
+              localStorage.setItem('kalamspark_project_progress', JSON.stringify(loadedProjects));
               if (setCachedRoadmap) setCachedRoadmap(clean);
             }
 
-            await dbService.saveRoadmap(user, clean);
+            if (forceRefresh) {
+              localStorage.removeItem("kalamspark_force_refresh");
+            }
+
             const completed = await dbService.getCompletedStages(user.id);
             if (active) {
               setCompletedStages(completed);
@@ -697,7 +714,23 @@ export default function RoadmapView({
           }
         }
 
-        // Direct Client-Side Generation
+        // Direct Client-Side Generation (Only run if no local cache exists or if forceRefresh is true)
+        if (active) {
+          setLoading(true);
+          setError(null);
+          setLoadingMsg('Generating roadmap on-device...');
+          setCompletedStages([]);
+          if (setCachedCompletedStages) setCachedCompletedStages([]);
+          setConceptProgress({});
+        }
+
+        if (forceRefresh) {
+          localStorage.removeItem("kalamspark_force_refresh");
+        }
+        localStorage.removeItem('kalamspark_concept_progress');
+        localStorage.removeItem('kalamspark_project_progress');
+        await dbService.clearCompletedStages(user.id);
+
         if (!networkService.isOnline()) {
           if (active) {
             setError("📡 No Internet Connection — Connect to the internet to generate your personalized roadmap.");
@@ -706,20 +739,13 @@ export default function RoadmapView({
           return null;
         }
 
-        if (active) {
-          setLoadingMsg('Generating roadmap on-device...');
-          setCompletedStages([]);
-          if (setCachedCompletedStages) setCachedCompletedStages([]);
-          setConceptProgress({});
-        }
-        localStorage.removeItem('kalamspark_concept_progress');
-        await dbService.clearCompletedStages(user.id);
-
         try {
           const fallback = await generateRoadmapWithProgress(user, (msg) => {
             if (active) setLoadingMsg(msg);
           });
           const clean = sanitizeRoadmap(fallback, user.dream, user.branch);
+          clean.conceptProgress = {};
+          clean.projectProgress = {};
           if (existing) {
             clean.playlists = existing.playlists || [];
             clean.watchLater = existing.watchLater || [];
@@ -822,19 +848,28 @@ export default function RoadmapView({
       return;
     }
 
-    setConceptProgress(prev => {
-      const current = prev[stageId] || [];
-      let next: string[];
-      if (current.includes(concept)) {
-        next = current.filter(c => c !== concept);
-      } else {
-        next = [...current, concept];
-      }
+    const current = conceptProgress[stageId] || [];
+    const next = current.includes(concept)
+      ? current.filter(c => c !== concept)
+      : [...current, concept];
 
-      checkStageCompletion(stageId, stageIndex, next, undefined);
+    const newProgress = { ...conceptProgress, [stageId]: next };
+    setConceptProgress(newProgress);
+    localStorage.setItem('kalamspark_concept_progress', JSON.stringify(newProgress));
 
-      return { ...prev, [stageId]: next };
-    });
+    // Save updated roadmap with progress
+    if (roadmap) {
+      const updatedRoadmap = {
+        ...roadmap,
+        conceptProgress: newProgress,
+        projectProgress: projectProgress
+      };
+      setRoadmap(updatedRoadmap);
+      if (setCachedRoadmap) setCachedRoadmap(updatedRoadmap);
+      dbService.saveRoadmap(user, updatedRoadmap).catch(err => console.warn('Failed to save concept progress:', err));
+    }
+
+    checkStageCompletion(stageId, stageIndex, next, undefined);
   };
 
   const toggleProject = (stageId: string, stageIndex: number, project: string) => {
@@ -843,19 +878,28 @@ export default function RoadmapView({
       return;
     }
 
-    setProjectProgress(prev => {
-      const current = prev[stageId] || [];
-      let next: string[];
-      if (current.includes(project)) {
-        next = current.filter(p => p !== project);
-      } else {
-        next = [...current, project];
-      }
+    const current = projectProgress[stageId] || [];
+    const next = current.includes(project)
+      ? current.filter(p => p !== project)
+      : [...current, project];
 
-      checkStageCompletion(stageId, stageIndex, undefined, next);
+    const newProgress = { ...projectProgress, [stageId]: next };
+    setProjectProgress(newProgress);
+    localStorage.setItem('kalamspark_project_progress', JSON.stringify(newProgress));
 
-      return { ...prev, [stageId]: next };
-    });
+    // Save updated roadmap with progress
+    if (roadmap) {
+      const updatedRoadmap = {
+        ...roadmap,
+        conceptProgress: conceptProgress,
+        projectProgress: newProgress
+      };
+      setRoadmap(updatedRoadmap);
+      if (setCachedRoadmap) setCachedRoadmap(updatedRoadmap);
+      dbService.saveRoadmap(user, updatedRoadmap).catch(err => console.warn('Failed to save project progress:', err));
+    }
+
+    checkStageCompletion(stageId, stageIndex, undefined, next);
   };
 
   const handleMarkIncomplete = async (stageId: string, stageIndex: number) => {

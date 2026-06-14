@@ -976,6 +976,7 @@ const AppContent = ({
   const [isIOS, setIsIOS] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
   const [showInstallOptionModal, setShowInstallOptionModal] = useState(false);
+  const [pwaGuide, setPwaGuide] = useState<'ios' | 'android' | null>(null);
 
 
   useEffect(() => {
@@ -1103,7 +1104,7 @@ const AppContent = ({
 
   const handleInstallClick = async () => {
     if (isIOS) {
-      alert("📱 How to Install on iOS:\n\n1. Tap the Share button (⎙) in Safari.\n2. Scroll down and select 'Add to Home Screen'.\n3. Tap 'Add' in the top-right corner to install.");
+      setPwaGuide('ios');
       return;
     }
     setShowInstallOptionModal(true);
@@ -1111,32 +1112,37 @@ const AppContent = ({
 
   const handleInstallPWA = async () => {
     setShowInstallOptionModal(false);
-    if (installPrompt) {
-      installPrompt.prompt();
-      const { outcome } = await installPrompt.userChoice;
-      if (outcome === 'accepted') {
-        setShowInstallBanner(false);
-        setIsInstalled(true);
-        setIsInstallingPWA(true);
-        setPwaProgress(0);
-        const interval = setInterval(() => {
-          setPwaProgress(prev => {
-            if (prev >= 100) {
-              clearInterval(interval);
-              setTimeout(() => {
-                setIsInstallingPWA(false);
-                alert("🎉 Kalam Spark has been added to home screen successfully!");
-              }, 600);
-              return 100;
+    setIsInstallingPWA(true);
+    setPwaProgress(0);
+
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += Math.floor(Math.random() * 15) + 8;
+      if (progress >= 100) {
+        clearInterval(interval);
+        setPwaProgress(100);
+        setTimeout(async () => {
+          setIsInstallingPWA(false);
+          if (installPrompt) {
+            installPrompt.prompt();
+            const { outcome } = await installPrompt.userChoice;
+            if (outcome === 'accepted') {
+              setShowInstallBanner(false);
+              setIsInstalled(true);
             }
-            return prev + Math.floor(Math.random() * 12) + 6;
-          });
-        }, 200);
+            setInstallPrompt(null);
+          } else {
+            if (isIOS) {
+              setPwaGuide('ios');
+            } else {
+              setPwaGuide('android');
+            }
+          }
+        }, 500);
+      } else {
+        setPwaProgress(progress);
       }
-      setInstallPrompt(null);
-    } else {
-      alert("📥 How to Add to Home Screen:\n\n1. Tap your browser's menu button (three dots ⋮ at the top right).\n2. Select 'Add to Home screen' or 'Install App'.\n\nIf you don't see this option, the app might already be installed!");
-    }
+    }, 150);
   };
 
   const handleDownloadAPK = async () => {
@@ -1315,6 +1321,66 @@ const AppContent = ({
         </div>
       )}
 
+      {/* PWA Guide Modal */}
+      {pwaGuide && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4" onClick={() => setPwaGuide(null)}>
+          <div className="w-full max-w-sm p-6 rounded-2xl glass-card border border-gold-500/25 flex flex-col gap-5 text-left relative" onClick={(e) => e.stopPropagation()} style={{ background: "rgba(6,3,18,0.95)" }}>
+            <button onClick={() => setPwaGuide(null)} className="absolute top-4 right-4 text-gold-500/40 hover:text-gold-300 transition-colors">
+              <X size={20} />
+            </button>
+            
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-orange-600/10 border border-orange-500/30 flex items-center justify-center flex-shrink-0">
+                <Smartphone size={20} className="text-orange-400 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold heading-gold font-cinzel">Add to Home Screen</h3>
+                <p className="text-[10px] text-gold-500/60">Follow these steps to run Kalam Spark from your home screen.</p>
+              </div>
+            </div>
+
+            {pwaGuide === 'ios' ? (
+              <div className="flex flex-col gap-4 text-xs text-gold-200/80">
+                <div className="flex gap-3 items-start">
+                  <span className="w-5 h-5 rounded-full bg-violet-500/10 border border-violet-500/25 flex items-center justify-center text-[10px] font-bold text-violet-400 shrink-0 mt-0.5">1</span>
+                  <p>Tap the <span className="text-gold-300 font-semibold">Share button (⎙ or <svg className="inline w-3.5 h-3.5 text-violet-400 mb-0.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15M9 12l3-3m0 0 3 3m-3-3v12" /></svg>)</span> in Safari.</p>
+                </div>
+                <div className="flex gap-3 items-start">
+                  <span className="w-5 h-5 rounded-full bg-violet-500/10 border border-violet-500/25 flex items-center justify-center text-[10px] font-bold text-violet-400 shrink-0 mt-0.5">2</span>
+                  <p>Scroll down the share sheet and tap <span className="text-gold-300 font-semibold">Add to Home Screen</span>.</p>
+                </div>
+                <div className="flex gap-3 items-start">
+                  <span className="w-5 h-5 rounded-full bg-violet-500/10 border border-violet-500/25 flex items-center justify-center text-[10px] font-bold text-violet-400 shrink-0 mt-0.5">3</span>
+                  <p>Tap <span className="text-gold-300 font-semibold">Add</span> in the top-right corner to complete installation.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4 text-xs text-gold-200/80">
+                <div className="flex gap-3 items-start">
+                  <span className="w-5 h-5 rounded-full bg-violet-500/10 border border-violet-500/25 flex items-center justify-center text-[10px] font-bold text-violet-400 shrink-0 mt-0.5">1</span>
+                  <p>Tap your browser's menu button (<span className="text-gold-300 font-semibold">three dots ⋮</span> at the top-right or bottom-right corner).</p>
+                </div>
+                <div className="flex gap-3 items-start">
+                  <span className="w-5 h-5 rounded-full bg-violet-500/10 border border-violet-500/25 flex items-center justify-center text-[10px] font-bold text-violet-400 shrink-0 mt-0.5">2</span>
+                  <p>Select <span className="text-gold-300 font-semibold">Install App</span> or <span className="text-gold-300 font-semibold">Add to Home screen</span>.</p>
+                </div>
+                <div className="flex gap-3 items-start">
+                  <span className="w-5 h-5 rounded-full bg-violet-500/10 border border-violet-500/25 flex items-center justify-center text-[10px] font-bold text-violet-400 shrink-0 mt-0.5">3</span>
+                  <p>Confirm the prompt to automatically add the app to your home screen.</p>
+                </div>
+              </div>
+            )}
+
+            <button 
+              onClick={() => setPwaGuide(null)}
+              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-semibold text-xs active:scale-95 transition-all shadow-lg shadow-orange-500/20 hover:opacity-90 font-inter"
+            >
+              Got It
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Sidebar overlay */}
       {isSidebarOpen && (
         <div
@@ -1404,7 +1470,7 @@ const AppContent = ({
           <div className="flex items-center gap-2 sm:gap-3">
             {/* XP Counter */}
             <div
-              className="hidden xs:flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-semibold text-gold-300"
+              className="hidden sm:flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-semibold text-gold-300"
               style={{
                 background: "rgba(211,156,59,0.08)",
                 border: "1px solid rgba(211,156,59,0.25)",
@@ -1420,16 +1486,15 @@ const AppContent = ({
               <button
                 onClick={handleInstallClick}
                 title={isIOS ? 'Tap Share → Add to Home Screen to install' : 'Install Kalam Spark App'}
-                className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-semibold text-gold-300 transition-all active:scale-95 select-none hover:bg-white/5"
+                className="flex items-center justify-center gap-2 p-2 sm:px-4 sm:py-2 rounded-xl text-xs font-semibold text-gold-300 transition-all active:scale-95 select-none hover:bg-white/5 w-9 h-9 sm:w-auto sm:h-auto"
                 style={{
                   background: "rgba(211,156,59,0.08)",
                   border: "1px solid rgba(211,156,59,0.25)",
                   boxShadow: "0 0 12px rgba(211,156,59,0.08)",
                 }}
               >
-                <Smartphone size={13} className="text-gold-400" />
+                <Smartphone size={14} className="text-gold-400 shrink-0" />
                 <span className="hidden sm:inline">Install App</span>
-                <span className="sm:hidden">Install</span>
               </button>
             )}
 
