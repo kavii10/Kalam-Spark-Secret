@@ -1015,43 +1015,128 @@ const AppContent = ({
     };
   }, []);
 
-  const startPwaDownloadSimulation = () => {
+  const downloadApkWithProgress = async () => {
     setIsInstallingPWA(true);
     setPwaProgress(0);
-    const interval = setInterval(() => {
-      setPwaProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setTimeout(() => {
-            setIsInstallingPWA(false);
-            alert("🎉 Kalam Spark has been installed successfully!");
-          }, 600);
-          return 100;
+    try {
+      const response = await fetch('/kalam-spark.apk');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch APK: HTTP status ${response.status}`);
+      }
+      const contentLengthHeader = response.headers.get('content-length');
+      const contentLength = contentLengthHeader ? parseInt(contentLengthHeader, 10) : 0;
+      
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('ReadableStream not supported by browser.');
+      }
+      
+      let receivedLength = 0;
+      const chunks: Uint8Array[] = [];
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
         }
-        return prev + Math.floor(Math.random() * 12) + 6;
-      });
-    }, 200);
+        if (value) {
+          chunks.push(value);
+          receivedLength += value.length;
+          if (contentLength > 0) {
+            const percent = Math.round((receivedLength / contentLength) * 100);
+            setPwaProgress(percent);
+          } else {
+            setPwaProgress(prev => Math.min(prev + 1, 99));
+          }
+        }
+      }
+      
+      setPwaProgress(100);
+      const blob = new Blob(chunks, { type: 'application/vnd.android.package-archive' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'kalam-spark.apk';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      setTimeout(() => {
+        setIsInstallingPWA(false);
+        alert("🎉 Kalam Spark APK has been downloaded successfully! Please open the downloaded .apk file to install the app on your mobile device.");
+      }, 500);
+      
+    } catch (error) {
+      console.warn('[App] APK download failed, falling back to simulated PWA install:', error);
+      setIsInstallingPWA(true);
+      setPwaProgress(0);
+      let simulatedProgress = 0;
+      const interval = setInterval(() => {
+        simulatedProgress += Math.floor(Math.random() * 12) + 6;
+        if (simulatedProgress >= 100) {
+          clearInterval(interval);
+          setPwaProgress(100);
+          setTimeout(async () => {
+            setIsInstallingPWA(false);
+            if (installPrompt) {
+              installPrompt.prompt();
+              const { outcome } = await installPrompt.userChoice;
+              if (outcome === 'accepted') {
+                setShowInstallBanner(false);
+                setIsInstalled(true);
+                alert("🎉 Kalam Spark PWA added to home screen successfully!");
+              }
+              setInstallPrompt(null);
+            } else {
+              alert("📥 PWA Installation Fallback:\n\n1. Tap your browser's menu button (three dots ⋮ at the top right).\n2. Select 'Install App' or 'Add to Home screen'.");
+            }
+          }, 500);
+        } else {
+          setPwaProgress(simulatedProgress);
+        }
+      }, 150);
+    }
   };
 
   const handleInstallClick = async () => {
+    const isAndroid = /android/i.test(navigator.userAgent);
+    const isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(navigator.userAgent);
+
     if (isIOS) {
       alert("📱 How to Install on iOS:\n\n1. Tap the Share button (⎙) in Safari.\n2. Scroll down and select 'Add to Home Screen'.\n3. Tap 'Add' in the top-right corner to install.");
       return;
     }
 
-    if (installPrompt) {
-      // Android Chrome — show native install dialog
-      installPrompt.prompt();
-      const { outcome } = await installPrompt.userChoice;
-      if (outcome === 'accepted') {
-        setShowInstallBanner(false);
-        setIsInstalled(true);
-        startPwaDownloadSimulation();
-      }
-      setInstallPrompt(null);
+    if (isAndroid || isMobile) {
+      await downloadApkWithProgress();
     } else {
-      // Fallback instructions if prompt is null
-      alert("📥 How to Install:\n\n1. Tap your browser's menu button (three dots ⋮ at the top right).\n2. Select 'Install App' or 'Add to Home screen'.\n\nIf you don't see this option, the app might already be installed!");
+      if (installPrompt) {
+        installPrompt.prompt();
+        const { outcome } = await installPrompt.userChoice;
+        if (outcome === 'accepted') {
+          setShowInstallBanner(false);
+          setIsInstalled(true);
+          setIsInstallingPWA(true);
+          setPwaProgress(0);
+          const interval = setInterval(() => {
+            setPwaProgress(prev => {
+              if (prev >= 100) {
+                clearInterval(interval);
+                setTimeout(() => {
+                  setIsInstallingPWA(false);
+                  alert("🎉 Kalam Spark has been installed successfully!");
+                }, 600);
+                return 100;
+              }
+              return prev + Math.floor(Math.random() * 12) + 6;
+            });
+          }, 200);
+        }
+        setInstallPrompt(null);
+      } else {
+        await downloadApkWithProgress();
+      }
     }
   };
 
@@ -1597,7 +1682,7 @@ const AppContent = ({
               </label>
             </div>
 
-            {Capacitor.isNativePlatform() && (
+            {Capacitor.isNativePlatform() ? (
               <div className="flex flex-col mb-5 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,140,66,0.25)', background: 'rgba(0,0,0,0.35)' }}>
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3" style={{ background: 'rgba(255,140,66,0.08)', borderBottom: '1px solid rgba(255,140,66,0.15)' }}>
@@ -1696,6 +1781,37 @@ const AppContent = ({
                       </button>
                     </div>
                   )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col mb-5 rounded-xl overflow-hidden text-left" style={{ border: '1px solid rgba(255,140,66,0.25)', background: 'rgba(0,0,0,0.35)' }}>
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3" style={{ background: 'rgba(255,140,66,0.08)', borderBottom: '1px solid rgba(255,140,66,0.15)' }}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🧠</span>
+                    <div>
+                      <p className="text-sm font-bold text-gold-200">Offline AI Brain</p>
+                      <p className="text-[10px] text-gold-500/50">Local Quantized Model</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-purple-500/15 text-purple-400 border border-purple-500/30">
+                    <span>App Feature</span>
+                  </div>
+                </div>
+
+                <div className="px-4 py-3 flex flex-col gap-3">
+                  <p className="text-[11px] text-gold-400/70 leading-relaxed">
+                    To run local quantized AI models (.gguf) completely offline, please download and install our native Android App (.apk).
+                  </p>
+                  
+                  <button
+                    onClick={() => { setShowSettingsModal(false); handleInstallClick(); }}
+                    className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all active:scale-95 text-gold-200"
+                    style={{ background: 'linear-gradient(135deg, rgba(255,140,66,0.25), rgba(124,58,237,0.2))', border: '1px solid rgba(255,140,66,0.4)' }}
+                  >
+                    <Download size={16} className="text-gold-400 animate-pulse" />
+                    <span>Download Android App (.apk)</span>
+                  </button>
                 </div>
               </div>
             )}
