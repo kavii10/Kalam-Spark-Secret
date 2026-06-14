@@ -13,9 +13,9 @@ import { getMentorChatReply } from '../services/geminiService';
 import { networkService } from '../services/networkService';
 import { llamaPlugin } from '../services/llamaPlugin';
 
-const BACKEND_URL = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://localhost:8000'
-  : '';
+  : '');
 
 /* ─── Types ─── */
 interface ChatMessage {
@@ -723,9 +723,7 @@ export default function MentorChat({ user, isLight = false }: { user: UserProfil
     else if (/[\u0D00-\u0D7F]/.test(text)) lang = 'ml-IN'; // Malayalam
     else if (/[\u0980-\u09FF]/.test(text)) lang = 'bn-IN'; // Bengali
 
-    const backendUrl = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-      ? 'http://localhost:8000'
-      : '';
+    const backendUrl = BACKEND_URL;
 
     // 4. Try high-quality backend edge-tts first if on desktop/localhost
     if (backendUrl) {

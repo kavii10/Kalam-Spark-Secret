@@ -17,9 +17,9 @@ import { Capacitor } from '@capacitor/core';
 // On native mobile, the backend at 127.0.0.1:8000 is NOT reachable
 const IS_NATIVE_MOBILE = Capacitor.isNativePlatform();
 
-const BACKEND = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+const BACKEND = import.meta.env.VITE_BACKEND_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://localhost:8000'
-  : '';
+  : '');
 
 /* Ã¢â€ â‚¬Ã¢â€ â‚¬Ã¢â€ â‚¬ Types Ã¢â€ â‚¬Ã¢â€ â‚¬Ã¢â€ â‚¬ */
 interface Source {
