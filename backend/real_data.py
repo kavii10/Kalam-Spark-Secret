@@ -645,15 +645,26 @@ def get_detailed_career_description(dream: str) -> dict:
             "tips": "Build a strong GitHub portfolio with real projects. Contribute to open-source. Practice coding interviews. Learn modern frameworks and tools relevant to your focus area."
         },
         
-        # Data careers
-        "data scientist|machine learning engineer|ai engineer|artificial intelligence engineer": {
-            "overview": "Data scientists and ML engineers extract insights from data and build intelligent systems. You'll analyze datasets, develop predictive models, create machine learning pipelines, and deploy AI solutions. This role sits at the intersection of statistics, programming, and business, requiring both technical depth and communication skills.",
-            "roles": ["Analyze large datasets and identify patterns", "Build and train machine learning models", "Evaluate model performance and optimize accuracy", "Deploy ML models to production", "Create data visualizations and dashboards", "Collaborate with engineers and business stakeholders", "Research and implement new algorithms"],
-            "required_skills": ["Python, R, or Julia programming", "Mathematics (Linear Algebra, Calculus, Statistics)", "Machine Learning frameworks (TensorFlow, PyTorch, Scikit-learn)", "Data manipulation (Pandas, NumPy)", "SQL for database queries", "Statistics and experimental design", "Data visualization (Matplotlib, Tableau)", "Deep Learning basics"],
-            "market_outlook": "Rapidly growing field with massive demand from startups to Fortune 500 companies. Every industry now needs data scientists. Competitive salaries and equity opportunities.",
-            "salary_range": "₹8,00,000 - ₹60,00,000+ per year. Entry-level: ₹8-15 LPA, Mid-level: ₹20-40 LPA, Senior: ₹40+ LPA",
-            "growth": "Specialize in Deep Learning, NLP, Computer Vision, or Research. Progress to ML Architect, Research Scientist, or Lead. Start your own ML company.",
-            "tips": "Build projects on Kaggle and GitHub. Understand the math behind algorithms. Learn big data tools (Spark, Hadoop). Stay updated with latest papers and techniques."
+        # AI/ML Engineer
+        "ai engineer|machine learning engineer|artificial intelligence engineer|deep learning engineer": {
+            "overview": "AI and Machine Learning Engineers build intelligent systems, train neural networks, fine-tune LLMs, and deploy AI models to production. You'll write code to implement algorithms, optimize model performance, and integrate AI capabilities into software applications.",
+            "roles": ["Train and fine-tune machine learning and deep learning models", "Implement neural network architectures and NLP/Vision models", "Deploy models to scale using cloud services (AWS, GCP, Azure)", "Build API endpoints to serve model predictions", "Optimize model inference speed and memory usage", "Stay up to date with state-of-the-art AI research and techniques", "Collaborate with software engineers to integrate AI features"],
+            "required_skills": ["Programming (Python, C++)", "Machine Learning & Deep Learning (PyTorch, TensorFlow)", "Natural Language Processing (NLP) & Large Language Models (LLMs)", "Computer Vision (OpenCV)", "AI tools & APIs (OpenAI, Hugging Face, LangChain)", "Model deployment (Docker, Kubernetes, Triton)", "Data pipelines & processing (NumPy, Pandas)"],
+            "market_outlook": "Exponentially growing demand worldwide. AI is transforming every industry, making AI/ML engineering one of the highest-paying and most sought-after careers in technology.",
+            "salary_range": "₹10,00,000 - ₹80,00,000+ per year. Entry-level: ₹10-18 LPA, Mid-level: ₹20-50 LPA, Senior: ₹50+ LPA",
+            "growth": "Progress to Lead AI Scientist, Chief AI Officer, or specialized Research Scientist. Launch your own AI startup.",
+            "tips": "Build and deploy real LLM or CV projects. Participate in Kaggle and Hugging Face forums. Understand deep learning fundamentals. Keep building hands-on projects."
+        },
+
+        # Data Scientist
+        "data scientist|data analyst|business intelligence developer": {
+            "overview": "Data scientists analyze large and complex datasets to discover hidden patterns, extract valuable insights, and drive business decision-making. You will combine statistics, data mining, and predictive modeling to translate raw data into actionable recommendations.",
+            "roles": ["Clean, preprocess, and analyze unstructured data", "Perform exploratory data analysis (EDA) to find trends", "Build statistical models and predictive algorithms", "Design A/B tests and evaluate business experiments", "Create interactive dashboards and reports for stakeholders", "Present insights and data stories to business leaders", "Collaborate with data engineers to optimize pipelines"],
+            "required_skills": ["Statistics and Probability", "SQL for querying large databases", "Python or R (Pandas, Scikit-learn)", "Data Visualization (Tableau, PowerBI, Matplotlib)", "A/B testing and experimentation design", "Data Warehousing and ETL pipelines", "Communication and storytelling"],
+            "market_outlook": "Very high demand. Every data-driven organization relies on data scientists to make strategic decisions. Strong growth across finance, healthcare, e-commerce, and SaaS.",
+            "salary_range": "₹8,00,000 - ₹50,00,000+ per year. Entry-level: ₹8-14 LPA, Mid-level: ₹15-30 LPA, Senior: ₹30+ LPA",
+            "growth": "Advance to Senior Data Scientist, Analytics Manager, Director of Data Science, or Chief Data Officer.",
+            "tips": "Focus on statistical foundations. Master SQL and Pandas. Build projects showing end-to-end data analysis. Develop strong presentation and business communication skills."
         },
         
         # Medical careers
