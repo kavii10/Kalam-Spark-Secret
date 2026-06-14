@@ -4,7 +4,7 @@ import {
   ExternalLink, Loader2, ChevronLeft, ChevronRight, AlertCircle,
   X, Library, GraduationCap, Atom, Rss, Bookmark, Plus, ListVideo, FolderPlus, Check, Trash2, Volume2, Folder, FolderOpen, WifiOff
 } from 'lucide-react';
-import { UserProfile, CareerRoadmap } from '../types';
+import { UserProfile, CareerRoadmap, StageCache } from '../types';
 import {
   fetchDirectResources, searchAllResources,
   BookResource, VideoResource, PaperResource, NewsResource, ResourceData
@@ -602,23 +602,41 @@ function getLocalResourcesPlaceholder(dream: string, stageTitle: string): any {
 }
 
 // ─── Main Component ─────────────────────────────────────────────────────────────
-export default function Resources({ user }: { user: UserProfile }) {
+export default function Resources({
+  user,
+  cachedResources,
+  setCachedResources
+}: {
+  user: UserProfile;
+  cachedResources: StageCache | null;
+  setCachedResources: (r: StageCache | null) => void;
+}) {
   const [activeTab, setActiveTab] = useState<Tab>('books');
-  const [loading, setLoading] = useState(true);
-  // `dataReady` is only true after we have real data (or confirmed empty) — prevents the single-book flash
-  const [dataReady, setDataReady] = useState(false);
-  const [initialized, setInitialized] = useState(false);
+
+  const currentUser = user;
+  const stageIdx = Math.min(currentUser.currentStageIndex, 5);
+
+  const hasMatchingCache = !!(
+    cachedResources &&
+    cachedResources.cachedForDream === currentUser.dream &&
+    cachedResources.cachedForStage === stageIdx &&
+    Array.isArray(cachedResources.books) &&
+    cachedResources.books.length > 0
+  );
+
+  const [loading, setLoading] = useState(!hasMatchingCache);
+  const [dataReady, setDataReady] = useState(hasMatchingCache);
+  const [initialized, setInitialized] = useState(hasMatchingCache);
   const [loadError, setLoadError] = useState(false);
   const [roadmap, setRoadmap] = useState<CareerRoadmap | null>(null);
-  const [data, setData] = useState<ResourceData>({ books: [], videos: [], papers: [], news: [] });
+  const [data, setData] = useState<ResourceData>(() => {
+    if (hasMatchingCache) return cachedResources!;
+    return { books: [], videos: [], papers: [], news: [] };
+  });
   const isLight = user.settings?.theme === 'light';
   const [isOfflineAndNoCache, setIsOfflineAndNoCache] = useState(false);
   const navigate = useNavigate();
   const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null);
-  // Tracks whether we've done a full load in this session (persists across re-mounts via useRef)
-  const initializedRef = useRef(false);
-  const cachedDataRef = useRef<ResourceData | null>(null);
-  const cachedStageRef = useRef<number>(-1);
 
   useEffect(() => {
     setActivePlaylistId(null);
@@ -717,6 +735,7 @@ export default function Resources({ user }: { user: UserProfile }) {
       if (cached && !dreamMismatch && !stageMismatch && Array.isArray(cached.books) && cached.books.length > 0) {
         setRoadmap({ ...rm });
         setData(cached as ResourceData);
+        setCachedResources(cached as StageCache);
         setDataReady(true);
         setLoading(false);
         setInitialized(true);
@@ -785,11 +804,8 @@ export default function Resources({ user }: { user: UserProfile }) {
       setRoadmap({ ...rm });
       // Set data and mark as ready in a single batch — prevents partial render with empty data
       setData(cached as ResourceData);
+      setCachedResources(cached as StageCache);
       setDataReady(true);
-      // Store in session refs so navigating back doesn't trigger a full reload
-      cachedDataRef.current = cached as ResourceData;
-      cachedStageRef.current = stageIdx;
-      initializedRef.current = true;
     } catch (e) {
       console.error('fetchCurriculum error:', e);
       setLoadError(true);
@@ -798,7 +814,7 @@ export default function Resources({ user }: { user: UserProfile }) {
       setLoading(false);
       setInitialized(true);
     }
-  }, [user.currentStageIndex, user.id, user.dream, user.year, user.branch]);
+  }, [user.currentStageIndex, user.id, user.dream, user.year, user.branch, setCachedResources]);
 
   useEffect(() => {
     let active = true;
@@ -813,8 +829,8 @@ export default function Resources({ user }: { user: UserProfile }) {
     }, 15000);
 
     // If already initialized in this session AND stage hasn't changed, skip the full reload
-    if (initializedRef.current && cachedDataRef.current && cachedStageRef.current === user.currentStageIndex) {
-      setData(cachedDataRef.current);
+    if (hasMatchingCache) {
+      setData(cachedResources!);
       setLoading(false);
       setDataReady(true);
       setInitialized(true);
@@ -824,7 +840,7 @@ export default function Resources({ user }: { user: UserProfile }) {
 
     if (active) fetchCurriculum();
     return () => { active = false; clearTimeout(timeout); };
-  }, [fetchCurriculum]);
+  }, [fetchCurriculum, hasMatchingCache, cachedResources]);
 
   // ── Load next batch — REPLACES current data with fresh resources ─────────────
   const loadNextBatch = useCallback(async () => {
@@ -883,12 +899,13 @@ export default function Resources({ user }: { user: UserProfile }) {
       await dbService.saveRoadmap(currentUser, updatedRm);
       setRoadmap(updatedRm);
       setData(freshData as ResourceData);
+      setCachedResources(freshData as StageCache);
     } catch (e) {
       console.error('loadNextBatch error:', e);
     } finally {
       setLoading(false);
     }
-  }, [roadmap]);
+  }, [roadmap, setCachedResources]);
 
   // ── Search ────────────────────────────────────────────────────────────────────
   const handleSearch = async () => {

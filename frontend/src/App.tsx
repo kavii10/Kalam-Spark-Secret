@@ -44,7 +44,7 @@ import CareerPivot from "./views/CareerPivot";
 import Opportunities from "./views/Opportunities";
 import FileSpeaker from "./views/FileSpeaker";
 import LoginScreen from "./views/LoginScreen";
-import { UserProfile, Reward, CareerRoadmap } from "./types";
+import { UserProfile, Reward, CareerRoadmap, StageCache } from "./types";
 import { dbService } from './services/dbService';
 import { supabase } from './services/supabaseClient';
 import { getCurrentLang, type LangCode } from "./i18n";
@@ -972,6 +972,7 @@ const AppContent = ({
   // ── Roadmap Cache — persists across page navigation ───────────────────────
   const [cachedRoadmap, setCachedRoadmap] = useState<CareerRoadmap | null>(null);
   const [cachedCompletedStages, setCachedCompletedStages] = useState<string[]>([]);
+  const [cachedResources, setCachedResources] = useState<StageCache | null>(null);
 
   useEffect(() => {
     // Detect iOS
@@ -1332,7 +1333,16 @@ const AppContent = ({
 
                 }
               />
-              <Route path="/resources" element={<Resources user={user} />} />
+              <Route
+                path="/resources"
+                element={
+                  <Resources
+                    user={user}
+                    cachedResources={cachedResources}
+                    setCachedResources={setCachedResources}
+                  />
+                }
+              />
               <Route
                 path="/revision"
                 element={

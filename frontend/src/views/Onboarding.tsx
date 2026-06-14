@@ -198,7 +198,7 @@ function CustomSelect({ value, onChange, options, placeholder, isLight }: Custom
 }
 
 interface OnboardingProps {
-  onComplete: (profile: Pick<UserProfile, 'name' | 'branch' | 'year' | 'dream' | 'educationLevel' | 'schoolBoard' | 'gradeOrSemester' | 'studyHoursPerDay' | 'targetYear' | 'city' | 'motivation'>) => void;
+  onComplete: (profile: Pick<UserProfile, 'name' | 'branch' | 'year' | 'dream' | 'educationLevel' | 'schoolBoard' | 'gradeOrSemester' | 'collegeName' | 'studyHoursPerDay' | 'targetYear' | 'city' | 'motivation'>) => void;
   isLight?: boolean;
 }
 

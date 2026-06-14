@@ -668,14 +668,13 @@ export default function RoadmapView({
         return;
       }
 
-      setLoading(true);
       try {
         const existing = await dbService.getRoadmap(user.id);
         const isDreamDifferent = existing && existing.dream && existing.dream.toLowerCase().trim() !== user.dream.toLowerCase().trim();
         const shouldGenerate = forceRefresh || !existing || !existing.stages || existing.stages.length === 0 || existing.stages[0].id === 'fallback-stage-1' || isDreamDifferent;
 
         if (!shouldGenerate) {
-          const clean = sanitizeRoadmap(existing, user.dream, user.branch);
+          const clean = { ...sanitizeRoadmap(existing, user.dream, user.branch), dream: user.dream };
           setRoadmap(clean);
           await dbService.saveRoadmap(user, clean);
           const completed = await dbService.getCompletedStages(user.id);
@@ -685,11 +684,13 @@ export default function RoadmapView({
           return;
         }
 
-        // Direct Client-Side Generation
+        // Direct Client-Side Generation (Now show the architecting loader)
+        setLoading(true);
+
         if (!networkService.isOnline()) {
           // If we have an existing roadmap in DB, show it even though we're offline
           if (existing && existing.stages && existing.stages.length > 0 && existing.stages[0].id !== 'fallback-stage-1') {
-            const clean = sanitizeRoadmap(existing, user.dream, user.branch);
+            const clean = { ...sanitizeRoadmap(existing, user.dream, user.branch), dream: user.dream };
             setRoadmap(clean);
             const completed = await dbService.getCompletedStages(user.id);
             setCompletedStages(completed);
@@ -713,7 +714,7 @@ export default function RoadmapView({
 
         try {
           const fallback = await generateRoadmapWithProgress(user, setLoadingMsg);
-          const clean = sanitizeRoadmap(fallback, user.dream, user.branch);
+          const clean = { ...sanitizeRoadmap(fallback, user.dream, user.branch), dream: user.dream };
           if (existing) {
             clean.playlists = existing.playlists || [];
             clean.watchLater = existing.watchLater || [];
