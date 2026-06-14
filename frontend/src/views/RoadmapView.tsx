@@ -581,17 +581,25 @@ export default function RoadmapView({
   user,
   setUser,
   onXpGain,
-  onStageAdvance
+  onStageAdvance,
+  cachedRoadmap,
+  setCachedRoadmap,
+  cachedCompletedStages,
+  setCachedCompletedStages,
 }: {
   user: UserProfile;
   setUser: React.Dispatch<React.SetStateAction<UserProfile>>;
   onXpGain?: (amount: number) => void;
   onStageAdvance?: (newIndex: number) => void;
+  cachedRoadmap?: CareerRoadmap | null;
+  setCachedRoadmap?: (r: CareerRoadmap | null) => void;
+  cachedCompletedStages?: string[];
+  setCachedCompletedStages?: (s: string[]) => void;
 }) {
-  const [roadmap, setRoadmap] = useState<CareerRoadmap | null>(null);
+  const [roadmap, setRoadmapLocal] = useState<CareerRoadmap | null>(cachedRoadmap ?? null);
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState('');
-  const [completedStages, setCompletedStages] = useState<string[]>([]);
+  const [completedStages, setCompletedStagesLocal] = useState<string[]>(cachedCompletedStages ?? []);
   const [activeStageIndex, setActiveStageIndex] = useState(user.currentStageIndex);
   const [selectedStage, setSelectedStage] = useState<any | null>(null);
   const [celebration, setCelebration] = useState(false);
@@ -600,10 +608,34 @@ export default function RoadmapView({
   const [retryCount, setRetryCount] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const showToast = (msg: string) => setToast(msg);
+  const [isOffline, setIsOffline] = useState(!networkService.isOnline());
+
+  // Track live network status
+  useEffect(() => {
+    const onOnline  = () => setIsOffline(false);
+    const onOffline = () => setIsOffline(true);
+    window.addEventListener('online',  onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online',  onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
   const [conceptProgress, setConceptProgress] = useState<Record<string, string[]>>(() => {
     const saved = localStorage.getItem('kalamspark_concept_progress');
     return saved ? JSON.parse(saved) : {};
   });
+
+  // Sync local roadmap state up to the parent cache so it survives navigation
+  const setRoadmap = (r: CareerRoadmap | null) => {
+    setRoadmapLocal(r);
+    setCachedRoadmap?.(r);
+  };
+
+  const setCompletedStages = (s: string[]) => {
+    setCompletedStagesLocal(s);
+    setCachedCompletedStages?.(s);
+  };
 
   useEffect(() => {
     localStorage.setItem('kalamspark_concept_progress', JSON.stringify(conceptProgress));
@@ -622,13 +654,22 @@ export default function RoadmapView({
 
   useEffect(() => {
     const init = async () => {
-      setLoading(true);
       setError(null);
+
+      const forceRefresh = localStorage.getItem("kalamspark_force_refresh") === "true";
+      if (forceRefresh) {
+        localStorage.removeItem("kalamspark_force_refresh");
+        // Dream pivot — clear cache and regenerate
+        setRoadmap(null);
+        setCompletedStages([]);
+      } else if (cachedRoadmap && cachedRoadmap.dream?.toLowerCase().trim() === user.dream.toLowerCase().trim()) {
+        // Already loaded in memory — just restore active index and bail out
+        setActiveStageIndex(Math.max(user.currentStageIndex, (cachedCompletedStages ?? []).length));
+        return;
+      }
+
+      setLoading(true);
       try {
-        const forceRefresh = localStorage.getItem("kalamspark_force_refresh") === "true";
-        if (forceRefresh) {
-          localStorage.removeItem("kalamspark_force_refresh");
-        }
         const existing = await dbService.getRoadmap(user.id);
         const isDreamDifferent = existing && existing.dream && existing.dream.toLowerCase().trim() !== user.dream.toLowerCase().trim();
         const shouldGenerate = forceRefresh || !existing || !existing.stages || existing.stages.length === 0 || existing.stages[0].id === 'fallback-stage-1' || isDreamDifferent;
@@ -646,6 +687,19 @@ export default function RoadmapView({
 
         // Direct Client-Side Generation
         if (!networkService.isOnline()) {
+          // If we have an existing roadmap in DB, show it even though we're offline
+          if (existing && existing.stages && existing.stages.length > 0 && existing.stages[0].id !== 'fallback-stage-1') {
+            const clean = sanitizeRoadmap(existing, user.dream, user.branch);
+            setRoadmap(clean);
+            const completed = await dbService.getCompletedStages(user.id);
+            setCompletedStages(completed);
+            setActiveStageIndex(Math.max(user.currentStageIndex, completed.length));
+            setLoading(false);
+            // Show a non-blocking offline toast
+            showToast('📡 Offline — showing your saved roadmap. Connect to update.');
+            return;
+          }
+          // No cache at all — must block with error
           setError("📡 No Internet Connection — Connect to the internet to generate your personalized roadmap.");
           setLoading(false);
           return null;
@@ -688,6 +742,7 @@ export default function RoadmapView({
         activeWs.close();
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.id, user.dream, user.branch, user.year, retryCount]);
   
   // Sequential completion logic is now handled manually to prevent auto-completion bugs from stale data.
@@ -875,6 +930,21 @@ export default function RoadmapView({
     <>
       {/* In-App Toast */}
       {toast && <ToastBanner message={toast} onClose={() => setToast(null)} />}
+
+      {/* Offline Banner — shows when offline but roadmap is loaded from cache */}
+      {isOffline && roadmap && (
+        <div
+          className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl mb-2 text-xs font-medium"
+          style={{
+            background: 'rgba(245,158,11,0.08)',
+            border: '1px solid rgba(245,158,11,0.25)',
+            color: '#fbbf24',
+          }}
+        >
+          <span className="text-base">📡</span>
+          <span>You’re offline — showing your saved roadmap. Connect to sync changes or pivot your career.</span>
+        </div>
+      )}
       {/* Career Pivot Modal - Rendered outside the fade-up div to prevent fixed positioning bugs */}
       {showPivotModal && (
         <div className="fixed inset-0 z-[200] flex items-start justify-center p-4 sm:p-6 bg-black/70 backdrop-blur-md overflow-y-auto" onClick={() => setShowPivotModal(false)}>
@@ -927,7 +997,13 @@ export default function RoadmapView({
             )}
           </div>
           <button
-            onClick={() => setShowPivotModal(true)}
+            onClick={() => {
+              if (!networkService.isOnline()) {
+                showToast('📡 Offline — connect to the internet to change your career path.');
+                return;
+              }
+              setShowPivotModal(true);
+            }}
             className="btn-primary text-xs px-4 py-2 shrink-0 flex items-center gap-2 rounded-xl mt-1"
             style={{ backgroundImage: 'linear-gradient(135deg, #7c3aed 0%, #9333ea 100%)', boxShadow: '0 4px 15px rgba(124,58,237,0.2)' }}
           >

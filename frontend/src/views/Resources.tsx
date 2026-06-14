@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   BookOpen, Youtube, Newspaper, FlaskConical, Search, RefreshCw,
   ExternalLink, Loader2, ChevronLeft, ChevronRight, AlertCircle,
-  X, Library, GraduationCap, Atom, Rss, Bookmark, Plus, ListVideo, FolderPlus, Check, Trash2, Volume2, Folder, FolderOpen
+  X, Library, GraduationCap, Atom, Rss, Bookmark, Plus, ListVideo, FolderPlus, Check, Trash2, Volume2, Folder, FolderOpen, WifiOff
 } from 'lucide-react';
 import { UserProfile, CareerRoadmap } from '../types';
 import {
@@ -12,6 +12,32 @@ import {
 import { dbService } from '../services/dbService';
 import { useNavigate } from 'react-router-dom';
 import { networkService } from '../services/networkService';
+
+// ─── Inline Toast Banner ───────────────────────────────────────────────────────────────────
+function ToastBanner({ message, onClose }: { message: string; onClose: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onClose, 3500);
+    return () => clearTimeout(t);
+  }, [onClose]);
+  return (
+    <div
+      className="fixed top-20 left-1/2 z-[9000] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl"
+      style={{
+        transform: 'translateX(-50%)',
+        background: 'linear-gradient(135deg, rgba(30,15,60,0.97), rgba(15,7,30,0.97))',
+        border: '1px solid rgba(245,158,11,0.45)',
+        boxShadow: '0 8px 40px rgba(245,158,11,0.15), 0 2px 8px rgba(0,0,0,0.5)',
+        maxWidth: '90vw',
+      }}
+    >
+      <WifiOff size={16} style={{ color: '#fbbf24', flexShrink: 0 }} />
+      <p className="text-sm font-medium" style={{ color: '#fde68a' }}>{message}</p>
+      <button onClick={onClose} className="ml-2 text-gold-500/50 hover:text-gold-300 transition-colors">
+        <X size={14} />
+      </button>
+    </div>
+  );
+}
 
 // ─── Glassmorphism card base style ─────────────────────────────────────────────
 const gc: React.CSSProperties = {
@@ -589,6 +615,10 @@ export default function Resources({ user }: { user: UserProfile }) {
   const [isOfflineAndNoCache, setIsOfflineAndNoCache] = useState(false);
   const navigate = useNavigate();
   const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null);
+  // Tracks whether we've done a full load in this session (persists across re-mounts via useRef)
+  const initializedRef = useRef(false);
+  const cachedDataRef = useRef<ResourceData | null>(null);
+  const cachedStageRef = useRef<number>(-1);
 
   useEffect(() => {
     setActivePlaylistId(null);
@@ -597,6 +627,19 @@ export default function Resources({ user }: { user: UserProfile }) {
   // Keep a stable ref to the latest user to avoid stale closures in callbacks
   const userRef = useRef(user);
   useEffect(() => { userRef.current = user; }, [user]);
+
+  // Track live network status reactively
+  const [isOffline, setIsOffline] = useState(!networkService.isOnline());
+  useEffect(() => {
+    const onOnline  = () => setIsOffline(false);
+    const onOffline = () => setIsOffline(true);
+    window.addEventListener('online',  onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online',  onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
 
   // Update Roadmap helper – stable via useCallback
   const updateRoadmap = useCallback(async (rm: CareerRoadmap) => {
@@ -610,6 +653,7 @@ export default function Resources({ user }: { user: UserProfile }) {
   const [searchMode, setSearchMode] = useState(false);
   const [searchResults, setSearchResults] = useState<ResourceData>({ books: [], videos: [], papers: [], news: [] });
   const searchRef = useRef<HTMLInputElement>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   // ── Helper: Extract clean, search-ready subjects from a stage ────────────────
   // Prefers stage.subjects (e.g. "Linear Algebra", "Calculus", "Python Programming")
@@ -630,9 +674,8 @@ export default function Resources({ user }: { user: UserProfile }) {
     return (stage?.concepts || []).filter((c: string) => c && c.trim().length > 0);
   };
 
-  // ── Fetch curriculum resources ───────────────────────────────────────────────
+  // ── Fetch curriculum resources — smart: shows cached data instantly, fetches only when needed ──
   const fetchCurriculum = useCallback(async () => {
-    setLoading(true);
     setLoadError(false);
     setIsOfflineAndNoCache(false);
     setSearchMode(false);
@@ -662,7 +705,6 @@ export default function Resources({ user }: { user: UserProfile }) {
       //   1. No cache exists
       //   2. The user has pivoted careers (dream mismatch)
       //   3. The user has moved to a new stage in the roadmap
-      //   4. The stage subjects changed (old cache built from stage title or wrong subjects)
       //
       // IMPORTANT: Use stage.subjects ("Linear Algebra", "Calculus", "Python") as the
       // primary source. Do NOT use stage.title ("Foundations of Math") or raw concepts
@@ -670,79 +712,84 @@ export default function Resources({ user }: { user: UserProfile }) {
       const stageSubjects: string[] = getStageSubjects(stage);
       const dreamMismatch = cached?.cachedForDream && cached.cachedForDream !== currentUser.dream;
       const stageMismatch = cached?.cachedForStage !== undefined && cached.cachedForStage !== stageIdx;
-      // Subjects mismatch: old cache built from stage title or different/no subjects
-      const cachedSubs: string[] = (cached as any)?.cachedSubjects || [];
-      // Use a set-based comparison so subject order doesn't falsely trigger a refetch
-      const subjectsMismatch = stageSubjects.length > 0 && (
-        cachedSubs.length === 0 ||
-        cachedSubs.length !== stageSubjects.length ||
-        stageSubjects.some(s => !cachedSubs.includes(s))
-      );
-      const loadCount = (rm as any)._loadMoreCount || 0;
-      const sparseCache = cached && loadCount === 0 && (
-        (!Array.isArray(cached.books) || cached.books.length === 0) &&
-        (!Array.isArray(cached.videos) || cached.videos.length === 0)
-      );
 
-      if (!cached || dreamMismatch || stageMismatch) {
-        const isOnline = networkService.isOnline();
-        if (isOnline) {
-          try {
-            // Pass '' as stageTopic so fetchDirectResources uses concepts/subjects only (not the generic stage title)
-            // stageSubjects contains either stage.concepts (preferred) or stage.subjects as fallback
-            const fetched = await fetchDirectResources(
-              currentUser.dream, '', stageSubjects, currentUser.year
-            );
-            // Sort resources so stage-subject matches appear first
-            const stageSubjectsLower = stageSubjects.map((s: string) => s.toLowerCase());
-            const scoreItem = (title: string) => {
-              const t = title.toLowerCase();
-              return stageSubjectsLower.some(s => t.includes(s)) ? 0 : 1;
-            };
-            cached = {
-              books:  (Array.isArray(fetched.books)  ? fetched.books  : []).filter((b: any) => b?.link?.startsWith('http')).sort((a: any, b: any) => scoreItem(a.title) - scoreItem(b.title)).slice(0, 10),
-              videos: (Array.isArray(fetched.videos) ? fetched.videos : []).filter((v: any) => v?.link?.startsWith('http')).sort((a: any, b: any) => scoreItem(a.title) - scoreItem(b.title)).slice(0, 10),
-              papers: (Array.isArray(fetched.papers) ? fetched.papers : []).filter((p: any) => p?.link?.startsWith('http')).sort((a: any, b: any) => scoreItem(a.title) - scoreItem(b.title)).slice(0, 10),
-              news:   (Array.isArray(fetched.news)   ? fetched.news   : []).filter((n: any) => n?.link?.startsWith('http')).slice(0, 10),
-              cachedForDream: currentUser.dream,
-              cachedForStage: stageIdx,
-              cachedSubjects: stageSubjects,
-            } as any;
-            rm = { ...rm, cachedResources: cached, _loadMoreCount: 0 };
-            await dbService.saveRoadmap(currentUser, rm);
-          } catch (fetchErr) {
-            console.warn('[Resources] Fetch direct failed online, trying cache fallback...', fetchErr);
-          }
+      // ── Fast path: valid cache exists — show instantly, no spinner ───────────
+      if (cached && !dreamMismatch && !stageMismatch && Array.isArray(cached.books) && cached.books.length > 0) {
+        setRoadmap({ ...rm });
+        setData(cached as ResourceData);
+        setDataReady(true);
+        setLoading(false);
+        setInitialized(true);
+        return;
+      }
+
+      // ── Slow path: need to fetch — show spinner now ──────────────────────────
+      setLoading(true);
+
+      const isOnline = networkService.isOnline();
+      if (isOnline) {
+        try {
+          // Pass '' as stageTopic so fetchDirectResources uses concepts/subjects only (not the generic stage title)
+          // stageSubjects contains either stage.concepts (preferred) or stage.subjects as fallback
+          const fetched = await fetchDirectResources(
+            currentUser.dream, '', stageSubjects, currentUser.year
+          );
+          // Sort resources so stage-subject matches appear first
+          const stageSubjectsLower = stageSubjects.map((s: string) => s.toLowerCase());
+          const scoreItem = (title: string) => {
+            const t = title.toLowerCase();
+            return stageSubjectsLower.some(s => t.includes(s)) ? 0 : 1;
+          };
+          cached = {
+            books:  (Array.isArray(fetched.books)  ? fetched.books  : []).filter((b: any) => b?.link?.startsWith('http')).sort((a: any, b: any) => scoreItem(a.title) - scoreItem(b.title)).slice(0, 10),
+            videos: (Array.isArray(fetched.videos) ? fetched.videos : []).filter((v: any) => v?.link?.startsWith('http')).sort((a: any, b: any) => scoreItem(a.title) - scoreItem(b.title)).slice(0, 10),
+            papers: (Array.isArray(fetched.papers) ? fetched.papers : []).filter((p: any) => p?.link?.startsWith('http')).sort((a: any, b: any) => scoreItem(a.title) - scoreItem(b.title)).slice(0, 10),
+            news:   (Array.isArray(fetched.news)   ? fetched.news   : []).filter((n: any) => n?.link?.startsWith('http')).slice(0, 10),
+            cachedForDream: currentUser.dream,
+            cachedForStage: stageIdx,
+            cachedSubjects: stageSubjects,
+          } as any;
+          rm = { ...rm, cachedResources: cached, _loadMoreCount: 0 };
+          await dbService.saveRoadmap(currentUser, rm);
+        } catch (fetchErr) {
+          console.warn('[Resources] Fetch direct failed online, trying cache fallback...', fetchErr);
         }
+      }
 
-        // If we failed to fetch or are offline, use placeholder fallbacks:
-        // NOTE: We use the local placeholder only as a LAST resort — not when cached data already exists
-        if (!cached || !cached.books || cached.books.length === 0) {
-          if (rm.cachedResources && rm.cachedResources.books && rm.cachedResources.books.length > 0) {
-            cached = rm.cachedResources;
+      // If we failed to fetch or are offline, use placeholder fallbacks:
+      // NOTE: We use the local placeholder only as a LAST resort — not when cached data already exists
+      if (!cached || !cached.books || cached.books.length === 0) {
+        if (rm.cachedResources && rm.cachedResources.books && rm.cachedResources.books.length > 0) {
+          cached = rm.cachedResources;
+        } else {
+          if (!networkService.isOnline()) {
+            // No cache at all and offline — only now show the blocking screen
+            setIsOfflineAndNoCache(true);
+            setLoading(false);
+            setInitialized(true);
+            setDataReady(true);
+            return;
           } else {
-            if (!networkService.isOnline()) {
-              setIsOfflineAndNoCache(true);
-              setLoading(false);
-              setInitialized(true);
-              setDataReady(true);
-              return;
-            } else {
-              // Use first subject as placeholder label; fall back to stage title
-              // Use the most specific subject name available (not a checklist item)
-              const placeholderLabel = stageSubjects.find(s => s.length < 30) || stageSubjects[0] || stage.title || 'Foundations';
-              cached = getLocalResourcesPlaceholder(currentUser.dream || 'Professional', placeholderLabel);
-              rm = { ...rm, cachedResources: cached };
-              await dbService.saveRoadmap(currentUser, rm);
-            }
+            // Use first subject as placeholder label; fall back to stage title
+            // Use the most specific subject name available (not a checklist item)
+            const placeholderLabel = stageSubjects.find(s => s.length < 30) || stageSubjects[0] || stage.title || 'Foundations';
+            cached = getLocalResourcesPlaceholder(currentUser.dream || 'Professional', placeholderLabel);
+            rm = { ...rm, cachedResources: cached };
+            await dbService.saveRoadmap(currentUser, rm);
           }
         }
       }
+
+
 
       setRoadmap({ ...rm });
       // Set data and mark as ready in a single batch — prevents partial render with empty data
       setData(cached as ResourceData);
       setDataReady(true);
+      // Store in session refs so navigating back doesn't trigger a full reload
+      cachedDataRef.current = cached as ResourceData;
+      cachedStageRef.current = stageIdx;
+      initializedRef.current = true;
     } catch (e) {
       console.error('fetchCurriculum error:', e);
       setLoadError(true);
@@ -764,6 +811,17 @@ export default function Resources({ user }: { user: UserProfile }) {
         console.warn('[Resources] Init timeout hit — showing UI with available data');
       }
     }, 15000);
+
+    // If already initialized in this session AND stage hasn't changed, skip the full reload
+    if (initializedRef.current && cachedDataRef.current && cachedStageRef.current === user.currentStageIndex) {
+      setData(cachedDataRef.current);
+      setLoading(false);
+      setDataReady(true);
+      setInitialized(true);
+      clearTimeout(timeout);
+      return () => { active = false; clearTimeout(timeout); };
+    }
+
     if (active) fetchCurriculum();
     return () => { active = false; clearTimeout(timeout); };
   }, [fetchCurriculum]);
@@ -771,6 +829,13 @@ export default function Resources({ user }: { user: UserProfile }) {
   // ── Load next batch — REPLACES current data with fresh resources ─────────────
   const loadNextBatch = useCallback(async () => {
     if (!roadmap || !Array.isArray(roadmap.stages) || roadmap.stages.length === 0) return;
+
+    // Block if offline — show toast and keep existing resources visible
+    if (!networkService.isOnline()) {
+      setToast('📡 You’re offline — connect to the internet to load new resources.');
+      return;
+    }
+
     setLoading(true);
     const currentUser = userRef.current;
 
@@ -829,6 +894,10 @@ export default function Resources({ user }: { user: UserProfile }) {
   const handleSearch = async () => {
     const q = searchQuery.trim();
     if (!q) { setSearchMode(false); return; }
+    if (!networkService.isOnline()) {
+      setToast('📡 You\'re offline — search requires an internet connection.');
+      return;
+    }
     setIsSearching(true);
     setSearchMode(true);
     try {
@@ -942,6 +1011,23 @@ export default function Resources({ user }: { user: UserProfile }) {
 
   return (
     <div className="space-y-6 fade-up">
+      {/* Toast notification */}
+      {toast && <ToastBanner message={toast} onClose={() => setToast(null)} />}
+
+      {/* Offline banner — only when offline but resources are showing */}
+      {isOffline && !isOfflineAndNoCache && (
+        <div
+          className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-medium"
+          style={{
+            background: 'rgba(245,158,11,0.08)',
+            border: '1px solid rgba(245,158,11,0.25)',
+            color: '#fbbf24',
+          }}
+        >
+          <WifiOff size={13} className="shrink-0" />
+          <span>You’re offline — showing your saved resources. Connect to load fresh content.</span>
+        </div>
+      )}
 
       {/* ── Header ── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
