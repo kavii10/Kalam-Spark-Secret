@@ -661,21 +661,31 @@ export default function RoadmapView({
         return;
       }
 
+      const cleanDream = (d: string) => d.toLowerCase().replace(/\s+/g, ' ').trim();
       const forceRefresh = localStorage.getItem("kalamspark_force_refresh") === "true";
       if (forceRefresh) {
         localStorage.removeItem("kalamspark_force_refresh");
         // Dream pivot — clear cache and regenerate
         setRoadmap(null);
         setCompletedStages([]);
-      } else if (cachedRoadmap && cachedRoadmap.dream?.toLowerCase().trim() === user.dream.toLowerCase().trim()) {
+      } else if (cachedRoadmap && cleanDream(cachedRoadmap.dream || '') === cleanDream(user.dream)) {
         // Already loaded in memory — just restore active index and bail out
         setActiveStageIndex(Math.max(user.currentStageIndex, (cachedCompletedStages ?? []).length));
         return;
       }
 
       try {
-        const existing = await dbService.getRoadmap(user.id);
-        const isDreamDifferent = existing && existing.dream && existing.dream.toLowerCase().trim() !== user.dream.toLowerCase().trim();
+        const existing = await dbService.getRoadmap(user.id, (remoteRoadmap) => {
+          console.log("[RoadmapView] Background roadmap update: remote won, updating UI state.");
+          const clean = { ...sanitizeRoadmap(remoteRoadmap, user.dream, user.branch), dream: user.dream };
+          setRoadmap(clean);
+          dbService.getCompletedStages(user.id).then(completed => {
+            setCompletedStages(completed);
+            setActiveStageIndex(Math.max(user.currentStageIndex, completed.length));
+          }).catch(() => {});
+        });
+
+        const isDreamDifferent = existing && existing.dream && cleanDream(existing.dream) !== cleanDream(user.dream);
         const shouldGenerate = forceRefresh || !existing || !existing.stages || existing.stages.length === 0 || existing.stages[0].id === 'fallback-stage-1' || isDreamDifferent;
 
         if (!shouldGenerate) {

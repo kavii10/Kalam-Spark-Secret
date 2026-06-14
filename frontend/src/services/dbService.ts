@@ -197,18 +197,76 @@ export const dbService = {
     // 1. Write to IndexedDB with dirty flag
     await localDB.put('roadmaps', payload, true);
 
-    // 2. Update emergency snapshot
+    // 2. Write to fast localStorage cache
+    try {
+      localStorage.setItem(`kalamspark_roadmap_cache_${user.id}`, JSON.stringify(payload));
+    } catch (e) {
+      console.warn('[dbService] failed to save roadmap to localStorage:', e);
+    }
+
+    // 3. Update emergency snapshot
     localDB.writeEmergencySnapshot(user.id).catch(() => {});
 
-    // 3. Sync to Supabase in background
+    // 4. Sync to Supabase in background
     await syncToSupabase('save_roadmap', payload);
   },
 
-  async getRoadmap(userId: string): Promise<any | null> {
-    // 1. Get the local version from IndexedDB
-    const local = await localDB.get<any>('roadmaps', userId);
+  async getRoadmap(userId: string, onBackgroundSync?: (remoteData: any) => void): Promise<any | null> {
+    // 1. Try localStorage first (fastest)
+    let localPayload: any = null;
+    try {
+      const cached = localStorage.getItem(`kalamspark_roadmap_cache_${userId}`);
+      if (cached) {
+        localPayload = JSON.parse(cached);
+      }
+    } catch (e) {}
 
-    // 2. If online, try to fetch the latest version from Supabase
+    // 2. Try IndexedDB
+    if (!localPayload) {
+      localPayload = await localDB.get<any>('roadmaps', userId);
+      if (localPayload) {
+        try {
+          localStorage.setItem(`kalamspark_roadmap_cache_${userId}`, JSON.stringify(localPayload));
+        } catch (e) {}
+      }
+    }
+
+    // If local version exists, return it immediately, and check Supabase in background
+    if (localPayload?.roadmap_data) {
+      if (networkService.isOnline()) {
+        (async () => {
+          try {
+            const { data: remoteData, error } = await supabase
+              .from(TABLES.ROADMAPS)
+              .select('roadmap_data, updated_at')
+              .eq('user_id', userId)
+              .maybeSingle();
+
+            if (!error && remoteData) {
+              const { remoteWon } = localDB.resolveConflict(localPayload, remoteData);
+              if (remoteWon) {
+                console.log('[dbService] Background roadmap sync: remote won, updating local cache.');
+                const payload = {
+                  user_id: userId,
+                  roadmap_data: remoteData.roadmap_data,
+                  updated_at: remoteData.updated_at || nowISO(),
+                };
+                await localDB.put('roadmaps', payload, false);
+                localStorage.setItem(`kalamspark_roadmap_cache_${userId}`, JSON.stringify(payload));
+                if (onBackgroundSync) {
+                  onBackgroundSync(remoteData.roadmap_data);
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('[dbService] Background roadmap check failed:', e);
+          }
+        })();
+      }
+      return localPayload.roadmap_data;
+    }
+
+    // 3. Fallback: If no local copy exists, fetch from Supabase (blocking)
     if (networkService.isOnline()) {
       try {
         const { data: remoteData, error } = await supabase
@@ -218,24 +276,23 @@ export const dbService = {
           .maybeSingle();
 
         if (!error && remoteData) {
-          // Resolve conflict
-          const { remoteWon } = localDB.resolveConflict(local, remoteData);
-          if (remoteWon || !local) {
-            await localDB.put('roadmaps', {
-              user_id: userId,
-              roadmap_data: remoteData.roadmap_data,
-              updated_at: remoteData.updated_at || nowISO(),
-            }, false); // dirty=false since it matches Supabase
-            return remoteData.roadmap_data;
-          }
+          const payload = {
+            user_id: userId,
+            roadmap_data: remoteData.roadmap_data,
+            updated_at: remoteData.updated_at || nowISO(),
+          };
+          await localDB.put('roadmaps', payload, false);
+          try {
+            localStorage.setItem(`kalamspark_roadmap_cache_${userId}`, JSON.stringify(payload));
+          } catch (e) {}
+          return remoteData.roadmap_data;
         }
       } catch (e) {
-        console.warn('[dbService] getRoadmap Supabase fetch failed, falling back to local cache:', e);
+        console.warn('[dbService] getRoadmap Supabase fetch failed:', e);
       }
     }
 
-    // 3. Fallback to local copy (or null if none exists)
-    return local?.roadmap_data || null;
+    return null;
   },
 
   // ── COMPLETED STAGES ─────────────────────────────────────────────────────────
@@ -492,6 +549,13 @@ export const dbService = {
       if (roadmapRes.status === 'fulfilled' && roadmapRes.value.data) {
         const rd = roadmapRes.value.data;
         await localDB.put('roadmaps', { user_id: userId, roadmap_data: rd.roadmap_data, updated_at: rd.updated_at || nowISO() }, false);
+        try {
+          localStorage.setItem(`kalamspark_roadmap_cache_${userId}`, JSON.stringify({
+            user_id: userId,
+            roadmap_data: rd.roadmap_data,
+            updated_at: rd.updated_at || nowISO(),
+          }));
+        } catch (e) {}
       }
 
       if (tasksRes.status === 'fulfilled' && tasksRes.value.data?.length) {
@@ -573,6 +637,15 @@ export const dbService = {
       'ks_emergency_snapshot',
     ];
     keysToRemove.forEach(k => localStorage.removeItem(k));
+
+    // Clear dynamic roadmap cache keys
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('kalamspark_roadmap_cache_')) {
+        localStorage.removeItem(key);
+      }
+    }
+
     sessionStorage.removeItem('kalamspark_radar');
     sessionStorage.removeItem('fs_import_url');
   },
