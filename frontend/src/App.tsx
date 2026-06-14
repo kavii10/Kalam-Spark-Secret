@@ -899,6 +899,8 @@ const AppContent = ({
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isOnline, setIsOnline] = useState(networkService.isOnline());
+  const [isInstallingPWA, setIsInstallingPWA] = useState(false);
+  const [pwaProgress, setPwaProgress] = useState(0);
 
   // Track offline sync queue size
   useEffect(() => {
@@ -1013,7 +1015,30 @@ const AppContent = ({
     };
   }, []);
 
+  const startPwaDownloadSimulation = () => {
+    setIsInstallingPWA(true);
+    setPwaProgress(0);
+    const interval = setInterval(() => {
+      setPwaProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setTimeout(() => {
+            setIsInstallingPWA(false);
+            alert("🎉 Kalam Spark has been installed successfully!");
+          }, 600);
+          return 100;
+        }
+        return prev + Math.floor(Math.random() * 12) + 6;
+      });
+    }, 200);
+  };
+
   const handleInstallClick = async () => {
+    if (isIOS) {
+      alert("📱 How to Install on iOS:\n\n1. Tap the Share button (⎙) in Safari.\n2. Scroll down and select 'Add to Home Screen'.\n3. Tap 'Add' in the top-right corner to install.");
+      return;
+    }
+
     if (installPrompt) {
       // Android Chrome — show native install dialog
       installPrompt.prompt();
@@ -1021,10 +1046,13 @@ const AppContent = ({
       if (outcome === 'accepted') {
         setShowInstallBanner(false);
         setIsInstalled(true);
+        startPwaDownloadSimulation();
       }
       setInstallPrompt(null);
+    } else {
+      // Fallback instructions if prompt is null
+      alert("📥 How to Install:\n\n1. Tap your browser's menu button (three dots ⋮ at the top right).\n2. Select 'Install App' or 'Add to Home screen'.\n\nIf you don't see this option, the app might already be installed!");
     }
-    // iOS — banner already shows instructions, nothing else to do
   };
 
   useEffect(() => {
@@ -1112,6 +1140,31 @@ const AppContent = ({
     <div className="flex h-screen w-screen overflow-hidden text-gold-100/90 select-none">
       {/* Global Reward Shower */}
       <RewardShower />
+
+      {/* PWA Installation Progress Overlay */}
+      {isInstallingPWA && (
+        <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black/80 backdrop-blur-md">
+          <div className="w-[320px] p-6 rounded-2xl glass-card flex flex-col items-center gap-5 text-center border border-gold-500/25">
+            <div className="w-16 h-16 rounded-2xl bg-orange-500/10 border border-orange-500/30 flex items-center justify-center animate-bounce">
+              <Smartphone size={32} className="text-orange-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold heading-gold font-cinzel">Installing Kalam Spark</h3>
+              <p className="text-xs text-gold-500/60 mt-1">Downloading offline assets and configurations...</p>
+            </div>
+            
+            {/* Progress Bar */}
+            <div className="w-full bg-black/40 h-3 rounded-full overflow-hidden border border-gold-500/10 relative">
+              <div 
+                className="h-full bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-300 transition-all duration-200"
+                style={{ width: `${Math.min(pwaProgress, 100)}%` }}
+              />
+            </div>
+            
+            <span className="text-sm font-semibold text-gold-300">{Math.min(pwaProgress, 100)}% Complete</span>
+          </div>
+        </div>
+      )}
 
       {/* Sidebar overlay */}
       {isSidebarOpen && (

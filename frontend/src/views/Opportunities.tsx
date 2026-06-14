@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { UserProfile } from "../types";
 import { 
   Search, MapPin, Briefcase, ExternalLink, Zap, Star, ShieldCheck, 
@@ -37,14 +37,14 @@ interface Hackathon {
 }
 
 const COUNTRIES = [
-  { code: "in", name: "India", flag: "≡ƒç«≡ƒç│" },
-  { code: "us", name: "United States", flag: "≡ƒç║≡ƒç╕" },
-  { code: "gb", name: "United Kingdom", flag: "≡ƒç¼≡ƒçº" },
-  { code: "ca", name: "Canada", flag: "≡ƒç¿≡ƒçª" },
-  { code: "au", name: "Australia", flag: "≡ƒçª≡ƒç║" },
-  { code: "de", name: "Germany", flag: "≡ƒç⌐≡ƒç¬" },
-  { code: "fr", name: "France", flag: "≡ƒç½≡ƒç╖" },
-  { code: "za", name: "South Africa", flag: "≡ƒç┐≡ƒçª" }
+  { code: "in", name: "India", flag: "🇮🇳" },
+  { code: "us", name: "United States", flag: "🇺🇸" },
+  { code: "gb", name: "United Kingdom", flag: "🇬🇧" },
+  { code: "ca", name: "Canada", flag: "🇨🇦" },
+  { code: "au", name: "Australia", flag: "🇦🇺" },
+  { code: "de", name: "Germany", flag: "🇩🇪" },
+  { code: "fr", name: "France", flag: "🇫🇷" },
+  { code: "za", name: "South Africa", flag: "🇿🇦" }
 ];
 
 const fetchWithProxy = async (url: string): Promise<string> => {
