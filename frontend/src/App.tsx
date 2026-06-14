@@ -1074,6 +1074,7 @@ const AppContent = ({
           onComplete={async (profile) => {
             const avatar = `https://api.dicebear.com/7.x/shapes/svg?seed=${encodeURIComponent(profile.name || 'user')}`;
             const updated = { ...user, ...profile, avatar, onboardingComplete: true, currentStageIndex: 0 };
+            localStorage.setItem("kalamspark_force_refresh", "true");
             navigate("/roadmap");
             setUser(updated);
             try {

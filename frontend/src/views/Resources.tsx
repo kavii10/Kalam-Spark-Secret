@@ -684,7 +684,7 @@ export default function Resources({ user }: { user: UserProfile }) {
         (!Array.isArray(cached.videos) || cached.videos.length === 0)
       );
 
-      if (!cached || dreamMismatch || stageMismatch || sparseCache || subjectsMismatch) {
+      if (!cached || dreamMismatch || stageMismatch) {
         const isOnline = networkService.isOnline();
         if (isOnline) {
           try {

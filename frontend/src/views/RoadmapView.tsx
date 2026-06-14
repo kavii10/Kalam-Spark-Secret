@@ -630,8 +630,10 @@ export default function RoadmapView({
           localStorage.removeItem("kalamspark_force_refresh");
         }
         const existing = await dbService.getRoadmap(user.id);
-        
-        if (!forceRefresh && existing && existing.stages && existing.stages.length > 0 && existing.stages[0].id !== 'fallback-stage-1' && existing.dream?.toLowerCase() === user.dream.trim().toLowerCase()) {
+        const isDreamDifferent = existing && existing.dream && existing.dream.toLowerCase().trim() !== user.dream.toLowerCase().trim();
+        const shouldGenerate = forceRefresh || !existing || !existing.stages || existing.stages.length === 0 || existing.stages[0].id === 'fallback-stage-1' || isDreamDifferent;
+
+        if (!shouldGenerate) {
           const clean = sanitizeRoadmap(existing, user.dream, user.branch);
           setRoadmap(clean);
           await dbService.saveRoadmap(user, clean);
