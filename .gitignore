@@ -38,3 +38,7 @@ backend/chroma_db/
 backend/roadmap_cache/
 backend/filespeaker_uploads/
 backend/filespeaker_audio/
+
+# ── APK builds
+*.apk
+frontend/public/kalam-spark.apk

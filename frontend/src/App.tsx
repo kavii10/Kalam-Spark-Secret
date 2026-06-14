@@ -975,6 +975,7 @@ const AppContent = ({
   const [showInstallBanner, setShowInstallBanner] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
+  const [showInstallOptionModal, setShowInstallOptionModal] = useState(false);
 
 
   useEffect(() => {
@@ -1019,7 +1020,8 @@ const AppContent = ({
     setIsInstallingPWA(true);
     setPwaProgress(0);
     try {
-      const response = await fetch('/kalam-spark.apk');
+      const apkUrl = import.meta.env.VITE_APK_DOWNLOAD_URL || '/kalam-spark.apk';
+      const response = await fetch(apkUrl);
       if (!response.ok) {
         throw new Error(`Failed to fetch APK: HTTP status ${response.status}`);
       }
@@ -1100,44 +1102,46 @@ const AppContent = ({
   };
 
   const handleInstallClick = async () => {
-    const isAndroid = /android/i.test(navigator.userAgent);
-    const isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(navigator.userAgent);
-
     if (isIOS) {
       alert("📱 How to Install on iOS:\n\n1. Tap the Share button (⎙) in Safari.\n2. Scroll down and select 'Add to Home Screen'.\n3. Tap 'Add' in the top-right corner to install.");
       return;
     }
+    setShowInstallOptionModal(true);
+  };
 
-    if (isAndroid || isMobile) {
-      await downloadApkWithProgress();
-    } else {
-      if (installPrompt) {
-        installPrompt.prompt();
-        const { outcome } = await installPrompt.userChoice;
-        if (outcome === 'accepted') {
-          setShowInstallBanner(false);
-          setIsInstalled(true);
-          setIsInstallingPWA(true);
-          setPwaProgress(0);
-          const interval = setInterval(() => {
-            setPwaProgress(prev => {
-              if (prev >= 100) {
-                clearInterval(interval);
-                setTimeout(() => {
-                  setIsInstallingPWA(false);
-                  alert("🎉 Kalam Spark has been installed successfully!");
-                }, 600);
-                return 100;
-              }
-              return prev + Math.floor(Math.random() * 12) + 6;
-            });
-          }, 200);
-        }
-        setInstallPrompt(null);
-      } else {
-        await downloadApkWithProgress();
+  const handleInstallPWA = async () => {
+    setShowInstallOptionModal(false);
+    if (installPrompt) {
+      installPrompt.prompt();
+      const { outcome } = await installPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setShowInstallBanner(false);
+        setIsInstalled(true);
+        setIsInstallingPWA(true);
+        setPwaProgress(0);
+        const interval = setInterval(() => {
+          setPwaProgress(prev => {
+            if (prev >= 100) {
+              clearInterval(interval);
+              setTimeout(() => {
+                setIsInstallingPWA(false);
+                alert("🎉 Kalam Spark has been added to home screen successfully!");
+              }, 600);
+              return 100;
+            }
+            return prev + Math.floor(Math.random() * 12) + 6;
+          });
+        }, 200);
       }
+      setInstallPrompt(null);
+    } else {
+      alert("📥 How to Add to Home Screen:\n\n1. Tap your browser's menu button (three dots ⋮ at the top right).\n2. Select 'Add to Home screen' or 'Install App'.\n\nIf you don't see this option, the app might already be installed!");
     }
+  };
+
+  const handleDownloadAPK = async () => {
+    setShowInstallOptionModal(false);
+    await downloadApkWithProgress();
   };
 
   useEffect(() => {
@@ -1247,6 +1251,66 @@ const AppContent = ({
             </div>
             
             <span className="text-sm font-semibold text-gold-300">{Math.min(pwaProgress, 100)}% Complete</span>
+          </div>
+        </div>
+      )}
+
+      {/* Install Options Modal */}
+      {showInstallOptionModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4" onClick={() => setShowInstallOptionModal(false)}>
+          <div className="w-full max-w-md p-6 rounded-2xl glass-card border border-gold-500/25 flex flex-col gap-6 text-left relative" onClick={(e) => e.stopPropagation()} style={{ background: "rgba(6,3,18,0.95)" }}>
+            <button onClick={() => setShowInstallOptionModal(false)} className="absolute top-4 right-4 text-gold-500/40 hover:text-gold-300 transition-colors">
+              <X size={20} />
+            </button>
+            
+            <div>
+              <h3 className="text-xl font-bold heading-gold font-cinzel">Install Kalam Spark</h3>
+              <p className="text-xs text-gold-500/60 mt-1">Select your preferred way to run Kalam Spark on your device.</p>
+            </div>
+            
+            <div className="flex flex-col gap-4">
+              {/* Option 1: PWA */}
+              <div 
+                className="flex items-start gap-4 p-4 rounded-xl cursor-pointer hover:bg-white/5 border border-gold-500/10 hover:border-gold-500/30 transition-all group active:scale-[0.98]"
+                onClick={handleInstallPWA}
+              >
+                <div className="w-10 h-10 rounded-xl bg-violet-600/10 border border-violet-500/30 flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-violet-600/20">
+                  <Smartphone size={20} className="text-violet-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-sm font-bold text-gold-200 group-hover:text-gold-100 flex items-center gap-1.5">
+                    Add to Home Screen (PWA)
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">Instant</span>
+                  </h4>
+                  <p className="text-[11px] text-gold-500/60 mt-1 leading-relaxed">
+                    Adds an icon directly to your phone's home screen. Runs the fast web version of the app. (Note: cannot load local offline AI models due to browser safety limits).
+                  </p>
+                </div>
+              </div>
+
+              {/* Option 2: APK */}
+              <div 
+                className="flex items-start gap-4 p-4 rounded-xl cursor-pointer hover:bg-white/5 border border-gold-500/10 hover:border-gold-500/30 transition-all group active:scale-[0.98]"
+                onClick={handleDownloadAPK}
+              >
+                <div className="w-10 h-10 rounded-xl bg-orange-600/10 border border-orange-500/30 flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-orange-600/20">
+                  <Download size={20} className="text-orange-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-sm font-bold text-gold-200 group-hover:text-gold-100 flex items-center gap-1.5">
+                    Download Android App (.apk)
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/25">Offline AI</span>
+                  </h4>
+                  <p className="text-[11px] text-gold-500/60 mt-1 leading-relaxed">
+                    Downloads the native Android App binary with progress tracking. Open the downloaded file to install. **Required to load local AI models (.gguf) and run fully offline**.
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="text-[10px] text-gold-500/40 text-center mt-2 border-t border-gold-500/10 pt-3">
+              💡 Tip: The mobile app works exactly like the website but allows running heavy AI models offline using your phone's processor.
+            </div>
           </div>
         </div>
       )}
