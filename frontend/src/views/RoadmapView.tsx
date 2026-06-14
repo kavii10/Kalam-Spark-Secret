@@ -629,6 +629,7 @@ export default function RoadmapView({
   const isLight = user.settings?.theme === 'light';
 
   useEffect(() => {
+    let active = true;
     const init = async () => {
       if (!user.id || !user.dream) {
         return;
@@ -644,18 +645,22 @@ export default function RoadmapView({
         const isDreamMatch = !cachedDreamClean || cachedDreamClean === userDreamClean;
         
         if (isDreamMatch) {
-          setRoadmap(cachedRoadmap);
-          if (cachedCompletedStages) {
-            setCompletedStages(cachedCompletedStages);
-            setActiveStageIndex(Math.max(user.currentStageIndex, cachedCompletedStages.length));
+          if (active) {
+            setRoadmap(cachedRoadmap);
+            if (cachedCompletedStages) {
+              setCompletedStages(cachedCompletedStages);
+              setActiveStageIndex(Math.max(user.currentStageIndex, cachedCompletedStages.length));
+            }
+            setLoading(false);
           }
-          setLoading(false);
           return;
         }
       }
 
-      setLoading(true);
-      setError(null);
+      if (active) {
+        setLoading(true);
+        setError(null);
+      }
       try {
         if (forceRefresh) {
           localStorage.removeItem("kalamspark_force_refresh");
@@ -671,16 +676,19 @@ export default function RoadmapView({
           // If dream matches, or if offline (cannot regenerate, so must use existing), use the cache
           if (!forceRefresh && isDreamMatch || !networkService.isOnline()) {
             const clean = sanitizeRoadmap(existing, user.dream, user.branch);
-            setRoadmap(clean);
-            if (setCachedRoadmap) setCachedRoadmap(clean);
+            if (active) {
+              setRoadmap(clean);
+              if (setCachedRoadmap) setCachedRoadmap(clean);
+            }
 
             await dbService.saveRoadmap(user, clean);
             const completed = await dbService.getCompletedStages(user.id);
-            setCompletedStages(completed);
-            if (setCachedCompletedStages) setCachedCompletedStages(completed);
-
-            setActiveStageIndex(Math.max(user.currentStageIndex, completed.length));
-            setLoading(false);
+            if (active) {
+              setCompletedStages(completed);
+              if (setCachedCompletedStages) setCachedCompletedStages(completed);
+              setActiveStageIndex(Math.max(user.currentStageIndex, completed.length));
+              setLoading(false);
+            }
 
             if (!networkService.isOnline() && !isDreamMatch) {
               showToast("Showing cached roadmap from previous dream (offline).");
@@ -691,52 +699,63 @@ export default function RoadmapView({
 
         // Direct Client-Side Generation
         if (!networkService.isOnline()) {
-          setError("📡 No Internet Connection — Connect to the internet to generate your personalized roadmap.");
-          setLoading(false);
+          if (active) {
+            setError("📡 No Internet Connection — Connect to the internet to generate your personalized roadmap.");
+            setLoading(false);
+          }
           return null;
         }
 
-        setLoadingMsg('Generating roadmap on-device...');
-        setCompletedStages([]);
-        if (setCachedCompletedStages) setCachedCompletedStages([]);
-        setConceptProgress({});
+        if (active) {
+          setLoadingMsg('Generating roadmap on-device...');
+          setCompletedStages([]);
+          if (setCachedCompletedStages) setCachedCompletedStages([]);
+          setConceptProgress({});
+        }
         localStorage.removeItem('kalamspark_concept_progress');
         await dbService.clearCompletedStages(user.id);
 
         try {
-          const fallback = await generateRoadmapWithProgress(user, setLoadingMsg);
+          const fallback = await generateRoadmapWithProgress(user, (msg) => {
+            if (active) setLoadingMsg(msg);
+          });
           const clean = sanitizeRoadmap(fallback, user.dream, user.branch);
           if (existing) {
             clean.playlists = existing.playlists || [];
             clean.watchLater = existing.watchLater || [];
           }
-          setRoadmap(clean);
-          if (setCachedRoadmap) setCachedRoadmap(clean);
+          if (active) {
+            setRoadmap(clean);
+            if (setCachedRoadmap) setCachedRoadmap(clean);
+          }
 
           await dbService.saveRoadmap(user, clean);
-          setLoading(false);
+          if (active) {
+            setLoading(false);
+          }
         } catch (fallbackErr: any) {
-          setError("Error generating roadmap: " + (fallbackErr.message || 'Unexpected error.'));
-          setLoading(false);
+          if (active) {
+            setError("Error generating roadmap: " + (fallbackErr.message || 'Unexpected error.'));
+            setLoading(false);
+          }
         }
         return null;
       } catch (error: any) {
         console.error("Failed to sync roadmap", error);
-        setError(error.message || "An unexpected error occurred while loading your roadmap.");
-        setLoading(false);
+        if (active) {
+          setError(error.message || "An unexpected error occurred while loading your roadmap.");
+          setLoading(false);
+        }
         return null;
       }
     };
     
-    let activeWs: WebSocket | null = null;
-    init().then(ws => { if (ws) activeWs = ws; });
+    init();
     
     return () => {
-      if (activeWs && activeWs.readyState !== WebSocket.CLOSED) {
-        activeWs.close();
-      }
+      active = false;
     };
-  }, [user.id, user.dream, user.branch, user.year, retryCount, cachedRoadmap, cachedCompletedStages]);
+  }, [user.id, user.dream, user.branch, user.year, retryCount]);
   
   // Sequential completion logic is now handled manually to prevent auto-completion bugs from stale data.
 
