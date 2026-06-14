@@ -656,6 +656,11 @@ export default function RoadmapView({
     const init = async () => {
       setError(null);
 
+      if (!user.id || !user.dream) {
+        console.log("[RoadmapView] User ID or dream is empty, waiting for initialization...", user);
+        return;
+      }
+
       const forceRefresh = localStorage.getItem("kalamspark_force_refresh") === "true";
       if (forceRefresh) {
         localStorage.removeItem("kalamspark_force_refresh");

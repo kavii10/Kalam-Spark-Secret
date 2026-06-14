@@ -205,55 +205,80 @@ export const dbService = {
   },
 
   async getRoadmap(userId: string): Promise<any | null> {
-    // 1. Try IndexedDB (with conflict resolution on fallback)
+    // 1. Get the local version from IndexedDB
     const local = await localDB.get<any>('roadmaps', userId);
-    if (local?.roadmap_data) return local.roadmap_data;
 
-    // 2. Fallback to Supabase
-    if (!networkService.isOnline()) return null;
-    try {
-      const { data, error } = await supabase.from(TABLES.ROADMAPS).select('roadmap_data, updated_at').eq('user_id', userId).single();
-      if (error || !data) return null;
+    // 2. If online, try to fetch the latest version from Supabase
+    if (networkService.isOnline()) {
+      try {
+        const { data: remoteData, error } = await supabase
+          .from(TABLES.ROADMAPS)
+          .select('roadmap_data, updated_at')
+          .eq('user_id', userId)
+          .maybeSingle();
 
-      // Conflict resolution: if we have a local version, compare timestamps
-      const { winner, remoteWon } = localDB.resolveConflict(local, data);
-      if (remoteWon || !local) {
-        await localDB.put('roadmaps', {
-          user_id: userId,
-          roadmap_data: data.roadmap_data,
-          updated_at: data.updated_at || nowISO(),
-        }, false); // dirty=false since it came from Supabase
+        if (!error && remoteData) {
+          // Resolve conflict
+          const { remoteWon } = localDB.resolveConflict(local, remoteData);
+          if (remoteWon || !local) {
+            await localDB.put('roadmaps', {
+              user_id: userId,
+              roadmap_data: remoteData.roadmap_data,
+              updated_at: remoteData.updated_at || nowISO(),
+            }, false); // dirty=false since it matches Supabase
+            return remoteData.roadmap_data;
+          }
+        }
+      } catch (e) {
+        console.warn('[dbService] getRoadmap Supabase fetch failed, falling back to local cache:', e);
       }
-      return data.roadmap_data;
-    } catch (e) {
-      return null;
     }
+
+    // 3. Fallback to local copy (or null if none exists)
+    return local?.roadmap_data || null;
   },
 
   // ── COMPLETED STAGES ─────────────────────────────────────────────────────────
 
   async getCompletedStages(userId: string): Promise<string[]> {
-    // 1. Try IndexedDB
+    // 1. Get the local completed stages
     const local = await localDB.getAll<any>('completed_stages', 'user_id', userId);
-    if (local.length > 0) return local.map((s: any) => s.stage_id);
 
-    // 2. Fallback to Supabase
-    if (!networkService.isOnline()) return [];
-    try {
-      const { data, error } = await supabase.from(TABLES.PROGRESS).select('stage_id, completed_at').eq('user_id', userId);
-      if (error || !data) return [];
-      const records = data.map((item: any) => ({
-        key: `${userId}__${item.stage_id}`,
-        user_id: userId,
-        stage_id: item.stage_id,
-        completed_at: item.completed_at || nowISO(),
-        updatedAt: item.completed_at || nowISO(),
-      }));
-      await localDB.putMany('completed_stages', records, false);
-      return data.map((item: any) => item.stage_id);
-    } catch (e) {
-      return [];
+    // 2. If online, sync completed stages from Supabase
+    if (networkService.isOnline()) {
+      try {
+        const { data: remoteData, error } = await supabase
+          .from(TABLES.PROGRESS)
+          .select('stage_id, completed_at')
+          .eq('user_id', userId);
+
+        if (!error && remoteData) {
+          const remoteStageIds = remoteData.map((item: any) => item.stage_id);
+          const localStageIds = local.map((s: any) => s.stage_id);
+
+          const setsEqual = remoteStageIds.length === localStageIds.length &&
+            remoteStageIds.every((id: string) => localStageIds.includes(id));
+
+          if (!setsEqual || local.length === 0) {
+            // Re-sync local IndexedDB
+            await localDB.deleteByIndex('completed_stages', 'user_id', userId);
+            const records = remoteData.map((item: any) => ({
+              key: `${userId}__${item.stage_id}`,
+              user_id: userId,
+              stage_id: item.stage_id,
+              completed_at: item.completed_at || nowISO(),
+              updatedAt: item.completed_at || nowISO(),
+            }));
+            await localDB.putMany('completed_stages', records, false);
+            return remoteStageIds;
+          }
+        }
+      } catch (e) {
+        console.warn('[dbService] getCompletedStages Supabase sync failed, falling back to local cache:', e);
+      }
     }
+
+    return local.map((s: any) => s.stage_id);
   },
 
   async saveCompletedStage(userId: string, stageId: string): Promise<void> {
