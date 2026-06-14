@@ -883,11 +883,16 @@ const SidebarItem = ({
 /* ── Main App Content ── */
 const AppContent = ({
   user, setUser, setShowSplash, setSessionLoading,
+  cachedRoadmap, setCachedRoadmap, cachedCompletedStages, setCachedCompletedStages,
 }: {
   user: UserProfile;
   setUser: React.Dispatch<React.SetStateAction<UserProfile>>;
   setShowSplash: React.Dispatch<React.SetStateAction<boolean>>;
   setSessionLoading: React.Dispatch<React.SetStateAction<boolean>>;
+  cachedRoadmap: CareerRoadmap | null;
+  setCachedRoadmap: React.Dispatch<React.SetStateAction<CareerRoadmap | null>>;
+  cachedCompletedStages: string[];
+  setCachedCompletedStages: React.Dispatch<React.SetStateAction<string[]>>;
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -2269,7 +2274,16 @@ export default function App() {
       {/* Inject light theme globally so splash + login pages are also styled */}
       {user.settings?.theme === 'light' && <style>{LIGHT_THEME_CSS}</style>}
       <Router>
-        <AppContent user={user} setUser={setUser} setShowSplash={setShowSplash} setSessionLoading={setSessionLoading} />
+        <AppContent
+          user={user}
+          setUser={setUser}
+          setShowSplash={setShowSplash}
+          setSessionLoading={setSessionLoading}
+          cachedRoadmap={cachedRoadmap}
+          setCachedRoadmap={setCachedRoadmap}
+          cachedCompletedStages={cachedCompletedStages}
+          setCachedCompletedStages={setCachedCompletedStages}
+        />
       </Router>
     </>
   );
