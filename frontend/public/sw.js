@@ -1,11 +1,11 @@
-﻿// ── Kalam Spark Service Worker ──────────────────────────────────────────────
+// ── Kalam Spark Service Worker ──────────────────────────────────────────────
 // Strategy:
 //   • Cache-First  → static assets (JS, CSS, fonts, images, icons)
 //   • Network-First → API calls (Supabase, Gemini, external)
 //   • Offline fallback → serve cached index.html for navigation requests
 // ────────────────────────────────────────────────────────────────────────────
 
-const CACHE_NAME = 'kalam-spark-v1';
+const CACHE_NAME = 'kalam-spark-v2';
 const OFFLINE_URL = '/';
 
 // Assets to pre-cache on install (app shell)
@@ -47,8 +47,9 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Skip non-GET and cross-origin API requests (Supabase, Gemini, etc.)
+  // Skip non-GET, cross-origin API requests, and APK downloads
   if (request.method !== 'GET') return;
+  if (url.pathname.endsWith('.apk')) return;
   if (
     url.hostname.includes('supabase.co') ||
     url.hostname.includes('googleapis.com') ||
