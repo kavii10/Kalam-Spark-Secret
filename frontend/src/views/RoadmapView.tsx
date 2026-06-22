@@ -608,6 +608,19 @@ export default function RoadmapView({
   const [retryCount, setRetryCount] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
   const showToast = (msg: string) => setToast(msg);
+  const [isOnline, setIsOnline] = useState(networkService.isOnline());
+
+  useEffect(() => {
+    const handleStatusChange = () => {
+      setIsOnline(networkService.isOnline());
+    };
+    window.addEventListener('online', handleStatusChange);
+    window.addEventListener('offline', handleStatusChange);
+    return () => {
+      window.removeEventListener('online', handleStatusChange);
+      window.removeEventListener('offline', handleStatusChange);
+    };
+  }, []);
   const [conceptProgress, setConceptProgress] = useState<Record<string, string[]>>(() => {
     const saved = localStorage.getItem('kalamspark_concept_progress');
     return saved ? JSON.parse(saved) : {};
@@ -1008,6 +1021,17 @@ export default function RoadmapView({
       )}
 
       <div className="space-y-7 fade-up">
+        {!isOnline && (
+          <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-3.5 flex items-start gap-3 text-orange-400">
+            <AlertTriangle className="shrink-0 mt-0.5" size={16} />
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider">Offline Mode</h4>
+              <p className="text-xs opacity-80 mt-0.5">
+                You are currently offline. Showing the cached version of your roadmap. Connect to the internet to pivot careers or generate a new roadmap.
+              </p>
+            </div>
+          </div>
+        )}
         {/* Stage Detail Panel */}
         {selectedStage && (
           <StageDetailPanel 

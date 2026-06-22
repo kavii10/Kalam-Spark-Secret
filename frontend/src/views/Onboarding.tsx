@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Rocket, GraduationCap, Briefcase, User,
   ArrowRight, ArrowLeft, Lightbulb, Loader2, CheckCircle2, RefreshCw,
-  Zap, Target, BookOpen, Sparkles, ChevronDown, Check
+  Zap, Target, BookOpen, Sparkles, ChevronDown, Check, AlertCircle
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import DreamDiscovery from './DreamDiscovery';
@@ -209,6 +209,7 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
   const [cameFromDiscovery, setCameFromDiscovery] = useState(false);
   const [dreamSummary, setDreamSummary] = useState<any>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: '',
     educationLevel: '' as 'school' | 'college' | 'graduate' | 'self-learner' | '',
@@ -267,24 +268,16 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
 
   const goToSummaryStep = async (newDream?: string, newBranch?: string, newYear?: string) => {
     setSummaryLoading(true);
+    setSummaryError(null);
+    setDreamSummary(null);
     setStep(4);
     try {
       const d = newDream || form.dream;
       const description = await fetchDetailedCareerDescription(d);
       setDreamSummary(description);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to fetch career description:', e);
-      setDreamSummary({
-        career: newDream || form.dream,
-        overview: `A ${newDream || form.dream} is a skilled professional who drives innovation and solves real-world problems.`,
-        roles: ["Design and build solutions", "Collaborate with teams", "Improve processes", "Solve problems"],
-        required_skills: ["Domain knowledge", "Technical skills", "Communication", "Problem-solving"],
-        market_outlook: "Growing opportunities in the field.",
-        salary_range: "₹6,00,000 - ₹25,00,000+",
-        growth: "Progress to senior roles and leadership positions.",
-        tips: "Build expertise, network, and stay updated with industry trends.",
-        is_curated: false
-      });
+      setSummaryError(e?.message || 'No internet connection. Career details cannot be loaded offline.');
     } finally {
       setSummaryLoading(false);
     }
@@ -421,7 +414,7 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
       if (!!targetYearError) return true;
     }
     if (step === 3 && !form.dream.trim()) return true;
-    if (step === 4 && summaryLoading) return true;
+    if (step === 4 && (summaryLoading || summaryError || !dreamSummary)) return true;
     return false;
   };
 
@@ -1025,6 +1018,18 @@ export default function Onboarding({ onComplete, isLight = false }: OnboardingPr
                     <div className="flex items-center gap-3 py-6 justify-center">
                       <Loader2 size={18} className="animate-spin text-purple-400" />
                       <p className="text-xs text-gold-400/40">AI is analysing this career for you...</p>
+                    </div>
+                  ) : summaryError ? (
+                    <div className="border rounded-2xl p-5 text-center space-y-3 bg-red-500/5 border-red-500/20 text-red-400">
+                      <AlertCircle size={24} className="mx-auto text-red-400" />
+                      <h4 className="font-bold text-xs">Analysis Failed</h4>
+                      <p className="text-xs max-w-xs mx-auto leading-relaxed">{summaryError}</p>
+                      <button 
+                        onClick={() => goToSummaryStep()} 
+                        className="btn-primary px-4 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 mx-auto"
+                      >
+                        <RefreshCw size={12} /> Retry
+                      </button>
                     </div>
                   ) : dreamSummary ? (
                     <div className="space-y-4">

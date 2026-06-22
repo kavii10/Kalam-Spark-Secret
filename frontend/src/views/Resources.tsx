@@ -587,6 +587,7 @@ export default function Resources({ user }: { user: UserProfile }) {
   const [data, setData] = useState<ResourceData>({ books: [], videos: [], papers: [], news: [] });
   const isLight = user.settings?.theme === 'light';
   const [isOfflineAndNoCache, setIsOfflineAndNoCache] = useState(false);
+  const [showOfflineBanner, setShowOfflineBanner] = useState(false);
   const navigate = useNavigate();
   const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null);
 
@@ -640,6 +641,7 @@ export default function Resources({ user }: { user: UserProfile }) {
     setLoading(true);
     setLoadError(false);
     setIsOfflineAndNoCache(false);
+    setShowOfflineBanner(false);
     setSearchMode(false);
     setSearchQuery('');
 
@@ -657,6 +659,24 @@ export default function Resources({ user }: { user: UserProfile }) {
       const stageIdx = Math.min(currentUser.currentStageIndex, rm.stages.length - 1);
       const stage = rm.stages[stageIdx];
       if (!stage) { setLoading(false); setInitialized(true); setDataReady(true); return; }
+
+      // Offline detection logic
+      if (!networkService.isOnline()) {
+        if (rm.cachedResources && rm.cachedResources.books && rm.cachedResources.books.length > 0) {
+          setData(rm.cachedResources as ResourceData);
+          setShowOfflineBanner(true);
+          setDataReady(true);
+          setLoading(false);
+          setInitialized(true);
+          return;
+        } else {
+          setIsOfflineAndNoCache(true);
+          setLoading(false);
+          setInitialized(true);
+          setDataReady(true);
+          return;
+        }
+      }
 
       let cached = rm.cachedResources;
 
@@ -774,6 +794,10 @@ export default function Resources({ user }: { user: UserProfile }) {
   // ── Load next batch — REPLACES current data with fresh resources ─────────────
   const loadNextBatch = useCallback(async () => {
     if (!roadmap || !Array.isArray(roadmap.stages) || roadmap.stages.length === 0) return;
+    if (!networkService.isOnline()) {
+      alert("You are offline. Connect to the internet to load more resources.");
+      return;
+    }
     setLoading(true);
     const currentUser = userRef.current;
 
@@ -832,6 +856,10 @@ export default function Resources({ user }: { user: UserProfile }) {
   const handleSearch = async () => {
     const q = searchQuery.trim();
     if (!q) { setSearchMode(false); return; }
+    if (!networkService.isOnline()) {
+      alert("You are offline. Connect to the internet to search resources.");
+      return;
+    }
     setIsSearching(true);
     setSearchMode(true);
     try {
@@ -945,6 +973,17 @@ export default function Resources({ user }: { user: UserProfile }) {
 
   return (
     <div className="space-y-6 fade-up">
+      {showOfflineBanner && (
+        <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-3.5 flex items-start gap-3 text-orange-400">
+          <AlertCircle className="shrink-0 mt-0.5" size={16} />
+          <div>
+            <h4 className="text-xs font-bold uppercase tracking-wider">Offline Mode</h4>
+            <p className="text-xs opacity-80 mt-0.5">
+              You are currently offline. Displaying cached resources for your current stage. Connect to the internet to load fresh materials or search.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── Header ── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

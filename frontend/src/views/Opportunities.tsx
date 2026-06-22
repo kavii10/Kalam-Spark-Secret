@@ -316,7 +316,14 @@ export default function Opportunities({ user }: Props) {
   const [location, setLocation] = useState<string>("India");
   const [country, setCountry] = useState<string>("in");
   const [limit, setLimit] = useState<number>(5);
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobs, setJobs] = useState<Job[]>(() => {
+    try {
+      const cached = localStorage.getItem('kalam_spark_cached_jobs');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   const [jobsLoading, setJobsLoading] = useState<boolean>(false);
   const [jobsError, setJobsError] = useState<string | null>(null);
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
@@ -329,7 +336,14 @@ export default function Opportunities({ user }: Props) {
   const [roadmap, setRoadmap] = useState<any>(null);
 
   // Hackathon State
-  const [hackathons, setHackathons] = useState<Hackathon[]>([]);
+  const [hackathons, setHackathons] = useState<Hackathon[]>(() => {
+    try {
+      const cached = localStorage.getItem('kalam_spark_cached_hackathons');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   const [hackathonsLoading, setHackathonsLoading] = useState<boolean>(false);
   const [hackathonsError, setHackathonsError] = useState<string | null>(null);
   const [hackathonKeyword, setHackathonKeyword] = useState<string>("");
@@ -383,6 +397,11 @@ export default function Opportunities({ user }: Props) {
   }, [activeTab]);
 
   const handleFetchJobs = async () => {
+    if (!networkService.isOnline()) {
+      setJobsError("You are offline. Showing previously loaded jobs. Connect to the internet to get fresh jobs.");
+      setJobsLoading(false);
+      return;
+    }
     setJobsLoading(true);
     setJobsError(null);
     try {
@@ -495,6 +514,7 @@ export default function Opportunities({ user }: Props) {
       filteredJobs.sort((a, b) => (b.matchPercentage || 0) - (a.matchPercentage || 0));
       
       setJobs(filteredJobs);
+      localStorage.setItem('kalam_spark_cached_jobs', JSON.stringify(filteredJobs));
     } catch (err: any) {
       console.error("handleFetchJobs error:", err);
       setJobsError(err.message || "Failed to fetch jobs directly.");
@@ -504,6 +524,11 @@ export default function Opportunities({ user }: Props) {
   };
 
   const handleFetchHackathons = async () => {
+    if (!networkService.isOnline()) {
+      setHackathonsError("You are offline. Showing previously loaded hackathons. Connect to the internet to fetch fresh hackathons.");
+      setHackathonsLoading(false);
+      return;
+    }
     setHackathonsLoading(true);
     setHackathonsError(null);
     setWarningBanner(null);
@@ -725,6 +750,7 @@ export default function Opportunities({ user }: Props) {
       }
       
       setHackathons(list);
+      localStorage.setItem('kalam_spark_cached_hackathons', JSON.stringify(list));
       if (warning) {
         setWarningBanner(warning);
       }
