@@ -968,6 +968,24 @@ const AppContent = ({
   const [modelExists, setModelExists] = useState(false);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copying' | 'done'>('idle');
   const [copyProgress, setCopyProgress] = useState(0);
+  const [showOfflineBrainSetup, setShowOfflineBrainSetup] = useState(false);
+  const [devSettingsOpen, setDevSettingsOpen] = useState(false);
+  const [devGeminiKey, setDevGeminiKey] = useState(() => localStorage.getItem('ks_gemini_key') || '');
+  const [devOpenRouterKey, setDevOpenRouterKey] = useState(() => localStorage.getItem('ks_openrouter_key') || '');
+  const [devGroqKey, setDevGroqKey] = useState(() => localStorage.getItem('ks_groq_key') || '');
+  const [devBackendUrl, setDevBackendUrl] = useState(() => localStorage.getItem('ks_backend_url') || '');
+  const saveDevSettings = () => {
+    if (devGeminiKey.trim()) localStorage.setItem('ks_gemini_key', devGeminiKey.trim());
+    else localStorage.removeItem('ks_gemini_key');
+    if (devOpenRouterKey.trim()) localStorage.setItem('ks_openrouter_key', devOpenRouterKey.trim());
+    else localStorage.removeItem('ks_openrouter_key');
+    if (devGroqKey.trim()) localStorage.setItem('ks_groq_key', devGroqKey.trim());
+    else localStorage.removeItem('ks_groq_key');
+    if (devBackendUrl.trim()) localStorage.setItem('ks_backend_url', devBackendUrl.trim());
+    else localStorage.removeItem('ks_backend_url');
+    alert('Settings saved! Restart the app or refresh for changes to take effect.');
+  };
+
 
   // ── PWA Install Prompt ────────────────────────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1813,8 +1831,12 @@ const AppContent = ({
 
             {Capacitor.isNativePlatform() ? (
               <div className="flex flex-col mb-5 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,140,66,0.25)', background: 'rgba(0,0,0,0.35)' }}>
-                {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3" style={{ background: 'rgba(255,140,66,0.08)', borderBottom: '1px solid rgba(255,140,66,0.15)' }}>
+                {/* Clickable Header — toggles accordion */}
+                <div
+                  className="flex items-center justify-between px-4 py-3 cursor-pointer select-none active:opacity-70"
+                  style={{ background: 'rgba(255,140,66,0.08)', borderBottom: showOfflineBrainSetup ? '1px solid rgba(255,140,66,0.15)' : 'none' }}
+                  onClick={() => setShowOfflineBrainSetup(v => !v)}
+                >
                   <div className="flex items-center gap-2">
                     <span className="text-lg">🧠</span>
                     <div>
@@ -1822,15 +1844,20 @@ const AppContent = ({
                       <p className="text-[10px] text-gold-500/50">Works without internet</p>
                     </div>
                   </div>
-                  {/* Status Badge */}
-                  {copyStatus !== 'copying' && (
-                    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${modelExists ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'}`}>
-                      <span>{modelExists ? '✓' : '!'}</span>
-                      <span>{modelExists ? 'Active' : 'Not Set Up'}</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {/* Status Badge */}
+                    {copyStatus !== 'copying' && (
+                      <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${modelExists ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'}`}>
+                        <span>{modelExists ? '✓' : '!'}</span>
+                        <span>{modelExists ? 'Active' : 'Tap to Set Up'}</span>
+                      </div>
+                    )}
+                    <span className="text-gold-400/60 text-xs transition-transform" style={{ transform: showOfflineBrainSetup ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
+                  </div>
                 </div>
 
+                {/* Collapsible body */}
+                {showOfflineBrainSetup && (
                 <div className="px-4 py-3 flex flex-col gap-3">
                   {/* What this does */}
                   <p className="text-[11px] text-gold-400/70 leading-relaxed">
@@ -1911,6 +1938,7 @@ const AppContent = ({
                     </div>
                   )}
                 </div>
+                )}
               </div>
             ) : (
               <div className="flex flex-col mb-5 rounded-xl overflow-hidden text-left" style={{ border: '1px solid rgba(255,140,66,0.25)', background: 'rgba(0,0,0,0.35)' }}>
@@ -1968,6 +1996,86 @@ const AppContent = ({
             >
               <LogOut size={16} /> Log Out
             </button>
+
+            {/* ── Developer Settings ── */}
+            <div className="mt-4 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(124,58,237,0.2)', background: 'rgba(0,0,0,0.3)' }}>
+              <div
+                className="flex items-center justify-between px-4 py-3 cursor-pointer select-none active:opacity-70"
+                style={{ background: 'rgba(124,58,237,0.07)' }}
+                onClick={() => setDevSettingsOpen(v => !v)}
+              >
+                <div className="flex items-center gap-2">
+                  <span>⚙️</span>
+                  <p className="text-sm font-bold text-purple-300">Developer Settings</p>
+                </div>
+                <span className="text-purple-400/60 text-xs" style={{ transform: devSettingsOpen ? 'rotate(180deg)' : 'rotate(0deg)', display: 'inline-block', transition: 'transform 0.2s' }}>▼</span>
+              </div>
+              {devSettingsOpen && (
+                <div className="px-4 py-3 flex flex-col gap-3">
+                  <p className="text-[10px] text-purple-300/50 leading-relaxed">Enter your own API keys here. These are saved locally on this device only and override the built-in keys.</p>
+
+                  {/* Gemini Key */}
+                  <div>
+                    <label className="text-[10px] text-purple-300/70 mb-1 block font-semibold">🔑 Google Gemini API Key</label>
+                    <input
+                      type="password"
+                      placeholder="AIza..."
+                      value={devGeminiKey}
+                      onChange={e => setDevGeminiKey(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg text-xs"
+                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(124,58,237,0.25)', color: '#e8d5ff', outline: 'none' }}
+                    />
+                  </div>
+
+                  {/* OpenRouter Key */}
+                  <div>
+                    <label className="text-[10px] text-purple-300/70 mb-1 block font-semibold">🔑 OpenRouter API Key (Backup)</label>
+                    <input
+                      type="password"
+                      placeholder="sk-or-..."
+                      value={devOpenRouterKey}
+                      onChange={e => setDevOpenRouterKey(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg text-xs"
+                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(124,58,237,0.25)', color: '#e8d5ff', outline: 'none' }}
+                    />
+                  </div>
+
+                  {/* Groq Key */}
+                  <div>
+                    <label className="text-[10px] text-purple-300/70 mb-1 block font-semibold">🔑 Groq API Key (Fallback)</label>
+                    <input
+                      type="password"
+                      placeholder="gsk_..."
+                      value={devGroqKey}
+                      onChange={e => setDevGroqKey(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg text-xs"
+                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(124,58,237,0.25)', color: '#e8d5ff', outline: 'none' }}
+                    />
+                  </div>
+
+                  {/* Backend URL */}
+                  <div>
+                    <label className="text-[10px] text-purple-300/70 mb-1 block font-semibold">🌐 Backend URL (Optional)</label>
+                    <input
+                      type="url"
+                      placeholder="http://192.168.x.x:8000"
+                      value={devBackendUrl}
+                      onChange={e => setDevBackendUrl(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg text-xs"
+                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(124,58,237,0.25)', color: '#e8d5ff', outline: 'none' }}
+                    />
+                  </div>
+
+                  <button
+                    onClick={saveDevSettings}
+                    className="w-full py-2.5 rounded-xl text-xs font-bold text-purple-200 transition-all active:scale-95"
+                    style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.3), rgba(124,58,237,0.15))', border: '1px solid rgba(124,58,237,0.4)' }}
+                  >
+                    💾 Save Settings
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

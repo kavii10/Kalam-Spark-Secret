@@ -5,17 +5,72 @@ import {
   UserProfile,
   HeroStory,
 } from '../types';
-import { GoogleGenAI, Type } from "@google/genai";
+// NOTE: @google/genai Node SDK is NOT used — we use direct REST fetch for browser/mobile compatibility
 import { networkService } from "./networkService";
 import { llamaPlugin } from "./llamaPlugin";
 import { Capacitor } from '@capacitor/core';
 
 const IS_NATIVE_MOBILE = Capacitor.isNativePlatform();
 
-// API Keys - loaded from .env
-const GOOGLE_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
-const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY || "";
-const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
+// Type schema enum (mirrors @google/genai Type, but works in browser)
+const Type = {
+  STRING: 'STRING' as const,
+  NUMBER: 'NUMBER' as const,
+  BOOLEAN: 'BOOLEAN' as const,
+  OBJECT: 'OBJECT' as const,
+  ARRAY: 'ARRAY' as const,
+};
+
+// API Keys - check LocalStorage overrides first, then fall back to build-time .env
+const getGoogleApiKey = (): string =>
+  localStorage.getItem('ks_gemini_key') || import.meta.env.VITE_GEMINI_API_KEY || '';
+const getOpenRouterApiKey = (): string =>
+  localStorage.getItem('ks_openrouter_key') || import.meta.env.VITE_OPENROUTER_API_KEY || '';
+const getGroqApiKey = (): string =>
+  localStorage.getItem('ks_groq_key') || import.meta.env.VITE_GROQ_API_KEY || '';
+
+// ── Helper: Direct REST call to Gemini generateContent API ──────────────────
+async function callGeminiRest(
+  apiKey: string,
+  prompt: string,
+  systemInstruction?: string,
+  contents?: any[],
+  responseMimeType?: string,
+  temperature?: number,
+  responseSchema?: any
+): Promise<string> {
+  const model = 'gemini-2.0-flash';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+  const reqContents: any[] = contents && contents.length > 0
+    ? contents
+    : [{ role: 'user', parts: [{ text: prompt }] }];
+
+  const body: any = { contents: reqContents };
+  if (systemInstruction) {
+    body.systemInstruction = { parts: [{ text: systemInstruction }] };
+  }
+  const genConfig: any = {};
+  if (responseMimeType) genConfig.responseMimeType = responseMimeType;
+  if (temperature !== undefined) genConfig.temperature = temperature;
+  if (responseSchema) genConfig.responseSchema = responseSchema;
+  if (Object.keys(genConfig).length > 0) body.generationConfig = genConfig;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Gemini REST error ${res.status}: ${errText.substring(0, 200)}`);
+  }
+  const data = await res.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  if (!text) throw new Error('Gemini REST returned empty response');
+  return text;
+}
 
 // Helper to repair/extract JSON from model outputs
 function tryParseJson(text: string): any {
@@ -64,9 +119,11 @@ export const normalizeCareers = (data: any[]): any[] => {
 // ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 const getBackendUrl = (): string => {
+  // Check LocalStorage override first (set via Developer Settings in the app)
+  const lsUrl = localStorage.getItem('ks_backend_url');
+  if (lsUrl && lsUrl.trim()) return lsUrl.trim();
   const envUrl = import.meta.env.VITE_BACKEND_URL;
   if (envUrl) return envUrl;
-  
   if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
     return 'http://localhost:8000';
   }
@@ -91,45 +148,36 @@ export const generateText = async (options: LLMRequestOptions): Promise<string> 
   const isOnline = networkService.isOnline();
   
   if (isOnline) {
-    // 1. Google Gemini (Primary)
-    try {
-      console.log("[LLMRouter] Trying Google Gemini API...");
-      const ai = new GoogleGenAI({ apiKey: GOOGLE_API_KEY });
-      const model = "gemini-2.0-flash";
-      
-      const config: any = {};
-      if (options.systemInstruction) config.systemInstruction = options.systemInstruction;
-      if (options.responseMimeType) config.responseMimeType = options.responseMimeType;
-      if (options.responseSchema) config.responseSchema = options.responseSchema;
-      if (options.temperature !== undefined) config.temperature = options.temperature;
-      if (options.useSearch) config.tools = [{ googleSearch: {} }];
-      
-      const response = await ai.models.generateContent({
-        model,
-        contents: options.contents || options.prompt,
-        config
-      });
-      
-      // Try multiple extraction paths for response text
-      let extractedText = '';
-      if (response && response.text) {
-        extractedText = response.text;
-      } else if ((response as any)?.candidates?.[0]?.content?.parts?.[0]?.text) {
-        extractedText = (response as any).candidates[0].content.parts[0].text;
+    // 1. Google Gemini (Primary) — direct REST fetch (no Node SDK required)
+    const googleKey = getGoogleApiKey();
+    if (googleKey) {
+      try {
+        console.log('[LLMRouter] Trying Google Gemini REST API...');
+        const extractedText = await callGeminiRest(
+          googleKey,
+          options.prompt,
+          options.systemInstruction,
+          options.contents,
+          options.responseMimeType,
+          options.temperature,
+          options.responseSchema
+        );
+        if (extractedText) {
+          console.log('[LLMRouter] Google Gemini succeeded.');
+          return extractedText;
+        }
+      } catch (e: any) {
+        const errMsg = String(e?.message || e);
+        const isRateLimit = errMsg.includes('429') || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('rate limit') || errMsg.toLowerCase().includes('exhausted');
+        console.warn(`[LLMRouter] Google Gemini ${isRateLimit ? 'rate limited' : 'failed'}. Trying OpenRouter...`, errMsg.substring(0, 200));
       }
-      
-      if (extractedText) {
-        console.log("[LLMRouter] Google Gemini succeeded.");
-        return extractedText;
-      }
-    } catch (e: any) {
-      const errMsg = String(e?.message || e);
-      const isRateLimit = errMsg.includes('429') || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('rate limit') || errMsg.toLowerCase().includes('exhausted');
-      console.warn(`[LLMRouter] Google Gemini ${isRateLimit ? 'rate limited' : 'failed'}. Trying OpenRouter...`, errMsg.substring(0, 100));
+    } else {
+      console.warn('[LLMRouter] No Gemini API key set. Skipping Gemini. Set key in Developer Settings.');
     }
     
     // 2. OpenRouter (Secondary)
-    try {
+    const openRouterKey = getOpenRouterApiKey();
+    if (openRouterKey) try {
       console.log("[LLMRouter] Trying OpenRouter API...");
       const messages: any[] = [];
       if (options.systemInstruction) {
@@ -169,7 +217,7 @@ export const generateText = async (options: LLMRequestOptions): Promise<string> 
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+          "Authorization": `Bearer ${openRouterKey}`,
           "HTTP-Referer": "https://kalam-spark.com",
           "X-Title": "Kalam Spark"
         },
@@ -189,10 +237,13 @@ export const generateText = async (options: LLMRequestOptions): Promise<string> 
       }
     } catch (e: any) {
       console.warn("[LLMRouter] OpenRouter failed/rate limited. Trying Groq...", e?.message?.substring(0, 100) || e);
+    } else {
+      console.warn('[LLMRouter] No OpenRouter API key. Skipping.');
     }
     
     // 3. Groq (Tertiary)
-    try {
+    const groqKey = getGroqApiKey();
+    if (groqKey) try {
       console.log("[LLMRouter] Trying Groq API...");
       const messages: any[] = [];
       if (options.systemInstruction) {
@@ -233,7 +284,7 @@ export const generateText = async (options: LLMRequestOptions): Promise<string> 
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${GROQ_API_KEY}`
+          "Authorization": `Bearer ${groqKey}`
         },
         body: JSON.stringify(body)
       });
@@ -251,6 +302,8 @@ export const generateText = async (options: LLMRequestOptions): Promise<string> 
       }
     } catch (e: any) {
       console.warn("[LLMRouter] Groq failed. Falling back to local Gemma...", e?.message || e);
+    } else {
+      console.warn('[LLMRouter] No Groq API key. Skipping.');
     }
   }
   
@@ -686,33 +739,13 @@ export const getCareerNews = async (dream: string): Promise<any[]> => {
   const isOnline = networkService.isOnline();
   if (isOnline) {
     try {
-      console.log("[LLMRouter] Fetching career news using Gemini search grounding...");
-      const ai = new GoogleGenAI({ apiKey: GOOGLE_API_KEY });
-      const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
-        contents: `Exciting news about ${dream} in simple words for kids.`,
-        config: { tools: [{ googleSearch: {} }] },
-      });
-      const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-      if (chunks.length > 0) {
-        return chunks.map((c) => ({
-          title: c.web?.title || "Latest Update",
-          link: c.web?.uri || "#",
-          summary: "Cool things happening in the world of " + dream,
-        }));
-      }
-    } catch (e) {
-      console.error("Career news Gemini search grounding failed, falling back to text generation:", e);
-    }
-    
-    try {
-      const prompt = `Provide 3 realistic and exciting current updates/achievements happening in the field of ${dream}. Format your output as a raw JSON array: [{"title": "Title of update", "link": "https://example.com/news", "summary": "Brief kid-friendly description"}].`;
+      const prompt = `Provide 3 realistic and exciting current updates/achievements happening in the field of ${dream}. Format your output as a raw JSON array: [{"title": "Title of update", "link": "https://example.com/news", "summary": "Brief description"}].`;
       const systemInstruction = "You are a news reporter. Return ONLY a valid JSON array.";
       const resText = await generateText({ prompt, systemInstruction, responseMimeType: "application/json" });
       const parsed = tryParseJson(resText);
       if (Array.isArray(parsed)) return parsed;
     } catch (e) {
-      console.error("News fallback text generation failed:", e);
+      console.error("News generation failed:", e);
     }
   }
   return [];
@@ -897,69 +930,152 @@ export const generateDreamSummary = async (dream: string, branch: string, year: 
   }
 };
 
+// ── Local curated career description database (mirrors backend real_data.py) ──
+const LOCAL_CAREER_DB: Record<string, any> = {
+  'software engineer|software developer|full stack developer|backend engineer|frontend engineer|web developer': {
+    overview: 'Software engineers design, develop, and maintain applications and systems that power modern technology. You will write clean, efficient code, solve complex technical problems, and collaborate with teams using Git. Software engineers work across all industries building everything from mobile apps to cloud infrastructure.',
+    roles: ['Write and maintain production-quality code', 'Design system architecture and APIs', 'Debug and optimize performance', 'Collaborate with designers and product managers', 'Participate in code reviews and testing', 'Deploy and monitor applications'],
+    required_skills: ['Programming languages (Python, Java, JavaScript, C++, Go)', 'Version control (Git/GitHub)', 'Data structures and algorithms', 'Database design (SQL/NoSQL)', 'REST APIs and microservices', 'Problem-solving and debugging', 'Communication and teamwork'],
+    market_outlook: 'Extremely high demand across all sectors. Tech companies compete aggressively for talent. Remote work is common, offering flexibility and global opportunities.',
+    salary_range: '₹6,00,000 - ₹50,00,000+ per year. Entry-level: ₹6-12 LPA, Mid-level: ₹15-30 LPA, Senior: ₹30+ LPA',
+    growth: 'Clear career progression to Senior Engineer, Architect, Tech Lead, or Engineering Manager. Opportunities to specialize in AI/ML, DevOps, Security, or Blockchain.',
+    tips: 'Build a strong GitHub portfolio with real projects. Contribute to open-source. Practice coding interviews. Learn modern frameworks and tools.',
+  },
+  'ai engineer|machine learning engineer|artificial intelligence engineer|deep learning engineer|ml engineer': {
+    overview: 'AI and Machine Learning Engineers build intelligent systems, train neural networks, fine-tune LLMs, and deploy AI models to production. You will implement algorithms, optimize model performance, and integrate AI capabilities into software applications.',
+    roles: ['Train and fine-tune machine learning and deep learning models', 'Implement neural network architectures and NLP/Vision models', 'Deploy models to scale using cloud services (AWS, GCP, Azure)', 'Build API endpoints to serve model predictions', 'Optimize model inference speed and memory usage', 'Collaborate with software engineers to integrate AI features'],
+    required_skills: ['Programming (Python, C++)', 'Machine Learning & Deep Learning (PyTorch, TensorFlow)', 'Natural Language Processing (NLP) & LLMs', 'Computer Vision (OpenCV)', 'AI tools & APIs (OpenAI, Hugging Face, LangChain)', 'Model deployment (Docker, Kubernetes, Triton)', 'Data pipelines (NumPy, Pandas)'],
+    market_outlook: 'Exponentially growing demand worldwide. AI is transforming every industry, making AI/ML engineering one of the highest-paying and most sought-after careers in technology.',
+    salary_range: '₹10,00,000 - ₹80,00,000+ per year. Entry-level: ₹10-18 LPA, Mid-level: ₹20-50 LPA, Senior: ₹50+ LPA',
+    growth: 'Progress to Lead AI Scientist, Chief AI Officer, or specialized Research Scientist. Launch your own AI startup.',
+    tips: 'Build and deploy real LLM or CV projects. Participate in Kaggle. Understand deep learning fundamentals. Keep building hands-on projects.',
+  },
+  'data scientist|data analyst|business intelligence developer': {
+    overview: 'Data scientists analyze large and complex datasets to discover patterns, extract insights, and drive business decision-making. You will combine statistics, data mining, and predictive modeling to translate raw data into actionable recommendations.',
+    roles: ['Clean, preprocess, and analyze unstructured data', 'Perform exploratory data analysis (EDA)', 'Build statistical models and predictive algorithms', 'Design A/B tests and evaluate business experiments', 'Create interactive dashboards and reports', 'Collaborate with data engineers to optimize pipelines'],
+    required_skills: ['Statistics and Probability', 'SQL for querying large databases', 'Python or R (Pandas, Scikit-learn)', 'Data Visualization (Tableau, PowerBI, Matplotlib)', 'A/B testing and experimentation design', 'Data Warehousing and ETL pipelines', 'Communication and storytelling'],
+    market_outlook: 'Very high demand. Every data-driven organization relies on data scientists to make strategic decisions. Strong growth across finance, healthcare, e-commerce, and SaaS.',
+    salary_range: '₹8,00,000 - ₹50,00,000+ per year. Entry-level: ₹8-14 LPA, Mid-level: ₹15-30 LPA, Senior: ₹30+ LPA',
+    growth: 'Advance to Senior Data Scientist, Analytics Manager, Director of Data Science, or Chief Data Officer.',
+    tips: 'Focus on statistical foundations. Master SQL and Pandas. Build projects showing end-to-end data analysis. Develop strong business communication skills.',
+  },
+  'doctor|physician|medical doctor|mbbs|surgeon': {
+    overview: 'Doctors diagnose and treat patients, conduct medical research, and serve as healthcare leaders. You will combine scientific knowledge with empathy to improve patient outcomes. The medical profession offers diverse specializations across hospitals, clinics, research institutions, and private practice.',
+    roles: ['Diagnose and treat patient conditions', 'Conduct medical examinations and tests', 'Prescribe medications and treatments', 'Perform surgeries (for surgeons)', 'Keep detailed medical records', 'Educate patients about health and prevention'],
+    required_skills: ['Deep medical knowledge (anatomy, physiology, pharmacology)', 'Clinical diagnosis and decision-making', 'Technical skills (surgery, procedures)', 'Empathy and communication', 'Attention to detail', 'Continuous learning and adaptability'],
+    market_outlook: 'Consistent high demand globally. Healthcare is recession-proof. Opportunities in emerging fields like telemedicine and rural healthcare.',
+    salary_range: '₹8,00,000 - ₹1,00,00,000+ per year (highly variable by specialization). Government: ₹8-25 LPA, Private: ₹15-100+ LPA',
+    growth: 'Choose specializations (Cardiology, Neurosurgery, Pediatrics, etc.). Establish own clinic or hospital. Pursue research and publication.',
+    tips: 'Excel in biology and chemistry. Prepare rigorously for medical entrance exams (NEET, etc.). Develop strong ethics and bedside manner.',
+  },
+  'civil engineer|mechanical engineer|electrical engineer|chemical engineer|structural engineer': {
+    overview: 'Engineers solve real-world problems by designing, building, and improving infrastructure, machines, systems, and processes. You will apply mathematics and physics to create solutions from buildings and bridges to manufacturing systems and power grids.',
+    roles: ['Design systems and components using CAD software', 'Conduct feasibility studies and risk analysis', 'Oversee construction and implementation', 'Test prototypes and troubleshoot issues', 'Ensure safety and regulatory compliance', 'Manage projects and budgets'],
+    required_skills: ['Strong mathematics and physics foundation', 'CAD/CAM software (AutoCAD, CATIA, Solidworks)', 'Project management', 'Problem-solving and creativity', 'Technical communication', 'Knowledge of relevant standards and codes'],
+    market_outlook: 'Steady demand in infrastructure, manufacturing, energy, and aerospace sectors. Infrastructure investment globally creates abundant opportunities.',
+    salary_range: '₹6,00,000 - ₹40,00,000+ per year. Entry-level: ₹6-12 LPA, Mid-level: ₹15-30 LPA, Senior/Manager: ₹30+ LPA',
+    growth: 'Specialize in advanced areas (AI-powered design, sustainable engineering). Become Project Manager. Start consulting firm.',
+    tips: 'Excel in math and physics. Gain hands-on experience with tools and simulations. Pursue internships at engineering companies.',
+  },
+  'management consultant|business analyst|product manager|entrepreneur': {
+    overview: 'Business professionals improve organizational performance through strategic planning, data analysis, and process optimization. You will identify problems, develop solutions, and drive business growth. Roles range from internal company positions to consulting firms.',
+    roles: ['Analyze business challenges and opportunities', 'Develop strategic recommendations', 'Track KPIs and business metrics', 'Implement process improvements', 'Manage projects and timelines', 'Drive company growth and profitability'],
+    required_skills: ['Business acumen and financial literacy', 'Data analysis and Excel/Power BI', 'Strategic thinking', 'Communication and presentation skills', 'Project management', 'Problem-solving and creativity'],
+    market_outlook: 'Strong demand across all industries. Every company needs business professionals to drive growth. Consulting firms compete for top talent.',
+    salary_range: '₹7,00,000 - ₹50,00,000+ per year. Entry-level: ₹7-15 LPA, Mid-level: ₹20-40 LPA, Senior/Partner: ₹40+ LPA',
+    growth: 'Progress to Senior Consultant, Manager, Director, or Partner. Start your own consulting firm. Transition to corporate strategy roles.',
+    tips: 'Develop strong analytical and communication skills. Learn financial modeling. Get comfortable with data and tools.',
+  },
+  'lawyer|advocate|attorney|legal professional': {
+    overview: 'Lawyers advise clients, represent them in legal proceedings, and ensure compliance with laws. You will research statutes and regulations, draft documents, negotiate agreements, and argue cases. The legal profession spans corporate law, criminal defense, litigation, intellectual property, environmental law, and more.',
+    roles: ['Research legal issues and precedents', 'Draft legal documents and contracts', 'Advise clients on legal implications', 'Represent clients in court', 'Negotiate settlements', 'Ensure regulatory compliance'],
+    required_skills: ['Deep legal knowledge in chosen specialization', 'Research and writing', 'Oral advocacy and persuasion', 'Attention to detail', 'Analytical thinking', 'Negotiation skills', 'Ethics and integrity'],
+    market_outlook: 'Steady demand across sectors. Legal tech is creating new opportunities.',
+    salary_range: '₹5,00,000 - ₹50,00,000+ per year. Entry-level: ₹5-12 LPA, Mid-level: ₹15-40 LPA, Senior/Partner: ₹40+ LPA',
+    growth: 'Specialize in areas like IP, M&A, International Law. Become Partner in law firm. Move to corporate legal roles.',
+    tips: 'Excel in law school. Clear bar exams with high scores. Join prestigious law firms for experience. Build specialization expertise.',
+  },
+  'ux designer|ui designer|graphic designer|product designer': {
+    overview: 'Designers create beautiful, intuitive interfaces and experiences that solve user problems. You will research user needs, sketch ideas, design prototypes, and test solutions. Design spans digital (apps, websites) and physical (products, environments).',
+    roles: ['Conduct user research and testing', 'Create wireframes and prototypes', 'Design interfaces and visual systems', 'Collaborate with developers and product managers', 'Iterate based on feedback', 'Maintain design consistency'],
+    required_skills: ['Design tools (Figma, Adobe Suite, Sketch)', 'UX/UI principles and best practices', 'User research and testing', 'Visual design and typography', 'Prototyping and interaction design', 'Communication and presentation'],
+    market_outlook: 'Growing demand as companies prioritize user experience. Tech startups compete for talented designers.',
+    salary_range: '₹6,00,000 - ₹40,00,000+ per year. Entry-level: ₹6-12 LPA, Mid-level: ₹15-30 LPA, Senior: ₹30+ LPA',
+    growth: 'Specialize in UX Research, Interaction Design, or Design Strategy. Become Design Lead or Head of Design. Start design agency.',
+    tips: 'Build a strong portfolio on Behance or Dribbble. Practice design thinking methodology. Learn user research techniques.',
+  },
+  'teacher|educator|professor|academic': {
+    overview: 'Educators shape future generations by teaching, mentoring, and developing curricula. You will inspire students, create engaging learning experiences, and assess progress. Teaching roles span K-12, higher education, corporate training, and online platforms.',
+    roles: ['Develop and deliver lessons', 'Create assessments and grade student work', 'Mentor and support student growth', 'Develop curriculum and learning materials', 'Communicate with parents/guardians', 'Stay updated with subject expertise'],
+    required_skills: ['Deep subject matter expertise', 'Communication and public speaking', 'Empathy and patience', 'Creativity in teaching methods', 'Assessment and feedback skills', 'Classroom management', 'Adaptability'],
+    market_outlook: 'Steady demand, especially in specialized fields. EdTech is creating new teaching opportunities.',
+    salary_range: '₹3,00,000 - ₹20,00,000+ per year. K-12 Government: ₹3-10 LPA, Higher Ed: ₹8-20+ LPA, Private/International: ₹10-30+ LPA',
+    growth: 'Become Department Head or Principal. Develop specialized curriculum. Pursue EdTech. Author educational content.',
+    tips: 'Develop genuine passion for your subject and teaching. Engage with modern pedagogies. Use technology in teaching effectively.',
+  },
+};
+
+function getCuratedCareerDescriptionLocal(dream: string): any | null {
+  const d = dream.toLowerCase().trim();
+  for (const [keywords, data] of Object.entries(LOCAL_CAREER_DB)) {
+    if (keywords.split('|').some(k => d.includes(k))) {
+      return { ...data, career: dream, is_curated: true };
+    }
+  }
+  return null;
+}
+
 export const fetchDetailedCareerDescription = async (dream: string) => {
   await networkService.ready();
   const backendUrl = getBackendUrl();
 
   if (backendUrl) {
     try {
-      console.log("[fetchDetailedCareerDescription] Trying local backend...");
+      console.log('[fetchDetailedCareerDescription] Trying local backend...');
       const response = await fetch(`${backendUrl}/api/career_description?dream=${encodeURIComponent(dream)}`);
       if (response.ok) {
         const data = await response.json();
         if (data && data.overview) {
-          console.log("[fetchDetailedCareerDescription] Local backend succeeded.");
-          return { ...data, career: dream, is_curated: false };
+          console.log('[fetchDetailedCareerDescription] Local backend succeeded.');
+          return { ...data, career: dream };
         }
-      } else {
-        console.warn(`[fetchDetailedCareerDescription] Local backend error HTTP ${response.status}`);
       }
     } catch (backendErr) {
-      console.warn("[fetchDetailedCareerDescription] Local backend unreachable/failed, falling back to direct browser APIs:", backendErr);
+      console.warn('[fetchDetailedCareerDescription] Local backend unreachable, trying local DB:', backendErr);
     }
   }
 
-  const prompt = `Provide a detailed career description for a ${dream}. Return a JSON object with: overview (string), roles (array of strings), required_skills (array of strings), market_outlook (string), salary_range (string), growth (string), tips (string).`;
-  const systemInstruction = `You are an elite career guidance counselor. Return ONLY a valid JSON object. No markdown.`;
+  // Try local curated database next (works offline)
+  const localResult = getCuratedCareerDescriptionLocal(dream);
+  if (localResult) {
+    console.log('[fetchDetailedCareerDescription] Local curated DB matched.');
+    return localResult;
+  }
 
+  // Try online AI generation
   try {
-    const resText = await generateText({
-      prompt,
-      systemInstruction,
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          overview: { type: Type.STRING },
-          roles: { type: Type.ARRAY, items: { type: Type.STRING } },
-          required_skills: { type: Type.ARRAY, items: { type: Type.STRING } },
-          market_outlook: { type: Type.STRING },
-          salary_range: { type: Type.STRING },
-          growth: { type: Type.STRING },
-          tips: { type: Type.STRING }
-        },
-        required: ["overview", "roles", "required_skills", "market_outlook", "salary_range", "growth", "tips"]
-      }
-    });
+    const prompt = `Provide a detailed career description for a ${dream}. Return a JSON object with: overview (string), roles (array of strings), required_skills (array of strings), market_outlook (string), salary_range (string), growth (string), tips (string).`;
+    const systemInstruction = 'You are an elite career guidance counselor. Return ONLY a valid JSON object. No markdown.';
+    const resText = await generateText({ prompt, systemInstruction, responseMimeType: 'application/json' });
     const parsed = tryParseJson(resText);
     if (parsed && parsed.overview) {
       return { ...parsed, career: dream, is_curated: false };
     }
   } catch (e) {
-    console.error("Failed to generate detailed career description via Gemini:", e);
+    console.error('Failed to generate detailed career description via AI:', e);
   }
 
-  // Fallback: Return generic detailed description
+  // Final generic fallback
   return {
     career: dream,
-    overview: `A ${dream} is a professional who specializes in their field, applying expertise to solve problems and drive value. You'll develop deep knowledge in this domain, collaborate with others, and continuously adapt to evolving technologies and methodologies.`,
-    roles: ["Apply specialized expertise to real-world challenges", "Collaborate with cross-functional teams", "Stay updated with industry developments", "Mentor junior professionals", "Contribute to innovation and improvement"],
-    required_skills: ["Domain expertise", "Technical and soft skills", "Problem-solving", "Communication", "Continuous learning", "Teamwork and leadership"],
-    market_outlook: "Growing opportunities as businesses invest in specialization and expertise.",
-    salary_range: "Variable by region, experience, and specialization. Early career: Γé╣6-15 LPA, Mid-career: Γé╣20-50 LPA, Senior: Γé╣50+ LPA",
-    growth: "Progress to senior roles, leadership positions, or specialized expertise. Start your own venture or consultancy.",
-    tips: "Build deep expertise in your chosen field. Network actively. Stay updated with industry trends. Develop both technical and leadership skills.",
-    is_curated: false
+    overview: `A ${dream} is a professional who specializes in their field, applying expertise to solve problems and drive value. You will develop deep knowledge in this domain, collaborate with others, and continuously adapt to evolving technologies and methodologies.`,
+    roles: ['Apply specialized expertise to real-world challenges', 'Collaborate with cross-functional teams', 'Stay updated with industry developments', 'Mentor junior professionals', 'Contribute to innovation and improvement'],
+    required_skills: ['Domain expertise', 'Technical and soft skills', 'Problem-solving', 'Communication', 'Continuous learning', 'Teamwork and leadership'],
+    market_outlook: 'Growing opportunities as businesses invest in specialization and expertise.',
+    salary_range: 'Variable by region, experience, and specialization. Early career: ₹6-15 LPA, Mid-career: ₹20-50 LPA, Senior: ₹50+ LPA',
+    growth: 'Progress to senior roles, leadership positions, or specialized expertise. Start your own venture or consultancy.',
+    tips: 'Build deep expertise in your chosen field. Network actively. Stay updated with industry trends. Develop both technical and leadership skills.',
+    is_curated: false,
   };
 };
 
