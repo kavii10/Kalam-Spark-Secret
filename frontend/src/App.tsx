@@ -1077,6 +1077,9 @@ const AppContent = ({
     if (isIOS) {
       alert("To install Kalam Spark on iOS, tap the Share icon in Safari and select 'Add to Home Screen'.");
     } else {
+      // Guide the user about the native Android installation step
+      alert("Downloading the Kalam Spark offline-ready app (APK). Once the download completes, tap the 'Open' notification at the top of your screen or run the file from your Downloads folder to install the app!");
+      
       // Trigger download of the native Android APK file
       const link = document.createElement('a');
       link.href = '/kalam-spark.apk';
