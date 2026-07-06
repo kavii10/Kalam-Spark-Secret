@@ -12,7 +12,7 @@ python-multipart==0.0.9
 # Primary: lightweight httpx + BeautifulSoup (works on Render/cloud)
 beautifulsoup4==4.12.3
 # Optional: crawl4ai for richer JS-rendered site crawling (local use)
-crawl4ai        # Uncomment for local use (requires Playwright + browser)
+# crawl4ai        # Uncomment for local use (requires Playwright + browser)
 # nest_asyncio==1.6.0        # Needed for Windows asyncio compatibility
 
 # ── Local LLM (Ollama / Gemma4 fallback when cloud APIs fail)
