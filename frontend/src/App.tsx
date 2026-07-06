@@ -1080,18 +1080,12 @@ const AppContent = ({
     if (isIOS) {
       alert("To install Kalam Spark on iOS, tap the Share icon in Safari and select 'Add to Home Screen'.");
     } else {
-      const apkUrl = import.meta.env.VITE_APK_DOWNLOAD_URL || '';
-      if (!apkUrl) {
-        alert("Since the offline-ready Android APK (134MB) exceeds GitHub's 100MB push limit, please copy the compiled installer directly from your computer:\n\nFolder: frontend/android/app/build/outputs/apk/debug/\nFile: app-arm64-v8a-debug.apk\n\n(Tip: You can also upload it to Google Drive and set the VITE_APK_DOWNLOAD_URL environment variable to download it directly from this button!)");
-        return;
-      }
-      
       // Guide the user about the native Android installation step
       alert("Downloading the Kalam Spark offline-ready app (APK). Once the download completes, tap the 'Open' notification at the top of your screen or run the file from your Downloads folder to install the app!");
       
       // Trigger download of the native Android APK file
       const link = document.createElement('a');
-      link.href = apkUrl;
+      link.href = '/kalam-spark.apk';
       link.download = 'kalam-spark.apk';
       document.body.appendChild(link);
       link.click();
