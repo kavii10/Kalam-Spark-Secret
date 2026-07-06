@@ -1,0 +1,1124 @@
+"""
+llm_service.py - Cloud LLM integration for Kalam Spark
+Uses Gemma 4 (April 2026 release) across all platforms with auto-failover.
+Platform priority: OpenRouter -> Groq -> Gemini AI Studio
+"""
+
+import json
+import os
+import re
+import httpx
+from typing import Optional
+from json_repair import try_parse_json, repair_json_string
+
+# ── Cloud API Keys (from environment variables)
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+GEMINI_API_KEY     = os.getenv("GEMINI_API_KEY", "")  # Google AI Studio key
+GROQ_API_KEY       = os.getenv("GROQ_API_KEY", "")
+
+# ── Local LLM via Ollama (fallback when cloud providers fail)
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "gemma4:e4b")  # gemma 4 e4b via Ollama
+
+# ── Cloud Model IDs
+OPENROUTER_MODEL    = "google/gemma-4-31b-it:free"    # Gemma 4 31B via OpenRouter
+OPENROUTER_FALLBACK = "openrouter/auto"               # Automatic fallback to free/cheap model
+GEMINI_GEMMA_MODEL  = "gemini-3.1-flash-lite"          # Gemini 3.1 Flash Lite
+GROQ_MODEL          = "llama-3.1-8b-instant"          # Groq Llama 3.1 8B
+
+# Language name map
+LANGUAGE_NAMES = {
+    "en": "English", "ta": "Tamil", "hi": "Hindi",
+    "te": "Telugu", "kn": "Kannada", "ml": "Malayalam",
+    "bn": "Bengali", "mr": "Marathi",
+    "es": "Spanish", "fr": "French", "de": "German",
+    "zh": "Chinese", "ar": "Arabic", "ru": "Russian",
+    "pt": "Portuguese", "ja": "Japanese", "ko": "Korean",
+    "it": "Italian", "id": "Indonesian", "tr": "Turkish",
+    "vi": "Vietnamese",
+}
+
+
+# ──────────────────────────────────────────────
+# Core: Call cloud LLM with auto-failover
+#    raise RuntimeError("All AI providers failed. Please check your API keys in the .env file.")
+
+
+async def _call_ollama(prompt: str, max_tokens: int = 3000, temperature: float = 0.3, json_mode: bool = False) -> str:
+    """
+    Call the local Ollama Gemma4 model as a last-resort fallback.
+    Requires: Ollama installed + 'ollama serve' running + gemma4:e4b pulled.
+    """
+    print(f"[LLM] [WARNING] All cloud providers failed. Trying local Ollama ({OLLAMA_MODEL})...")
+    try:
+        body: dict = {
+            "model": OLLAMA_MODEL,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": temperature,
+                "num_predict": max_tokens,
+                "top_p": 0.85,
+                "repeat_penalty": 1.15,
+                "num_gpu": 32,
+            },
+        }
+        if json_mode:
+            body["format"] = "json"  # Forces Gemma4 to output valid JSON
+
+        async with httpx.AsyncClient(timeout=300.0) as client:  # Long timeout — local model can be slow
+            resp = await client.post(f"{OLLAMA_BASE_URL}/api/generate", json=body)
+            resp.raise_for_status()
+            text = resp.json().get("response", "").strip()
+            print(f"[LLM] Ollama (local) [OK] ({len(text)} chars)")
+            return text
+    except httpx.ConnectError:
+        raise RuntimeError(
+            "All cloud AI providers and local Ollama have failed. "
+            "Start Ollama with 'ollama serve' and pull gemma4:e4b, or add API keys to .env."
+        )
+    except Exception as e:
+        raise RuntimeError(f"[LLM] Ollama (local) failed: {e}")
+
+
+async def _call_llm(prompt: str, max_tokens: int = 3000, temperature: float = 0.3, json_mode: bool = False) -> str:
+    """Legacy wrapper for flat prompt calls. Enforces role separation to prevent instruction leakage."""
+    messages = [
+        {"role": "system", "content": "You are a professional assistant. Return only the requested content."},
+        {"role": "user", "content": prompt}
+    ]
+    return await _call_llm_chat(messages, max_tokens=max_tokens, temperature=temperature, json_mode=json_mode)
+
+
+async def _call_llm_chat(messages: list[dict], max_tokens: int = 1500, temperature: float = 0.7, 
+                        attachment_b64: str = "", attachment_type: str = "", json_mode: bool = False,
+                        force_cloud: bool = False) -> str:
+    """Chat variant: accepts a list of {role, content} messages. Supports multimodal image attachments."""
+
+    # ── 1. OpenRouter
+    if OPENROUTER_API_KEY:
+        try:
+            headers = {
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://kalam-spark.onrender.com",
+                "X-Title": "Kalam Spark",
+            }
+            
+            # Prepare messages, injecting image into the last user message if present
+            processed_messages = []
+            for i, m in enumerate(messages):
+                if i == len(messages) - 1 and m["role"] == "user" and attachment_b64 and attachment_type.startswith("image/"):
+                    processed_messages.append({
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": m["content"]},
+                            {"type": "image_url", "image_url": {"url": f"data:{attachment_type};base64,{attachment_b64}"}}
+                        ]
+                    })
+                else:
+                    processed_messages.append(m)
+
+            body = {
+                "model": OPENROUTER_MODEL,
+                "messages": processed_messages,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            }
+            if json_mode:
+                body["response_format"] = {"type": "json_object"}
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                resp = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=body)
+                resp.raise_for_status()
+                text = resp.json()["choices"][0]["message"]["content"].strip()
+                print(f"[LLM] OpenRouter chat [OK] ({len(text)} chars)")
+                return text
+        except Exception as e:
+            print(f"[LLM] OpenRouter chat failed: {e} — trying fallback (auto)...")
+            try:
+                body["model"] = OPENROUTER_FALLBACK
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    resp = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=body)
+                    resp.raise_for_status()
+                    text = resp.json()["choices"][0]["message"]["content"].strip()
+                    print(f"[LLM] OpenRouter chat fallback [OK] ({len(text)} chars)")
+                    return text
+            except Exception as fallback_e:
+                print(f"[LLM] OpenRouter chat fallback failed: {fallback_e} — trying Groq...")
+
+    # ── 2. Groq (Secondary)
+    if GROQ_API_KEY:
+        try:
+            headers = {
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            }
+            groq_messages = [{"role": m["role"], "content": m["content"]} for m in messages if "content" in m]
+            body = {
+                "model": GROQ_MODEL,
+                "messages": groq_messages,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            }
+            if json_mode:
+                body["response_format"] = {"type": "json_object"}
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                resp = await client.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=body)
+                resp.raise_for_status()
+                text = resp.json()["choices"][0]["message"]["content"].strip()
+                print(f"[LLM] Groq chat [OK] ({len(text)} chars)")
+                return text
+        except Exception as groq_e:
+            print(f"[LLM] Groq chat failed: {groq_e} — trying Google AI Studio...")
+
+    # ── 3. Google AI Studio — gemini-2.0-flash
+    if GEMINI_API_KEY:
+        # Try with JSON mode first
+        for attempt_num in range(2):
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_GEMMA_MODEL}:generateContent?key={GEMINI_API_KEY}"
+                system_message = None
+                contents = []
+                for i, m in enumerate(messages):
+                    role = m.get("role")
+                    if role == "system":
+                        system_message = m.get("content", "")
+                    else:
+                        gemma_role = "user" if role == "user" else "model"
+                        parts = [{"text": m.get("content", "")}] if isinstance(m.get("content"), str) else []
+                        if i == len(messages) - 1 and role == "user" and attachment_b64 and (attachment_type.startswith("image/") or attachment_type == "application/pdf" or attachment_type.startswith("audio/")):
+                            parts.append({"inlineData": {"mimeType": attachment_type, "data": attachment_b64}})
+                        contents.append({"role": gemma_role, "parts": parts})
+                
+                gen_config = {"maxOutputTokens": max_tokens, "temperature": temperature}
+                
+                if json_mode and attempt_num == 0:
+                    gen_config["responseMimeType"] = "application/json"
+                    attempt_desc = "with JSON mode"
+                else:
+                    attempt_desc = "without JSON mode (fallback)"
+                    
+                body = {
+                    "contents": contents,
+                    "generationConfig": gen_config,
+                }
+                if system_message:
+                    body["systemInstruction"] = {"parts": [{"text": system_message}]}
+                
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    resp = await client.post(url, json=body)
+                    resp.raise_for_status()
+                    text = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    print(f"[LLM] Google AI Studio chat ({GEMINI_GEMMA_MODEL}) {attempt_desc} [OK] ({len(text)} chars)")
+                    
+                    if text and not text.startswith('{') and json_mode:
+                        if any(keyword in text[:200].lower() for keyword in ["career mentor", "return only", "raw json", "do not wrap", "do not include"]):
+                            print(f"[LLM] WARNING: Gemini returned prompt text instead of JSON (responseMimeType not working). Response: {text[:80]}...")
+                            if attempt_num == 0:
+                                print(f"[LLM] Retrying without responseMimeType...")
+                                continue
+                            else:
+                                raise ValueError("Gemini returned instructions instead of JSON even without responseMimeType")
+                    
+                    return text
+                    
+            except Exception as e:
+                if attempt_num == 0 and json_mode:
+                    print(f"[LLM] Google AI Studio attempt {attempt_num + 1} failed: {e} — retrying without JSON mode...")
+                    continue
+                else:
+                    print(f"[LLM] Google AI Studio chat failed: {e} — trying local Ollama...")
+                    break
+
+    # If force_cloud is requested, do NOT fall back to local Ollama.
+    if force_cloud:
+        raise RuntimeError("All cloud AI providers failed and force_cloud is enabled.")
+
+    # ── 4. Ollama (local Gemma 4 e4b — last resort)
+    # Build flat prompt for /api/generate fallback
+    flat_prompt = "\n\n".join(
+        f"{'ASSISTANT' if m['role'] == 'assistant' else m['role'].upper()}: {m['content']}"
+        for m in messages if 'content' in m
+    ) + "\n\nASSISTANT:"
+
+    print(f"[LLM] [WARNING] All cloud chat providers failed. Trying local Ollama ({OLLAMA_MODEL})...")
+
+    try:
+        ollama_chat_body: dict = {
+            "model": OLLAMA_MODEL,
+            "messages": messages,
+            "stream": False,
+            "options": {
+                "temperature": temperature,
+                "top_p": 0.9,
+                "num_gpu": 32,
+                "num_predict": max_tokens,
+            }
+        }
+        if json_mode:
+            ollama_chat_body["format"] = "json"
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            resp = await client.post(
+                f"{OLLAMA_BASE_URL}/api/chat",
+                json=ollama_chat_body,
+            )
+            resp.raise_for_status()
+            text = resp.json().get("message", {}).get("content", "").strip()
+            if text:
+                print(f"[LLM] Ollama /api/chat [OK] ({len(text)} chars)")
+                return text
+            raise ValueError("Empty response from /api/chat")
+    except httpx.ConnectError:
+        raise RuntimeError(
+            "All cloud AI providers and local Ollama have failed. "
+            "Start Ollama with 'ollama serve' and pull gemma4:e4b, or add API keys to .env."
+        )
+    except Exception as chat_err:
+        print(f"[LLM] Ollama /api/chat failed ({chat_err}). Trying /api/generate fallback...")
+        try:
+            ollama_gen_body: dict = {
+                "model": OLLAMA_MODEL,
+                "prompt": flat_prompt,
+                "stream": False,
+                "options": {"temperature": temperature, "top_p": 0.9, "num_gpu": 32, "num_predict": max_tokens}
+            }
+            if json_mode:
+                ollama_gen_body["format"] = "json"
+            async with httpx.AsyncClient(timeout=180.0) as client:
+                resp = await client.post(
+                    f"{OLLAMA_BASE_URL}/api/generate",
+                    json=ollama_gen_body,
+                )
+                resp.raise_for_status()
+                text = resp.json().get("response", "").strip()
+                if text:
+                    print(f"[LLM] Ollama /api/generate [OK] ({len(text)} chars)")
+                    return text
+                raise ValueError("Empty response from /api/generate")
+        except httpx.ConnectError:
+            raise RuntimeError(
+                "All cloud AI providers and local Ollama have failed. "
+                "Start Ollama with 'ollama serve' and pull gemma4:e4b, or add API keys to .env."
+            )
+        except Exception as gen_err:
+            raise RuntimeError(f"All AI providers failed. Last Ollama error: {gen_err}")
+
+
+
+# ──────────────────────────────────────────────
+# JSON Schema for the roadmap
+# ──────────────────────────────────────────────
+ROADMAP_SCHEMA = """
+{
+  "dream": "Career title",
+  "summary": "Exactly 2 complete sentences: sentence 1 describes what this career is and what the student will do; sentence 2 states what they will achieve by following this roadmap. Be specific and inspiring. No more than 40 words total.",
+  "stages": [
+    {
+      "id": "stage-1",
+      "title": "Stage 1 Title (specific to career)",
+      "description": "Comprehensive explanation of what to learn and why in this stage.",
+      "duration": "8-12 weeks",
+      "subjects": ["Specific Topic 1", "Specific Topic 2", "Specific Topic 3", "Specific Topic 4", "Specific Topic 5", "Specific Topic 6", "Specific Topic 7", "Specific Topic 8", "Specific Topic 9", "Specific Topic 10"],
+      "concepts": ["Concept Check 1", "Concept Check 2", "Concept Check 3", "Concept Check 4"],
+      "skills": ["Specific Skill 1", "Skill 2", "Skill 3", "Skill 4", "Skill 5", "Skill 6"],
+      "projects": ["Detailed project idea 1", "Detailed project idea 2", "Project 3"],
+      "resources": []
+    },
+    {
+      "id": "stage-2",
+      "title": "Stage 2 Title",
+      "description": "...",
+      "duration": "...",
+      "subjects": [],
+      "concepts": [],
+      "skills": [],
+      "projects": [],
+      "resources": []
+    },
+    {
+      "id": "stage-3",
+      "title": "Stage 3 Title",
+      "description": "...",
+      "duration": "...",
+      "subjects": [],
+      "concepts": [],
+      "skills": [],
+      "projects": [],
+      "resources": []
+    },
+    {
+      "id": "stage-4",
+      "title": "Stage 4 Title",
+      "description": "...",
+      "duration": "...",
+      "subjects": [],
+      "concepts": [],
+      "skills": [],
+      "projects": [],
+      "resources": []
+    },
+    {
+      "id": "stage-5",
+      "title": "Stage 5 Title",
+      "description": "...",
+      "duration": "...",
+      "subjects": [],
+      "concepts": [],
+      "skills": [],
+      "projects": [],
+      "resources": []
+    },
+    {
+      "id": "stage-6",
+      "title": "Stage 6 Title",
+      "description": "...",
+      "duration": "...",
+      "subjects": [],
+      "concepts": [],
+      "skills": [],
+      "projects": [],
+      "resources": []
+    }
+  ]
+}
+"""
+
+
+def _build_prompt(dream: str, year: str, branch: str, crawled_content: str, language: str = "en") -> str:
+    context_section = ""
+    if crawled_content and len(crawled_content) > 50:
+        context_section = f"\nREAL DATA FROM CAREER WEBSITES:\n---\n{crawled_content[:12000]}\n---\n"
+    else:
+        context_section = "(No web data — use your extensive knowledge to create an accurate roadmap.)"
+
+    lang_name = LANGUAGE_NAMES.get(language, "English")
+    language_instruction = (
+        f"\nIMPORTANT: Write ALL roadmap content in {lang_name}. Keep JSON keys in English but all values in {lang_name}."
+        if language != "en" else ""
+    )
+
+    # Smart stage tailoring instructions based on school vs college vs other
+    tailoring_instruction = ""
+    year_lower = year.lower()
+    if "class" in year_lower or "grade" in year_lower or "school" in year_lower:
+        tailoring_instruction = f"""
+- The student is in SCHOOL (specifically {year}).
+- Stage 1 and Stage 2 MUST focus on building the correct foundation within their current class and school subjects. Specify exactly which school subjects (e.g., Mathematics, Physics, Chemistry, English, etc.) they need to be strong in at their current class level ({year}) and what foundational concepts they must master to eventually achieve their dream career.
+- Include advice on how to align their school studies and any target exams with their dream career.
+"""
+    elif "sem" in year_lower or "year" in year_lower or "college" in year_lower or "degree" in year_lower or "b.tech" in year_lower or "m.tech" in year_lower or "mba" in year_lower or "msc" in year_lower or "bsc" in year_lower or "mbbs" in year_lower:
+        tailoring_instruction = f"""
+- The student is in COLLEGE (specifically {year} for {branch}).
+- Tailor the early stages to their specific degree and year/semester ({year}). Specify the exact college subjects, core academic courses, and university projects they should focus on to align with their dream career.
+- If their college major/branch ({branch}) is different from their dream career, specify how they should balance their college curriculum while self-studying or transitioning/pivoting in the early stages.
+"""
+    else:
+        tailoring_instruction = f"""
+- The student is a SELF-LEARNER or WORKING professional.
+- Focus the first stages on leveraging their existing background in {branch} and bridging the gap between their current skills and the skills required for the dream career.
+"""
+
+    return f"""Create a detailed 6-stage career roadmap for a student whose dream career is to become a {dream}. The student's current education level is {year} and their current field/branch of study is {branch}.{language_instruction}
+
+STUDENT PROFILE:
+- Dream Career: {dream}
+- Current Education Level: {year}
+- Current Field/Branch of Study: {branch}
+
+{context_section}
+
+REQUIREMENTS:
+1. Generate EXACTLY 6 progressive stages from their current level ({year} in {branch}) to successfully landing a role as a {dream}.
+2. TAILOR THE ROADMAP STAGES & FOUNDATION TO THEIR CURRENT EDUCATIONAL STAGE:
+{tailoring_instruction}
+3. Ensure the roadmap is highly accurate and practical for {dream}.
+   - Focus on Target Career: Base the roadmap stages, subjects, concepts, and skills strictly on the target dream career ({dream}). If the target career is unrelated to their current branch of study ({branch}), do NOT include subjects, tools, or concepts from {branch}. Focus exclusively on the requirements of the target career {dream}.
+   - Note on terminology: If the target career is 'Doctor', 'Physician', or a medical practitioner, this refers EXCLUSIVELY to a medical doctor (e.g., MBBS, MD, DO) practicing medicine. Under no circumstances should you generate an academic PhD or academic doctoral program roadmap unless the career is explicitly specified as a PhD/academic doctorate.
+   - Cross-Disciplinary Transition handling: If the student is transitioning from an unrelated current field/branch (e.g. Mathematics, Computer Science, AI, Engineering) to a completely different field (e.g. Medicine/Doctor, Law, Creative Arts), the roadmap MUST focus on the transition/pivot process in the early stages.
+4. Each stage MUST have:
+   - Minimum 10 highly specific subjects/topics (e.g., "Organic Chemistry", "Linear Algebra", "Pediatric Medicine" — do NOT use generic titles like "Chemistry" or "Core Concepts").
+   - 4-6 specific learnable items/concepts in the 'concepts' array that map directly to checkboxes for student progress (e.g., "Learn vector spaces", "Identify anatomic structures").
+   - 6 skills, 3 projects, 100+ word description.
+5. Use real professional tools, technologies, methodologies, and frameworks specific to {dream}.
+6. Realistic durations for a student at the {year} level to transition.
+
+OUTPUT INSTRUCTIONS - CRITICAL:
+- Return ONLY valid JSON object. Start with {{ and end with }}.
+- NO markdown code blocks. NO explanatory text before or after.
+- NO wrapping. NO backticks. Just the raw JSON object.
+- All strings must use double quotes and be properly escaped.
+
+Match this EXACT structure:
+{ROADMAP_SCHEMA}"""
+
+
+def _parse_roadmap_json(raw: str, dream: str) -> Optional[dict]:
+    """Parse roadmap JSON with multiple recovery strategies."""
+    if not raw or len(raw.strip()) < 10:
+        print(f"[JSON] Input too short or empty (len={len(raw.strip()) if raw else 0})")
+        return None
+    
+    print(f"[JSON] Attempting to parse {len(raw)} char response...")
+    
+    # Use robust JSON repair and parsing utility
+    parsed = try_parse_json(raw)
+    
+    if parsed and isinstance(parsed, dict) and "stages" in parsed and len(parsed["stages"]) > 0:
+        print(f"[JSON] [OK] Successfully parsed roadmap with {len(parsed['stages'])} stages")
+        return parsed
+    
+    # Additional fallback: Manual extraction of the main JSON object
+    if not parsed:
+        print(f"[JSON] Trying manual extraction of JSON object...")
+        text = raw.strip()
+        try:
+            start_idx = text.find('{')
+            end_idx = text.rfind('}')
+            if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                json_str = text[start_idx:end_idx + 1]
+                # Try to repair the extracted JSON
+                repaired = repair_json_string(json_str)
+                parsed = json.loads(repaired)
+                if isinstance(parsed, dict) and "stages" in parsed and len(parsed["stages"]) > 0:
+                    print(f"[JSON] [OK] Successfully extracted and repaired JSON")
+                    return parsed
+        except Exception as e:
+            print(f"[JSON] Manual extraction failed: {e}")
+    
+    print(f"[JSON] [ERROR] Failed to parse JSON. Raw (first 400): {raw[:400]}")
+    return None
+
+
+def _normalize_stage(stage: dict, index: int) -> dict:
+    def to_list(val) -> list:
+        if not val: return []
+        if isinstance(val, list): return [str(v).strip() for v in val if v]
+        if isinstance(val, str): return [v.strip() for v in re.split(r'[,;|\n]', val) if v.strip()]
+        return []
+    subjects = to_list(stage.get("subjects"))
+    concepts = to_list(stage.get("concepts"))
+    if not concepts:
+        concepts = subjects
+    return {
+        "id": stage.get("id") or f"stage-{index + 1}",
+        "title": stage.get("title") or f"Stage {index + 1}",
+        "description": stage.get("description") or "",
+        "duration": stage.get("duration") or "8-12 weeks",
+        "subjects": subjects,
+        "concepts": concepts,
+        "skills": to_list(stage.get("skills")),
+        "projects": to_list(stage.get("projects")),
+        "resources": stage.get("resources") if isinstance(stage.get("resources"), list) else [],
+    }
+
+
+async def generate_roadmap(dream: str, year: str, branch: str, crawled_content: str, language: str = "en") -> dict:
+    """Generate a career roadmap using cloud Gemma4 (OpenRouter → Groq → Gemini)."""
+    # Career disambiguation mapping
+    dream_clean = dream.strip().lower()
+    normalized_dream = dream
+    disambiguation = {
+        "doctor": "Medical Doctor (Physician)",
+        "medical doctor": "Medical Doctor (Physician)",
+        "gp": "General Practitioner (Medical Doctor)",
+        "physician": "Medical Doctor (Physician)",
+        "surgeon": "General Surgeon (Medical Doctor)",
+        "dentist": "Dentist (Dental Surgeon)",
+        "nurse": "Registered Nurse (Healthcare)",
+        "lawyer": "Lawyer (Attorney/Legal Practitioner)",
+        "advocate": "Advocate (Legal Practitioner)",
+    }
+    if dream_clean in disambiguation:
+        normalized_dream = disambiguation[dream_clean]
+
+    user_prompt = _build_prompt(normalized_dream, year, branch, crawled_content, language)
+    print(f"[Roadmap] Starting generation for: {normalized_dream} (original: {dream}) | {year} | {branch}")
+    print(f"[Roadmap] Prompt size: {len(user_prompt)} chars | Context: {len(crawled_content)} chars")
+    
+    # Keep system instruction separate to prevent instruction echo
+    system_prompt = f"You are an elite career mentor. Return ONLY a raw JSON object matching this exact schema. Do NOT wrap in markdown. {ROADMAP_SCHEMA}"
+    messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+    
+    print(f"[Roadmap] Calling LLM with max_tokens=3500, json_mode=True...")
+    try:
+        raw_response = await _call_llm_chat(messages, max_tokens=3500, temperature=0.15, json_mode=True, force_cloud=True)
+        print(f"[Roadmap] LLM response received: {len(raw_response)} chars")
+    except Exception as e:
+        print(f"[Roadmap] LLM call failed: {e}")
+        raise RuntimeError(f"Failed to call LLM: {e}")
+    
+    print(f"[Roadmap] Parsing JSON response...")
+    parsed = _parse_roadmap_json(raw_response, normalized_dream)
+
+    if not parsed:
+        print(f"[Roadmap] [-] JSON parsing failed. Response preview: {raw_response[:200]}...")
+        raise RuntimeError(
+            "LLM returned invalid JSON format. The response could not be parsed. "
+            "This may be a temporary issue with the API. Please try again."
+        )
+
+    roadmap = {
+        "dream": parsed.get("dream") or normalized_dream,
+        "summary": parsed.get("summary") or f"Your personalized roadmap to become a {normalized_dream}.",
+        "stages": [_normalize_stage(s, i) for i, s in enumerate(parsed.get("stages", []))],
+    }
+    if not roadmap["stages"]:
+        print(f"[Roadmap] [-] Parsed JSON but no stages found")
+        raise RuntimeError("LLM returned roadmap with no stages. Please try again.")
+
+    print(f"[Roadmap] [OK] Successfully generated roadmap with {len(roadmap['stages'])} stages")
+    return roadmap
+
+
+# ──────────────────────────────────────────────
+# Smart Task Generation
+# ──────────────────────────────────────────────
+async def generate_tasks(dream: str, current_stage: str, subjects: list[str], count: int = 5) -> list[dict]:
+    subjects_str = ", ".join(subjects) if subjects else dream
+    try:
+        system_prompt = "You are an expert educator tasked with generating daily tasks."
+        user_prompt = f"Create exactly {count} actionable daily tasks for a student studying to become a {dream}, currently at stage: '{current_stage}'.\nTheir current topics: {subjects_str}.\n\nTasks must be balanced: theory, hands-on, and review.\nReturn ONLY valid JSON array with exactly {count} objects:\n[{{\"title\": \"Specific actionable task\", \"type\": \"theory|hands-on|review\"}}]"
+        messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+        raw = await _call_llm_chat(messages, max_tokens=800, temperature=0.2, json_mode=True, force_cloud=True)
+        try:
+            parsed = json.loads(raw.strip())
+        except json.JSONDecodeError:
+            match = re.search(r'\[[\s\S]*\]', raw)
+            parsed = json.loads(match.group(0)) if match else []
+        if isinstance(parsed, list) and len(parsed) > 0:
+            print(f"[LLM] Generated {len(parsed)} smart tasks")
+            return parsed
+    except Exception as e:
+        print(f"[LLM] Failed to generate smart tasks: {e}")
+    return []
+
+
+# ──────────────────────────────────────────────
+# Smart Quiz Generation
+# ──────────────────────────────────────────────
+async def generate_quiz(subject: str, tasks: list[str], stage_desc: str = "", stage_concepts: list[str] = [],
+                         difficulty: str = "beginner/foundational", quiz_number: int = 1,
+                         previous_questions: list[str] = []) -> list[dict]:
+    tasks_bullet = "\n".join(f"- {t}" for t in tasks) if tasks else f"- {subject} fundamentals"
+    concepts_str = ", ".join(stage_concepts) if stage_concepts else ""
+
+    # Build an explicit exclusion block to prevent repeat questions
+    exclusion_block = ""
+    if previous_questions:
+        numbered = "\n".join(f"{i+1}. {q}" for i, q in enumerate(previous_questions))
+        exclusion_block = (
+            f"\n\nCRITICAL — NEVER repeat any of these questions already shown to the student:\n"
+            f"{numbered}\n"
+            f"You MUST generate COMPLETELY DIFFERENT questions that test DIFFERENT aspects of the tasks above."
+        )
+
+    advanced_note = (
+        f"This is Quiz Round #{quiz_number}. IMPORTANT: Do NOT repeat questions from previous rounds. "
+        f"Make questions significantly more {difficulty} — go deeper, test real-world application and edge cases."
+        if quiz_number > 1 else ""
+    )
+
+    # Higher temperature on subsequent rounds injects more lexical variety
+    quiz_temperature = 0.7 if quiz_number == 1 else min(0.95, 0.7 + (quiz_number - 1) * 0.08)
+
+    try:
+        system_prompt = (
+            "You are an expert academic examiner. "
+            "Create quiz questions STRICTLY based on the provided completed tasks list. "
+            "Do NOT add questions about topics not mentioned in those tasks. "
+            "Each question must be unique — never repeat a question that was already shown. "
+            "Return ONLY a valid JSON array."
+        )
+        user_prompt = (
+            f"Generate a 10-question MCQ quiz STRICTLY based on these tasks the student completed today:\n"
+            f"{tasks_bullet}\n\n"
+            f"Subject: {subject}\n"
+            f"Stage context: {stage_desc[:500]}\n"
+            f"Key concepts: {concepts_str}\n"
+            f"Difficulty level: {difficulty}\n"
+            f"{advanced_note}\n"
+            f"{exclusion_block}\n\n"
+            f"Rules:\n"
+            f"- Every question MUST test knowledge from the completed tasks listed above\n"
+            f"- Do NOT ask about topics not covered in those tasks\n"
+            f"- Each question needs exactly 4 options\n"
+            f"- correctAnswer is the 0-based index of the correct option\n"
+            f"- Include a clear explanation for why the correct answer is right\n"
+            f"- Questions must be practical and test real understanding, NOT trivial recall\n\n"
+            f"Return ONLY a JSON array of 10 objects: "
+            f"[{{\"question\": \"...\", \"options\": [\"...\"], \"correctAnswer\": 0, \"explanation\": \"...\"}}]"
+        )
+        messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+        raw = await _call_llm_chat(messages, max_tokens=2500, temperature=quiz_temperature, json_mode=True)
+        raw = raw.strip()
+        if raw.startswith('```'):
+            raw = re.sub(r'^```[a-zA-Z]*\n', '', raw)
+            raw = re.sub(r'\n```$', '', raw).strip()
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            match = re.search(r'\[[\s\S]*\]', raw)
+            parsed = json.loads(match.group(0)) if match else []
+        if isinstance(parsed, list) and len(parsed) >= 1:
+            print(f"[LLM] Generated {len(parsed)} quiz questions at difficulty: {difficulty} (round {quiz_number}, temp={quiz_temperature:.2f})")
+            return parsed[:10]
+    except Exception as e:
+        print(f"[LLM] Failed to generate quiz: {e}")
+    raise RuntimeError("Failed to generate quiz.")
+
+
+
+# ──────────────────────────────────────────────
+def clean_mentor_response(text: str) -> str:
+    """
+    Strips internal thinking/planning templates that Gemma 4 IT models sometimes output.
+    """
+    if not ("* User:" in text or "*   User:" in text or "* Dream:" in text or "*   Dream:" in text):
+        return text
+
+    lines = text.split("\n")
+    cleaned_paragraphs = []
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        # Match pattern: * *Paragraph 1: Title* Content OR * *Greeting:* Content
+        match = re.match(r'^\*+\s*\*+(Paragraph\s+\d+|Greeting|Advice\s+\d+|Intro|Outro|Introduction|Conclusion)[^*]*\*+[:\s\-\.]*(.*)$', stripped, re.IGNORECASE)
+        if match:
+            content = match.group(2).strip()
+            if content:
+                cleaned_paragraphs.append(content)
+            continue
+
+        # Try a simpler match without double bold: e.g. * Paragraph 1: Content
+        match_simple = re.match(r'^\*+\s*(Paragraph\s+\d+|Greeting|Advice\s+\d+|Intro|Outro|Introduction|Conclusion)[:\s\-\.]+(.*)$', stripped, re.IGNORECASE)
+        if match_simple:
+            content = match_simple.group(2).strip()
+            if content:
+                cleaned_paragraphs.append(content)
+            continue
+
+    if cleaned_paragraphs:
+        return "\n\n".join(cleaned_paragraphs)
+
+    return text
+
+
+# AI Mentor Chat
+# ──────────────────────────────────────────────
+async def chat_mentor(user_profile: dict, messages: list[dict], new_message: str,
+                      attachment_base64: str = "", attachment_type: str = "", language: str = "en") -> str:
+    dream = user_profile.get("dream", "a great career")
+    year = user_profile.get("year", "student")
+    branch = user_profile.get("branch", "general studies")
+    stage_idx = user_profile.get("currentStageIndex", 0) + 1
+    lang_name = LANGUAGE_NAMES.get(language, "English")
+
+    language_instruction = (
+        f"\nIMPORTANT: Always respond in {lang_name} language."
+        if language != "en" else ""
+    )
+
+    system_prompt = f"""You are Kalam Spark, a friendly and encouraging AI career mentor.
+Student: {user_profile.get('name', 'Student')}, Dream: {dream}, Education: {year}, Branch: {branch}, Stage: {stage_idx}.{language_instruction}
+
+- Be warm and supportive. 
+- Respond NATURALLY to simple greetings (say hello back — do NOT generate a huge roadmap).
+- Keep responses focused and practical (2-3 paragraphs max).
+- Never use markdown headers. Use **bold** for emphasis.
+- Under NO circumstances should you assist with, encourage, or provide advice on illegal, harmful, dangerous, or unsafe activities (such as theft, crime, drugs, hacking/malware, violence, etc.). If asked about these, politely explain that you are a career mentor designed for legal, safe, and positive career guidance."""
+
+    chat_messages = [{"role": "system", "content": system_prompt}]
+
+    for msg in messages:
+        if "role" in msg and "text" in msg:
+            role = "assistant" if msg["role"] == "ai" else "user"
+            chat_messages.append({"role": role, "content": msg["text"]})
+
+    content = new_message
+    att_b64 = ""
+    att_type = ""
+
+    if attachment_base64:
+        if "word" in attachment_type or "msword" in attachment_type or attachment_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            # Word document (.docx/.doc) — extract plain text on backend using python-docx
+            try:
+                import base64
+                from file_speaker import extract_text_from_file
+                file_bytes = base64.b64decode(attachment_base64)
+                extracted_text = extract_text_from_file("document.docx", file_bytes)
+                doc_text = extracted_text[:8000]
+                content = f"[Attached Word Document]:\n{doc_text}\n\n---\nUser: {new_message}"
+            except Exception as e:
+                print(f"[LLM] Word document extraction failed: {e}")
+                content = f"[Attached Word Document (Extraction failed)]: {e}\n\n---\nUser: {new_message}"
+
+        elif attachment_type in ("text", "text/plain"):
+            # Plain text / CSV / Markdown — embed inline in message
+            doc_text = attachment_base64[:8000]
+            content = f"[Attached document]:\n{doc_text}\n\n---\nUser: {new_message}"
+
+        elif attachment_type.startswith("image/") or attachment_type.startswith("video/"):
+            # Images and video frames (sent as image/jpeg from frontend)
+            att_b64 = attachment_base64
+            att_type = attachment_type
+            if not content:
+                content = "Please analyze this image."
+
+        elif attachment_type == "application/pdf":
+            # PDF — pass as multimodal inlineData if model supports it, else extract text hint
+            att_b64 = attachment_base64
+            att_type = "application/pdf"
+            if not content:
+                content = "Please analyze this PDF document and summarise the key points."
+
+        elif attachment_type.startswith("audio/"):
+            # Audio file — pass as multimodal inlineData
+            att_b64 = attachment_base64
+            att_type = attachment_type
+            if not content:
+                content = "Please transcribe or summarise this audio file."
+
+    chat_messages.append({"role": "user", "content": content})
+
+    try:
+        reply = await _call_llm_chat(chat_messages, max_tokens=1500, temperature=0.7, 
+                                     attachment_b64=att_b64, attachment_type=att_type)
+        print(f"[LLM] Chat mentor response: {len(reply)} chars")
+        return clean_mentor_response(reply)
+    except Exception as e:
+        print(f"[LLM] Chat mentor failed: {e}")
+        raise
+
+
+# ──────────────────────────────────────────────
+# Career Pivot Analysis
+# ──────────────────────────────────────────────
+async def analyze_career_pivot(current_dream: str, new_dream: str, branch: str, year: str, current_skills: str) -> dict:
+    try:
+        system_prompt = "You are a Career Transition Architect with deep knowledge of the Indian job market."
+        user_prompt = f"A student wants to pivot from {current_dream} to {new_dream}. Branch: {branch}, Skills: {current_skills}.\nReturn ONLY valid JSON with transferPercentage, transferableSkills, biggestGap, marketDemand, timeToTransition, and bridgePlan."
+        messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+        raw = await _call_llm_chat(messages, max_tokens=1200, temperature=0.25, json_mode=True, force_cloud=True)
+        if raw.startswith('```'):
+            raw = re.sub(r'^```[a-zA-Z]*\n', '', raw)
+            raw = re.sub(r'\n```$', '', raw).strip()
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            match = re.search(r'\{[\s\S]*\}', raw)
+            parsed = json.loads(match.group(0)) if match else None
+        required = ["transferPercentage", "transferableSkills", "bridgePlan"]
+        if parsed and isinstance(parsed, dict) and all(k in parsed for k in required):
+            print(f"[LLM] Career pivot: {parsed.get('transferPercentage')}% transfer")
+            return parsed
+    except Exception as e:
+        print(f"[LLM] Career pivot failed: {e}")
+
+    return {
+        "transferPercentage": 45,
+        "transferableSkills": ["Problem Solving", "Research Skills", "Self-Learning"],
+        "biggestGap": f"Transitioning from {current_dream} to {new_dream} requires specialized domain knowledge.",
+        "marketDemand": f"{new_dream} roles are growing in India with increasing demand.",
+        "timeToTransition": "6-12 months with consistent effort",
+        "bridgePlan": [
+            {"title": "Foundation Learning", "action": f"Start with free courses on NPTEL or Coursera covering core concepts of {new_dream}."},
+            {"title": "Build Projects", "action": f"Create 2-3 portfolio projects demonstrating {new_dream} skills. Share on GitHub and LinkedIn."},
+            {"title": "Network & Apply", "action": f"Join {new_dream} communities on LinkedIn, attend meetups, and apply on Internshala."}
+        ]
+    }
+
+
+# ──────────────────────────────────────────────
+# Opportunity Scanner
+# ──────────────────────────────────────────────
+async def generate_opportunities(dream: str, branch: str, year: str, current_skills: str, stage_index: int) -> list:
+    PLATFORM_URLS = {
+        "linkedin": f"https://www.linkedin.com/jobs/search/?keywords={dream.replace(' ', '+')}&location=India&f_E=1",
+        "internshala": f"https://internshala.com/internships/{dream.lower().replace(' ', '-')}-internship",
+        "naukri": f"https://www.naukri.com/{dream.lower().replace(' ', '-')}-jobs",
+        "unstop": f"https://unstop.com/hackathons?search={dream.replace(' ', '+')}",
+        "devpost": f"https://devpost.com/hackathons?search={dream.replace(' ', '+')}",
+        "sih": "https://www.sih.gov.in/",
+        "freelancer": f"https://www.freelancer.in/jobs/{dream.lower().replace(' ', '-')}/",
+        "google": f"https://www.google.com/search?q={dream.replace(' ', '+')}+internship+OR+hackathon+India+2025",
+    }
+    try:
+        system_prompt = "You are an Opportunity Scanner AI for Indian students in 2025."
+        user_prompt = f"Find 6 realistic opportunities for a student with dream career '{dream}'. Branch: {branch}, Stage: {stage_index+1}.\nReturn ONLY a JSON array of objects with: type, title, company, location, requiredSkills, matchPercentage, actionText, platform."
+        messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+        raw = await _call_llm_chat(messages, max_tokens=1800, temperature=0.4, json_mode=True, force_cloud=True)
+        raw = raw.strip()
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            match = re.search(r'\[[\s\S]*\]', raw)
+            parsed = json.loads(match.group(0)) if match else None
+        if isinstance(parsed, list) and len(parsed) > 0:
+            for opp in parsed:
+                platform = opp.get("platform", "google").lower()
+                opp["searchUrl"] = PLATFORM_URLS.get(platform, PLATFORM_URLS["google"])
+            print(f"[LLM] Generated {len(parsed)} opportunities")
+            return parsed
+        elif isinstance(parsed, dict):
+            items = parsed.get("items", parsed.get("opportunities", []))
+            if items:
+                for opp in items:
+                    opp["searchUrl"] = PLATFORM_URLS.get(opp.get("platform", "google"), PLATFORM_URLS["google"])
+                return items
+    except Exception as e:
+        print(f"[LLM] Opportunity scan failed: {e}")
+
+    return [
+        {"type": "Internship", "title": f"{dream} Intern", "company": "Internshala Partner Companies", "location": "Remote / Pan India", "requiredSkills": [branch or "Communication", "Eagerness to Learn", "Domain Knowledge"], "matchPercentage": 85, "actionText": "Apply on Internshala", "platform": "internshala", "searchUrl": PLATFORM_URLS["internshala"]},
+        {"type": "Hackathon", "title": "Smart India Hackathon 2025", "company": "Ministry of Education, Govt. of India", "location": "Pan India", "requiredSkills": ["Teamwork", "Innovation", "Problem Solving"], "matchPercentage": 90, "actionText": "Register on SIH Portal", "platform": "sih", "searchUrl": PLATFORM_URLS["sih"]},
+        {"type": "Hackathon", "title": f"{dream} Innovation Challenge", "company": "Unstop Community", "location": "Online", "requiredSkills": ["Creativity", branch or "Research", "Presentation"], "matchPercentage": 88, "actionText": "Browse on Unstop", "platform": "unstop", "searchUrl": PLATFORM_URLS["unstop"]},
+        {"type": "Job", "title": f"Entry-Level {dream}", "company": "Naukri Listed Startups", "location": "Bangalore / Delhi / Remote", "requiredSkills": ["Domain Knowledge", "Communication", "Problem Solving"], "matchPercentage": 78, "actionText": "Search on Naukri", "platform": "naukri", "searchUrl": PLATFORM_URLS["naukri"]},
+        {"type": "Internship", "title": f"Junior {dream} Trainee", "company": "LinkedIn Partner Companies", "location": "India (Multiple Cities)", "requiredSkills": ["Fresher Friendly", "Domain Basics", "Communication"], "matchPercentage": 82, "actionText": "Apply on LinkedIn", "platform": "linkedin", "searchUrl": PLATFORM_URLS["linkedin"]},
+        {"type": "Freelance", "title": f"Freelance {dream} Projects", "company": "Freelancer.in", "location": "Online", "requiredSkills": ["Portfolio", "Self-Management", "Communication"], "matchPercentage": 74, "actionText": "Browse Projects", "platform": "freelancer", "searchUrl": PLATFORM_URLS["freelancer"]},
+    ]
+
+
+# ──────────────────────────────────────────────
+# Health check (no longer needs Ollama)
+# ──────────────────────────────────────────────
+async def check_ollama() -> dict:
+    """Returns cloud AI status + checks if local Ollama is available."""
+    providers = []
+    if OPENROUTER_API_KEY:
+        providers.append("OpenRouter (Gemma 4 31B / 26B)")
+    if GEMINI_API_KEY:
+        providers.append("Google AI Studio (Gemma 4 31B)")
+
+    # Check local Ollama availability
+    ollama_local = {"running": False, "model_available": False}
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get(f"{OLLAMA_BASE_URL}/api/tags")
+            if resp.status_code == 200:
+                models = resp.json().get("models", [])
+                model_names = [m.get("name", "") for m in models]
+                has_gemma4 = any("gemma4" in n.lower() or "gemma" in n.lower() for n in model_names)
+                ollama_local = {"running": True, "model_available": has_gemma4, "models": model_names}
+                if has_gemma4:
+                    providers.append(f"Ollama (local: {OLLAMA_MODEL})")
+    except Exception:
+        pass  # Ollama not running locally — that's fine
+
+    return {
+        "running": len(providers) > 0,
+        "model_available": len(providers) > 0,
+        "model_name": "Gemma4 (Cloud + Local fallback)",
+        "providers": providers,
+        "mode": "cloud+local",
+        "ollama_local": ollama_local,
+    }
+
+
+# ──────────────────────────────────────────────
+# Dream Discovery
+# ──────────────────────────────────────────────
+async def discover_dream_careers(interests: str, personality: str, language: str = "en") -> list:
+    """Uses the AI model to suggest 12 career paths based on user answers."""
+    try:
+        system_prompt = "You are an expert career counselor. Return only valid JSON. Use exactly the field names 'dream', 'description', and 'subjects'."
+        user_prompt = (
+            f"Suggest exactly 12 ideal career paths for this student.\n"
+            f"Interests: {interests}\n"
+            f"Personality: {personality}\n\n"
+            f"Return ONLY a JSON array of exactly 12 objects. Each object MUST have:\n"
+            f"  'dream': concise career title (string, e.g. 'Software Engineer', 'Robotics Engineer', 'Intellectual Property Lawyer'). Under NO circumstances should this be a sentence, description, or action phrase.\n"
+            f"  'description': short 1-2 sentence description explaining the career or why it matches the student.\n"
+            f"  'subjects': array of exactly 3 key skills/subjects (strings)\n\n"
+            f"Example:\n"
+            f'[{{"dream": "Software Engineer", "description": "Design and build software applications and systems using code.", "subjects": ["Python", "Data Structures", "System Design"]}}, ...]\n\n'
+            f"No markdown, no explanation — only the raw JSON array."
+        )
+        messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+        response = await _call_llm_chat(messages, max_tokens=2000, temperature=0.7, json_mode=True, force_cloud=True)
+
+        # ── Parse JSON ──
+        parsed = None
+        # Try direct array match first
+        arr_match = re.search(r'\[\s*\{.*\}\s*\]', response, re.DOTALL)
+        if arr_match:
+            parsed = json.loads(arr_match.group(0))
+        else:
+            parsed = json.loads(response)
+
+        # Unwrap if model returned {"careers": [...]} or similar
+        if isinstance(parsed, dict):
+            for val in parsed.values():
+                if isinstance(val, list) and len(val) > 0:
+                    parsed = val
+                    break
+
+        # ── Normalize field names ──
+        # Some models use title/name/career instead of dream, or skills/tags instead of subjects
+        def _normalize_career(item: dict) -> dict:
+            dream_val = (
+                item.get("dream") or item.get("title") or item.get("name") or
+                item.get("career") or item.get("career_title") or ""
+            )
+            description_val = (
+                item.get("description") or item.get("summary") or item.get("desc") or
+                f"A rewarding career path in {dream_val}."
+            )
+            subjects_val = (
+                item.get("subjects") or item.get("skills") or item.get("tags") or
+                item.get("key_subjects") or []
+            )
+            if isinstance(subjects_val, str):
+                subjects_val = [s.strip() for s in subjects_val.split(",") if s.strip()]
+            return {
+                "dream": str(dream_val).strip(),
+                "description": str(description_val).strip(),
+                "subjects": list(subjects_val)[:3]
+            }
+
+        if isinstance(parsed, list) and len(parsed) > 0:
+            normalized = [_normalize_career(c) for c in parsed if isinstance(c, dict)]
+            valid = [c for c in normalized if c["dream"]]  # drop empty dream fields
+            if valid:
+                print(f"[LLM] Dream discovery: {len(valid)} careers returned")
+                return valid
+
+        raise ValueError(f"LLM returned valid JSON but not a usable list of careers (len={len(parsed) if isinstance(parsed, list) else 'N/A'})")
+
+    except Exception as e:
+        print(f"[LLM] discover_dream_careers failed: {e}")
+        # 12-item fallback so UI always has something to show
+        return [
+            {"dream": "Software Engineer",      "description": "Design and build software applications and systems using code.", "subjects": ["Computer Science", "Logic", "Math"]},
+            {"dream": "Data Scientist",          "description": "Analyze complex data sets to discover patterns and drive decision-making.", "subjects": ["Statistics", "Programming", "Analysis"]},
+            {"dream": "Product Manager",         "description": "Lead the product lifecycle from conception to launch, aligning business goals.", "subjects": ["Leadership", "Design", "Business"]},
+            {"dream": "UI/UX Designer",          "description": "Create intuitive and visually appealing user interfaces and experiences.", "subjects": ["Visual Design", "User Research", "Prototyping"]},
+            {"dream": "Digital Marketer",        "description": "Promote products or brands using digital channels and marketing strategies.", "subjects": ["SEO", "Content Strategy", "Analytics"]},
+            {"dream": "Cybersecurity Analyst",   "description": "Protect an organization's systems, networks, and data from digital attacks.", "subjects": ["Network Security", "Cryptography", "Risk Assessment"]},
+            {"dream": "Cloud Architect",         "description": "Design and manage cloud computing architecture and infrastructure.", "subjects": ["AWS/Azure", "DevOps", "Infrastructure"]},
+            {"dream": "Business Analyst",        "description": "Analyze business processes and requirements to improve efficiency.", "subjects": ["Data Modeling", "Requirements", "Communication"]},
+            {"dream": "Full Stack Developer",    "description": "Develop both client-side and server-side software components.", "subjects": ["Frontend", "Backend", "Database"]},
+            {"dream": "AI Engineer",             "description": "Build intelligent systems and models using machine learning algorithms.", "subjects": ["Machine Learning", "Neural Networks", "Python"]},
+            {"dream": "Content Creator",         "description": "Produce engaging digital content across video, audio, and text platforms.", "subjects": ["Storytelling", "Video Editing", "Marketing"]},
+            {"dream": "Financial Analyst",       "description": "Evaluate financial data and trends to guide business investment decisions.", "subjects": ["Accounting", "Investment", "Reporting"]},
+        ]
+
+
+async def generate_career_summary(dream: str, branch: str, year: str, language: str = "en") -> str:
+    """Generate a highly specific 3-sentence career summary."""
+    lang_name = LANGUAGE_NAMES.get(language, "English")
+    try:
+        system_prompt = "You are a concise career summary writer."
+        user_prompt = f"Write an inspiring career overview for a {dream} (focusing on {branch} for a {year} student) in {lang_name}.\nOutput ONLY a JSON object with keys 'sentence1', 'sentence2', 'sentence3'."
+        messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+        response = await _call_llm_chat(messages, max_tokens=600, temperature=0.3, json_mode=True)
+        raw = response.strip()
+        try:
+            if raw.startswith('```'):
+                raw = re.sub(r'^```[a-zA-Z]*\n', '', raw)
+                raw = re.sub(r'\n```$', '', raw).strip()
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict) and "sentence1" in parsed and "sentence2" in parsed and "sentence3" in parsed:
+                s1 = str(parsed["sentence1"]).strip()
+                s2 = str(parsed["sentence2"]).strip()
+                s3 = str(parsed["sentence3"]).strip()
+                s1 = s1 if s1.endswith(('.', '!', '?')) else s1 + '.'
+                s2 = s2 if s2.endswith(('.', '!', '?')) else s2 + '.'
+                s3 = s3 if s3.endswith(('.', '!', '?')) else s3 + '.'
+                return f"{s1} {s2} {s3}"
+        except Exception:
+            pass
+        # fallback plain text handling
+        text = response.strip()
+        text = re.sub(r'[\*\-\#]', '', text)
+        text = re.sub(r'(?i)constraint \d+:', '', text)
+        text = re.sub(r'\n+', ' ', text)
+        text = re.sub(r'\s{2,}', ' ', text)
+        return text.strip()
+    except Exception as e:
+        print(f"Error in generate_career_summary: {e}")
+        # Career-specific fallbacks
+        d = dream.lower()
+        if "engineer" in d or "developer" in d:
+            return f"A {dream} designs and builds technical solutions that solve complex real-world problems through code and logic. You will spend your days writing high-quality code, debugging systems, and collaborating with teams on platforms like GitHub. Your main duties include architecting software features, optimizing performance, and ensuring system reliability."
+        if "doctor" in d or "health" in d:
+            return f"A {dream} is a dedicated healthcare provider who diagnoses illnesses and promotes wellness in their community. Your daily work involves clinical examinations, analyzing patient data, and coordinating care with other medical professionals. Your core responsibilities are accurate diagnosis, treatment planning, and patient education."
+        if "designer" in d or "artist" in d:
+            return f"A {dream} transforms abstract ideas into compelling visual experiences that communicate meaning and inspire action. You will work daily with tools like Figma or Adobe Creative Cloud, conducting user research and iterating on design prototypes. Your key roles are creating intuitive interfaces, maintaining brand consistency, and solving visual problems."
+        
+        return f"A {dream} is a specialized professional who applies expert knowledge in {branch} to drive innovation and impact. Daily work involves using industry-specific tools to solve unique challenges and collaborating with peers to reach project goals. Your critical responsibilities include strategic planning, execution of core tasks, and delivering high-quality results."
+    except Exception as e:
+        print(f"Error in generate_career_summary: {e}")
+        # Career-specific fallbacks
+        d = dream.lower()
+        if "engineer" in d or "developer" in d:
+            return f"A {dream} designs and builds technical solutions that solve complex real-world problems through code and logic. You will spend your days writing high-quality code, debugging systems, and collaborating with teams on platforms like GitHub. Your main duties include architecting software features, optimizing performance, and ensuring system reliability."
+        if "doctor" in d or "health" in d:
+            return f"A {dream} is a dedicated healthcare provider who diagnoses illnesses and promotes wellness in their community. Your daily work involves clinical examinations, analyzing patient data, and coordinating care with other medical professionals. Your core responsibilities are accurate diagnosis, treatment planning, and patient education."
+        if "designer" in d or "artist" in d:
+            return f"A {dream} transforms abstract ideas into compelling visual experiences that communicate meaning and inspire action. You will work daily with tools like Figma or Adobe Creative Cloud, conducting user research and iterating on design prototypes. Your key roles are creating intuitive interfaces, maintaining brand consistency, and solving visual problems."
+        
+        return f"A {dream} is a specialized professional who applies expert knowledge in {branch} to drive innovation and impact. Daily work involves using industry-specific tools to solve unique challenges and collaborating with peers to reach project goals. Your critical responsibilities include strategic planning, execution of core tasks, and delivering high-quality results."
+
+
+async def generate_career_description_llm(dream: str) -> dict:
+    """
+    Generate detailed, career-specific description using cloud LLM.
+    Returns:
+        dict with keys: overview, roles, required_skills, market_outlook, salary_range, growth, tips
+    """
+    try:
+        system_prompt = (
+            "You are an expert career guidance counselor. Return only valid JSON. "
+            "Under NO circumstances should you include markdown formatting, backticks, or explanation text."
+        )
+        user_prompt = (
+            f"Provide a detailed, accurate career description for a '{dream}'.\n"
+            f"Format the output strictly as a JSON object with the following keys:\n"
+            f"- 'overview': A paragraph describing the day-to-day duties, environment, and purpose of the career.\n"
+            f"- 'roles': A list of 5-7 core responsibilities and daily tasks (array of strings).\n"
+            f"- 'required_skills': A list of 6-8 essential technical and soft skills (array of strings).\n"
+            f"- 'market_outlook': A short paragraph describing current demand, hiring trends, and global landscape.\n"
+            f"- 'salary_range': A string outlining early-career, mid-level, and senior-level salary estimates (e.g. in INR or USD).\n"
+            f"- 'growth': A paragraph describing typical career progression paths and specialization options.\n"
+            f"- 'tips': Practical, actionable advice for a student wanting to enter this career.\n"
+        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
+        response = await _call_llm_chat(messages, max_tokens=1500, temperature=0.3, json_mode=True)
+        raw = response.strip()
+        
+        if raw.startswith('```'):
+            raw = re.sub(r'^```[a-zA-Z]*\n', '', raw)
+            raw = re.sub(r'\n```$', '', raw).strip()
+            
+        parsed = json.loads(raw)
+        
+        required_keys = ["overview", "roles", "required_skills", "market_outlook", "salary_range", "growth", "tips"]
+        if not isinstance(parsed, dict):
+            raise ValueError("LLM response is not a JSON object")
+            
+        for key in required_keys:
+            if key not in parsed:
+                raise ValueError(f"Missing required key '{key}' in LLM response")
+                
+        return {
+            "career": dream,
+            "overview": str(parsed["overview"]).strip(),
+            "roles": [str(r).strip() for r in parsed["roles"]],
+            "required_skills": [str(s).strip() for s in parsed["required_skills"]],
+            "market_outlook": str(parsed["market_outlook"]).strip(),
+            "salary_range": str(parsed["salary_range"]).strip(),
+            "growth": str(parsed["growth"]).strip(),
+            "tips": str(parsed["tips"]).strip(),
+            "is_curated": False
+        }
+    except Exception as e:
+        print(f"Error in generate_career_description_llm: {e}")
+        raise e
+

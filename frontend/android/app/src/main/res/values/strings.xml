@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Kalam Spark</string>
+    <string name="title_activity_main">Kalam Spark</string>
+    <string name="package_name">com.kalamspark.app</string>
+    <string name="custom_url_scheme">com.kalamspark.app</string>
+</resources>

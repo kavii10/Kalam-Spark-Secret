@@ -1,0 +1,1282 @@
+
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import {
+  Rocket, GraduationCap, Briefcase, User,
+  ArrowRight, ArrowLeft, Lightbulb, Loader2, CheckCircle2, RefreshCw,
+  Zap, Target, BookOpen, Sparkles, ChevronDown, Check, AlertCircle
+} from 'lucide-react';
+import { UserProfile } from '../types';
+import DreamDiscovery from './DreamDiscovery';
+import { generateDreamSummary, fetchDetailedCareerDescription } from '../services/geminiService';
+import { isIllegalCareer } from '../services/questions';
+
+// ─── Career Taxonomy for Validation ──────────────────────────────────────────
+const CAREER_TAXONOMY: string[] = [
+  // Tech
+  'Software Engineer', 'Data Scientist', 'Machine Learning Engineer', 'AI Engineer',
+  'Web Developer', 'Full Stack Developer', 'Frontend Developer', 'Backend Developer',
+  'Mobile App Developer', 'DevOps Engineer', 'Cloud Architect', 'Cybersecurity Analyst',
+  'Game Developer', 'Blockchain Developer', 'UX Designer', 'UI Designer',
+  'Product Manager', 'Data Analyst', 'Database Administrator', 'Systems Architect',
+  // Medical
+  'Doctor', 'Surgeon', 'Dentist', 'Pharmacist', 'Nurse', 'Veterinarian',
+  'Physiotherapist', 'Psychologist', 'Psychiatrist', 'Biomedical Engineer',
+  'Medical Researcher', 'Public Health Specialist',
+  // Government / Civil Services
+  'IAS Officer', 'IPS Officer', 'IFS Officer', 'UPSC Aspirant', 'Civil Servant',
+  'District Collector', 'District Magistrate', 'Government Administrator',
+  // Engineering
+  'Mechanical Engineer', 'Civil Engineer', 'Electrical Engineer', 'Electronics Engineer',
+  'Chemical Engineer', 'Aerospace Engineer', 'Robotics Engineer', 'Environmental Engineer',
+  // Business & Finance
+  'Chartered Accountant', 'Investment Banker', 'Financial Analyst', 'Economist',
+  'Management Consultant', 'Entrepreneur', 'Business Analyst', 'Marketing Manager',
+  'Human Resources Manager', 'Supply Chain Manager',
+  // Creative & Arts
+  'Graphic Designer', 'Animator', 'Film Director', 'Photographer', 'Musician',
+  'Actor', 'Fashion Designer', 'Interior Designer', 'Architect', 'Writer', 'Journalist',
+  // Science & Research
+  'Scientist', 'Physicist', 'Chemist', 'Biologist', 'Astronomer', 'Geologist',
+  'Research Scientist', 'Environmental Scientist',
+  // Education & Law
+  'Teacher', 'Professor', 'Lawyer', 'Judge', 'Legal Advisor',
+  // Other
+  'Pilot', 'Astronaut', 'Chef', 'Sports Coach', 'Athlete', 'Social Worker',
+  'Content Creator', 'Digital Marketer', 'Ethical Hacker',
+];
+
+/** Simple Levenshtein distance for fuzzy matching */
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, (_, i) => {
+    const row = new Array(n + 1).fill(0);
+    row[0] = i;
+    return row;
+  });
+  for (let j = 1; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + (a[i - 1] !== b[j - 1] ? 1 : 0)
+      );
+  return dp[m][n];
+}
+
+/** Find the best matching career from taxonomy. Returns null if exact match or too far. */
+function findClosestCareer(input: string): string | null {
+  if (!input) return null;
+  const lower = input.trim().toLowerCase();
+  if (!lower || lower.length < 3) return null;
+
+  // Check for exact match first (case insensitive)
+  const exact = CAREER_TAXONOMY.find(c => c.toLowerCase() === lower);
+  if (exact) return null; // perfect match, no suggestion needed
+
+  // Check if any taxonomy entry contains the input or vice versa
+  const contains = CAREER_TAXONOMY.find(c =>
+    c.toLowerCase().includes(lower) || lower.includes(c.toLowerCase())
+  );
+  if (contains) return null; // close enough
+
+  // Fuzzy match
+  let best = '', bestDist = Infinity;
+  for (const career of CAREER_TAXONOMY) {
+    const dist = levenshtein(lower, career.toLowerCase());
+    const threshold = Math.max(2, Math.floor(career.length * 0.35)); // allow ~35% edits
+    if (dist < bestDist && dist <= threshold) {
+      bestDist = dist;
+      best = career;
+    }
+  }
+  return best || null;
+}
+
+/** Get autocomplete suggestions while typing */
+function getAutocompleteSuggestions(input: string, max = 5): string[] {
+  if (!input) return [];
+  const lower = input.trim().toLowerCase();
+  if (lower.length < 2) return [];
+  return CAREER_TAXONOMY
+    .filter(c => c.toLowerCase().includes(lower))
+    .slice(0, max);
+}
+
+import { t, getCurrentLang } from '../i18n';
+
+interface CustomSelectProps {
+  value: string;
+  onChange: (val: string) => void;
+  options: { label: string; value: string }[];
+  placeholder: string;
+  isLight: boolean;
+}
+
+function CustomSelect({ value, onChange, options, placeholder, isLight }: CustomSelectProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  const selectedOpt = options.find(o => o.value === value);
+
+  return (
+    <div className="relative w-full" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full rounded-xl px-4 py-3.5 text-sm transition-all outline-none text-left flex items-center justify-between"
+        style={
+          isLight
+            ? { background: '#ffffff', border: '1px solid #d1d5db', color: value ? '#111827' : '#9ca3af' }
+            : { background: '#0f172a', border: '1px solid rgba(211,156,59,0.25)', color: value ? '#fde68a' : 'rgba(211,156,59,0.3)' }
+        }
+      >
+        <span>{selectedOpt ? selectedOpt.label : placeholder}</span>
+        <ChevronDown size={16} className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} style={{ color: isLight ? '#6b7280' : '#d97706' }} />
+      </button>
+
+      {isOpen && (
+        <div
+          className="absolute z-[1000] left-0 right-0 mt-1 max-h-60 overflow-y-auto rounded-xl p-1 shadow-lg border animate-in fade-in slide-in-from-top-2 duration-150"
+          style={
+            isLight
+              ? { background: '#ffffff', borderColor: '#e5e7eb', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }
+              : { background: '#0f172a', borderColor: 'rgba(211,156,59,0.25)', boxShadow: '0 4px 25px rgba(0,0,0,0.5)' }
+          }
+        >
+          {options.map((opt) => {
+            const isSelected = opt.value === value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  onChange(opt.value);
+                  setIsOpen(false);
+                }}
+                className="w-full text-left px-4 py-3 text-sm rounded-lg transition-colors flex items-center justify-between"
+                style={
+                  isLight
+                    ? {
+                        color: isSelected ? '#111827' : '#374151',
+                        background: isSelected ? '#f3f4f6' : 'transparent',
+                      }
+                    : {
+                        color: isSelected ? '#ffffff' : '#fde68a',
+                        background: isSelected ? 'rgba(255,255,255,0.08)' : 'transparent',
+                      }
+                }
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = isLight ? '#f3f4f6' : 'rgba(255,255,255,0.05)';
+                  e.currentTarget.style.color = isLight ? '#111827' : '#ffffff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = isSelected
+                    ? (isLight ? '#f3f4f6' : 'rgba(255,255,255,0.08)')
+                    : 'transparent';
+                  e.currentTarget.style.color = isSelected
+                    ? (isLight ? '#111827' : '#ffffff')
+                    : (isLight ? '#374151' : '#fde68a');
+                }}
+              >
+                <span>{opt.label}</span>
+                {isSelected && <Check size={14} className={isLight ? 'text-purple-600' : 'text-yellow-500'} />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface OnboardingProps {
+  onComplete: (profile: Pick<UserProfile, 'name' | 'branch' | 'year' | 'dream' | 'educationLevel' | 'schoolBoard' | 'gradeOrSemester' | 'collegeName' | 'studyHoursPerDay' | 'targetYear' | 'city' | 'motivation'>) => void;
+  isLight?: boolean;
+}
+
+export default function Onboarding({ onComplete, isLight = false }: OnboardingProps) {
+  const lang = getCurrentLang();
+  const [step, setStep] = useState(1);
+  const [showDiscovery, setShowDiscovery] = useState(false);
+  const [cameFromDiscovery, setCameFromDiscovery] = useState(false);
+  const [dreamSummary, setDreamSummary] = useState<any>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [form, setForm] = useState({
+    name: '',
+    educationLevel: '' as 'school' | 'college' | 'graduate' | 'self-learner' | '',
+    schoolBoard: '',
+    gradeOrSemester: '',
+    branch: '',
+    city: '',
+    studyHoursPerDay: 3,
+    targetYear: '',
+    motivation: '',
+    year: '',   // label built from educationLevel + gradeOrSemester
+    dream: '',
+    schoolClass: '',
+    schoolName: '',
+    collegeName: '',  // ← was missing, caused blank screen when typing in college stream
+    collegeDegree: '',
+    collegeYear: '',
+    collegeSem: '',
+    collegeStream: '',
+    academicStrengths: '',
+    schoolGroup: '',
+    customSchoolGroup: '',
+  });
+
+
+  // Dream validation state
+  const [dreamSuggestion, setDreamSuggestion] = useState<string | null>(null);
+  const [autocompleteSuggestions, setAutocompleteSuggestions] = useState<string[]>([]);
+  const [showAutocomplete, setShowAutocomplete] = useState(false);
+  const [targetYearError, setTargetYearError] = useState('');
+  const [bgError, setBgError] = useState('');
+
+  const handleDreamChange = (val: string) => {
+    setForm(f => ({ ...f, dream: val }));
+    // Live autocomplete
+    const suggestions = getAutocompleteSuggestions(val, 5);
+    setAutocompleteSuggestions(suggestions);
+    setShowAutocomplete(suggestions.length > 0 && val.length >= 2);
+    // Clear old suggestion
+    setDreamSuggestion(null);
+  };
+
+  const handleDreamBlur = () => {
+    setTimeout(() => setShowAutocomplete(false), 200);
+    if ((form.dream || '').trim().length >= 3) {
+      const closest = findClosestCareer(form.dream);
+      setDreamSuggestion(closest);
+    }
+  };
+
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+
+  const acceptSuggestion = (career: string) => {
+    setForm(f => ({ ...f, dream: career }));
+    setDreamSuggestion(null);
+    setShowAutocomplete(false);
+  };
+
+  const totalSteps = 5;
+
+  const goToSummaryStep = async (newDream?: string, newBranch?: string, newYear?: string) => {
+    const d = newDream || form.dream;
+    if (isIllegalCareer(d)) {
+      alert("Kalam Spark does not support or generate roadmaps for illegal, harmful, or dangerous activities. Please choose a legal, constructive career path to explore.");
+      setSummaryLoading(false);
+      setSummaryError("Kalam Spark does not support or generate roadmaps for illegal, harmful, or dangerous activities. Please choose a legal, constructive career path to explore.");
+      setStep(3);
+      return;
+    }
+    setSummaryLoading(true);
+    setSummaryError(null);
+    setDreamSummary(null);
+    setStep(4);
+    try {
+      const description = await fetchDetailedCareerDescription(d);
+      setDreamSummary(description);
+    } catch (e: any) {
+      console.error('Failed to fetch career description:', e);
+      setSummaryError(e.message || "Failed to generate career description. Please ensure you are connected to the internet and try again.");
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
+  const handleNext = () => {
+    if (step === 1) { setStep(2); return; }
+    if (step === 2) {
+      let yearLabel = '';
+      let gradeOrSemesterLabel = '';
+      let collegeNameLabel = '';
+      let motivationLabel = '';
+      let branchLabel = '';
+
+      if (form.educationLevel === 'school') {
+        gradeOrSemesterLabel = form.schoolClass;
+        collegeNameLabel = form.schoolName;
+        yearLabel = form.schoolClass;
+        if (form.schoolClass === 'Class 11' || form.schoolClass === 'Class 12') {
+          branchLabel = form.schoolGroup === 'Other' ? form.customSchoolGroup : form.schoolGroup;
+        } else {
+          branchLabel = form.branch;
+        }
+        motivationLabel = '';
+      } else if (form.educationLevel === 'college') {
+        gradeOrSemesterLabel = `${form.collegeDegree} - ${form.collegeStream}`;
+        collegeNameLabel = form.collegeName;
+        branchLabel = form.collegeStream;
+        yearLabel = `${form.collegeDegree} - ${form.collegeYear} (${form.collegeSem})`;
+        motivationLabel = form.academicStrengths;
+      } else if (form.educationLevel === 'graduate') {
+        gradeOrSemesterLabel = `${form.collegeDegree} - ${form.collegeStream}`;
+        collegeNameLabel = form.collegeName;
+        branchLabel = form.collegeStream;
+        yearLabel = `${form.collegeDegree} - ${form.collegeYear} (${form.collegeSem})`;
+        motivationLabel = form.academicStrengths;
+      } else if (form.educationLevel === 'self-learner') {
+        gradeOrSemesterLabel = 'Self-Learner';
+        collegeNameLabel = '';
+        branchLabel = form.branch;
+        yearLabel = 'Self-Learner / Working';
+        motivationLabel = form.academicStrengths;
+      }
+
+      setForm(f => ({
+        ...f,
+        year: yearLabel,
+        gradeOrSemester: gradeOrSemesterLabel,
+        collegeName: collegeNameLabel,
+        branch: branchLabel,
+        motivation: motivationLabel,
+        city: '',
+      }));
+      setStep(3);
+      return;
+    }
+    if (step === 3) { setCameFromDiscovery(false); goToSummaryStep(); return; }
+    if (step === 4) { setStep(5); return; }
+    if (step === 5) {
+      let yearLabel = '';
+      let gradeOrSemesterLabel = '';
+      let collegeNameLabel = '';
+      let motivationLabel = '';
+      let branchLabel = '';
+
+      if (form.educationLevel === 'school') {
+        gradeOrSemesterLabel = form.schoolClass;
+        collegeNameLabel = form.schoolName;
+        yearLabel = form.schoolClass;
+        if (form.schoolClass === 'Class 11' || form.schoolClass === 'Class 12') {
+          branchLabel = form.schoolGroup === 'Other' ? form.customSchoolGroup : form.schoolGroup;
+        } else {
+          branchLabel = form.branch;
+        }
+        motivationLabel = '';
+      } else if (form.educationLevel === 'college') {
+        gradeOrSemesterLabel = `${form.collegeDegree} - ${form.collegeStream}`;
+        collegeNameLabel = form.collegeName;
+        branchLabel = form.collegeStream;
+        yearLabel = `${form.collegeDegree} - ${form.collegeYear} (${form.collegeSem})`;
+        motivationLabel = form.academicStrengths;
+      } else if (form.educationLevel === 'graduate') {
+        gradeOrSemesterLabel = `${form.collegeDegree} - ${form.collegeStream}`;
+        collegeNameLabel = form.collegeName;
+        branchLabel = form.collegeStream;
+        yearLabel = `${form.collegeDegree} - ${form.collegeYear} (${form.collegeSem})`;
+        motivationLabel = form.academicStrengths;
+      } else if (form.educationLevel === 'self-learner') {
+        gradeOrSemesterLabel = 'Self-Learner';
+        collegeNameLabel = '';
+        branchLabel = form.branch;
+        yearLabel = 'Self-Learner / Working';
+        motivationLabel = form.academicStrengths;
+      }
+
+      onComplete({
+        ...form,
+        year: yearLabel,
+        gradeOrSemester: gradeOrSemesterLabel,
+        collegeName: collegeNameLabel,
+        branch: branchLabel,
+        motivation: motivationLabel,
+        city: '',
+      });
+    }
+  };
+
+  const handleBack = () => {
+    if (step === 2) { setStep(1); return; }
+    if (step === 3) { setStep(2); return; }
+    if (step === 4) { 
+      if (cameFromDiscovery) {
+        setShowDiscovery(true);
+      } else {
+        setStep(3); 
+      }
+      setDreamSummary(null); 
+      return; 
+    }
+    if (step === 5) { setStep(4); return; }
+  };
+
+  const isNextDisabled = () => {
+    if (step === 1 && !(form.name || '').trim()) return true;
+    if (step === 2) {
+      if (!form.educationLevel) return true;
+      if (form.educationLevel === 'school') {
+        if (!form.schoolClass) return true;
+        if (!form.schoolBoard) return true;
+        if (!(form.schoolName || '').trim()) return true;
+        if (form.schoolClass === 'Class 11' || form.schoolClass === 'Class 12') {
+          if (!form.schoolGroup) return true;
+          if (form.schoolGroup === 'Other' && !(form.customSchoolGroup || '').trim()) return true;
+        } else {
+          if (!(form.branch || '').trim()) return true;
+        }
+      } else if (form.educationLevel === 'college' || form.educationLevel === 'graduate') {
+        if (!(form.collegeDegree || '').trim()) return true;
+        if (!(form.collegeStream || '').trim()) return true;
+        if (!(form.collegeName || '').trim()) return true;
+        if (!form.collegeYear) return true;
+        if (!form.collegeSem) return true;
+      } else if (form.educationLevel === 'self-learner') {
+        if (!(form.branch || '').trim()) return true;
+      }
+      if (!form.targetYear) return true;
+      if (!!targetYearError) return true;
+    }
+    if (step === 3 && !(form.dream || '').trim()) return true;
+    if (step === 4 && (summaryLoading || !!summaryError || !dreamSummary)) return true;
+    return false;
+  };
+
+  // Dream Discovery mode — rendered as a fixed full-screen overlay
+  const discoveryNode = (
+    <div style={{ display: showDiscovery ? 'block' : 'none' }}>
+      <DreamDiscovery
+        isLight={isLight}
+        studentName={form.name}
+        studentClass={form.schoolClass}
+        studentStream={form.schoolClass === 'Class 11' || form.schoolClass === 'Class 12'
+          ? (form.schoolGroup === 'Other' ? form.customSchoolGroup : form.schoolGroup)
+          : ''}
+        onComplete={(dream, subjects) => {
+          const branch = subjects[0] || form.branch;
+          const yearLabel = form.gradeOrSemester || form.educationLevel;
+          setForm(f => ({ ...f, dream, branch, year: yearLabel }));
+          setCameFromDiscovery(true);
+          setShowDiscovery(false);
+          goToSummaryStep(dream, branch, yearLabel);
+        }}
+        onSkip={() => {
+          setShowDiscovery(false);
+          setStep(3);
+          setCameFromDiscovery(false);
+        }}
+      />
+    </div>
+  );
+
+  const progressPercent = ((step - 1) / (totalSteps - 1)) * 100;
+
+  // Input / select shared styles
+  const inputClass = "w-full rounded-xl px-4 py-3.5 text-sm transition-all outline-none";
+  const inputStyle = isLight
+    ? { background: '#ffffff', border: '1px solid #d1d5db', color: '#111827' }
+    : { background: '#0f172a', border: '1px solid rgba(211,156,59,0.25)', color: '#fde68a' };
+  const labelClr = isLight ? '#6b7280' : undefined;
+  const headClr  = isLight ? '#111827' : undefined;
+  const subClr   = isLight ? '#374151' : undefined;
+
+  return (
+    <>
+      {discoveryNode}
+      {!showDiscovery && (
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          WebkitOverflowScrolling: 'touch' as any,
+          background: isLight ? '#ffffff' : '#070e20',
+          zIndex: 100,
+        }}
+      >
+        {/* Fixed ambient glows — decorative only */}
+        {!isLight && <div style={{ position: 'fixed', top: '33%', left: '25%', width: 384, height: 384, borderRadius: '50%', background: 'rgba(88,40,180,0.18)', filter: 'blur(140px)', pointerEvents: 'none', zIndex: 0 }} />}
+        {!isLight && <div style={{ position: 'fixed', bottom: '33%', right: '25%', width: 288, height: 288, borderRadius: '50%', background: 'rgba(180,120,0,0.08)', filter: 'blur(120px)', pointerEvents: 'none', zIndex: 0 }} />}
+        {isLight && <div style={{ position: 'fixed', top: 0, right: 0, width: 500, height: 500, borderRadius: '50%', background: '#fff7ed', filter: 'blur(80px)', pointerEvents: 'none', opacity: 0.6, zIndex: 0 }} />}
+        {isLight && <div style={{ position: 'fixed', bottom: 0, left: 0, width: 400, height: 400, borderRadius: '50%', background: '#f0f9ff', filter: 'blur(80px)', pointerEvents: 'none', opacity: 0.4, zIndex: 0 }} />}
+
+        {/* Scrollable centered content */}
+        <div
+          style={{
+            position: 'relative',
+            zIndex: 10,
+            width: '100%',
+            minHeight: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '32px 16px',
+          }}
+        >
+          <div style={{ width: '100%', maxWidth: 448 }}>
+
+        {/* Logo + title */}
+        <div className="flex flex-col items-center mb-7">
+          <div className="w-16 h-16 mb-3">
+            <img src={isLight ? "/assets/logo-light.png" : "/assets/logo.png"} className="w-full h-full object-contain" alt="Kalam Spark Logo" />
+          </div>
+          <h1 className="heading-gold font-cinzel text-2xl font-bold tracking-widest">Kalam Spark</h1>
+          <p className="text-sm mt-1" style={{ color: isLight ? '#9a3412' : undefined, opacity: isLight ? 0.7 : undefined }}>Let's set up your journey</p>
+        </div>
+
+        {/* Card — no height restriction, page itself scrolls */}
+        <div
+          className="glass-card glass-inner-shadow p-6 lg:p-8"
+          style={{
+            ...(isLight
+              ? { background: '#ffffff', border: '1px solid #e5e7eb', boxShadow: '0 4px 32px rgba(0,0,0,0.08)' }
+              : { borderColor: 'rgba(211,156,59,0.22)' }),
+          }}
+        >
+          {/* Progress bar */}
+          <div className="progress-track h-1.5 mb-8">
+            <div className="progress-bar-gold h-full" style={{ width: `${progressPercent}%` }} />
+          </div>
+
+          <div className="space-y-6">
+            {/* ── Step 1: Name ── */}
+            {step === 1 && (
+              <div className="space-y-4 fade-up">
+                <div className="flex items-center gap-2 mb-1">
+                  <User className="text-orange-500" size={15} />
+                  <h2 className="text-sm font-semibold" style={{ color: headClr }}>What's your name?</h2>
+                </div>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
+                  onKeyDown={(e) => e.key === 'Enter' && !isNextDisabled() && handleNext()}
+                  placeholder="Enter your name"
+                  className={inputClass}
+                  style={inputStyle}
+                  autoFocus
+                />
+              </div>
+            )}
+
+            {/* ── Step 2: Background (rich questions) ── */}
+            {step === 2 && (
+              <div className="space-y-4 fade-up">
+                <div className="flex items-center gap-2 mb-1">
+                  <GraduationCap className="text-orange-500" size={15} />
+                  <h2 className="text-sm font-semibold" style={{ color: headClr }}>{t('ob_your_background', lang)}</h2>
+                </div>
+                <div className="space-y-3">
+                  {/* Education Level */}
+                  <div>
+                    <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>{t('ob_education_level', lang)}</p>
+                    <CustomSelect
+                      value={form.educationLevel}
+                      onChange={(val) => {
+                        const level = val as 'school' | 'college' | 'graduate' | 'self-learner' | '';
+                        setForm(f => ({
+                          ...f,
+                          educationLevel: level,
+                          schoolBoard: '',
+                          schoolClass: '',
+                          schoolName: '',
+                          collegeName: '',
+                          collegeDegree: '',
+                          collegeYear: '',
+                          collegeSem: '',
+                          collegeStream: '',
+                          academicStrengths: '',
+                          branch: '',
+                          schoolGroup: '',
+                          customSchoolGroup: '',
+                        }));
+                      }}
+                      options={[
+                        { label: t('ob_high_school', lang), value: 'school' },
+                        { label: t('ob_college', lang), value: 'college' },
+                        { label: t('ob_graduate', lang), value: 'graduate' },
+                        { label: t('ob_self_learner', lang), value: 'self-learner' }
+                      ]}
+                      placeholder={t('ob_choose_level', lang)}
+                      isLight={isLight}
+                    />
+                  </div>
+
+                  {/* ── SCHOOL SPECIFIC FIELDS ── */}
+                  {form.educationLevel === 'school' && (
+                    <>
+                      {/* School Board */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>{t('ob_school_board', lang)}</p>
+                        <CustomSelect
+                          value={form.schoolBoard}
+                          onChange={(val) => setForm(f => ({ ...f, schoolBoard: val }))}
+                          options={['CBSE', 'State Board (Tamil Nadu)', 'State Board (Karnataka)', 'State Board (Andhra Pradesh)', 'State Board (Kerala)', 'State Board (Maharashtra)', 'State Board (UP)', 'ICSE / ISC', 'IB (International)', 'Other'].map(b => ({
+                            label: b,
+                            value: b
+                          }))}
+                          placeholder={t('ob_choose_board', lang)}
+                          isLight={isLight}
+                        />
+                      </div>
+
+                      {/* Class */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Class</p>
+                        <CustomSelect
+                          value={form.schoolClass}
+                          onChange={(val) => setForm(f => ({ ...f, schoolClass: val, schoolGroup: '', customSchoolGroup: '' }))}
+                          options={Array.from({ length: 12 }, (_, i) => ({
+                            label: `Class ${i + 1}`,
+                            value: `Class ${i + 1}`
+                          }))}
+                          placeholder="Select your class..."
+                          isLight={isLight}
+                        />
+                      </div>
+
+                      {/* School Name */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>School Name</p>
+                        <input
+                          type="text"
+                          value={form.schoolName}
+                          onChange={(e) => setForm(f => ({ ...f, schoolName: e.target.value }))}
+                          placeholder="e.g. Delhi Public School"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+
+                      {/* Favourite Subject or Group/Stream selection (conditional for 11th and 12th) */}
+                      {(form.schoolClass === 'Class 11' || form.schoolClass === 'Class 12') ? (
+                        <>
+                          <div>
+                            <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Group / Stream</p>
+                            <CustomSelect
+                              value={form.schoolGroup}
+                              onChange={(val) => setForm(f => ({ ...f, schoolGroup: val, customSchoolGroup: '' }))}
+                              options={[
+                                { label: 'Physics, Chemistry, Biology (PCB)', value: 'Physics, Chemistry, Biology (PCB)' },
+                                { label: 'Physics, Chemistry, Mathematics (PCM)', value: 'Physics, Chemistry, Mathematics (PCM)' },
+                                { label: 'Physics, Chemistry, Mathematics & Biology (PCMB)', value: 'Physics, Chemistry, Mathematics & Biology (PCMB)' },
+                                { label: 'Computer Science', value: 'Computer Science' },
+                                { label: 'Commerce', value: 'Commerce' },
+                                { label: 'Arts / Humanities', value: 'Arts / Humanities' },
+                                { label: 'Other', value: 'Other' }
+                              ]}
+                              placeholder="Select your group / stream..."
+                              isLight={isLight}
+                            />
+                          </div>
+
+                          {form.schoolGroup === 'Other' && (
+                            <div>
+                              <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Specify Stream</p>
+                              <input
+                                type="text"
+                                value={form.customSchoolGroup}
+                                onChange={(e) => setForm(f => ({ ...f, customSchoolGroup: e.target.value }))}
+                                placeholder="e.g. Vocational, Electronics"
+                                className={inputClass}
+                                style={inputStyle}
+                              />
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div>
+                          <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Favourite subject / stream</p>
+                          <input
+                            type="text"
+                            value={form.branch}
+                            onChange={(e) => setForm(f => ({ ...f, branch: e.target.value }))}
+                            placeholder="e.g. Mathematics, Science"
+                            className={inputClass}
+                            style={inputStyle}
+                          />
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* ── COLLEGE (UNDER-GRADUATE) SPECIFIC FIELDS ── */}
+                  {form.educationLevel === 'college' && (
+                    <>
+                      {/* College Degree */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>College Degree</p>
+                        <input
+                          type="text"
+                          value={form.collegeDegree}
+                          onChange={(e) => setForm(f => ({ ...f, collegeDegree: e.target.value }))}
+                          placeholder="e.g. B.Tech, B.Sc, MBBS"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+
+                      {/* College Stream */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>College Stream / Major</p>
+                        <input
+                          type="text"
+                          value={form.collegeStream}
+                          onChange={(e) => setForm(f => ({ ...f, collegeStream: e.target.value }))}
+                          placeholder="e.g. CSE, AIDS, Doctor, ECE"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+
+                      {/* College Name */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>College / University Name</p>
+                        <input
+                          type="text"
+                          value={form.collegeName}
+                          onChange={(e) => setForm(f => ({ ...f, collegeName: e.target.value }))}
+                          placeholder="e.g. IIT Madras"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+
+                      {/* College Year (Max 4) */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>College Year</p>
+                        <CustomSelect
+                          value={form.collegeYear}
+                          onChange={(val) => setForm(f => ({ ...f, collegeYear: val }))}
+                          options={[
+                            { label: '1st Year', value: '1st Year' },
+                            { label: '2nd Year', value: '2nd Year' },
+                            { label: '3rd Year', value: '3rd Year' },
+                            { label: '4th Year', value: '4th Year' }
+                          ]}
+                          placeholder="Select your college year..."
+                          isLight={isLight}
+                        />
+                      </div>
+
+                      {/* Semester (1 or 2) */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Semester</p>
+                        <CustomSelect
+                          value={form.collegeSem}
+                          onChange={(val) => setForm(f => ({ ...f, collegeSem: val }))}
+                          options={[
+                            { label: 'Semester 1', value: 'Semester 1' },
+                            { label: 'Semester 2', value: 'Semester 2' }
+                          ]}
+                          placeholder="Select semester..."
+                          isLight={isLight}
+                        />
+                      </div>
+
+                      {/* Academic Strengths */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Academic Strengths / Focus Areas (optional)</p>
+                        <input
+                          type="text"
+                          value={form.academicStrengths}
+                          onChange={(e) => setForm(f => ({ ...f, academicStrengths: e.target.value }))}
+                          placeholder="e.g. Web Development, Math, Data Structures"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* ── POST-GRADUATE SPECIFIC FIELDS ── */}
+                  {form.educationLevel === 'graduate' && (
+                    <>
+                      {/* Postgraduate Degree */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Postgraduate Degree</p>
+                        <input
+                          type="text"
+                          value={form.collegeDegree}
+                          onChange={(e) => setForm(f => ({ ...f, collegeDegree: e.target.value }))}
+                          placeholder="e.g. M.Tech, MBA, MS"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+
+                      {/* Postgraduate Stream */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Postgraduate Stream / Major</p>
+                        <input
+                          type="text"
+                          value={form.collegeStream}
+                          onChange={(e) => setForm(f => ({ ...f, collegeStream: e.target.value }))}
+                          placeholder="e.g. CSE, AIDS, Finance"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+
+                      {/* College Name */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>College / University Name</p>
+                        <input
+                          type="text"
+                          value={form.collegeName}
+                          onChange={(e) => setForm(f => ({ ...f, collegeName: e.target.value }))}
+                          placeholder="e.g. IIT Madras"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+
+                      {/* Postgraduate Year (Max 2) */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Postgraduate Year</p>
+                        <CustomSelect
+                          value={form.collegeYear}
+                          onChange={(val) => setForm(f => ({ ...f, collegeYear: val }))}
+                          options={[
+                            { label: '1st Year', value: '1st Year' },
+                            { label: '2nd Year', value: '2nd Year' }
+                          ]}
+                          placeholder="Select postgraduate year..."
+                          isLight={isLight}
+                        />
+                      </div>
+
+                      {/* Semester (1 or 2) */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Semester</p>
+                        <CustomSelect
+                          value={form.collegeSem}
+                          onChange={(val) => setForm(f => ({ ...f, collegeSem: val }))}
+                          options={[
+                            { label: 'Semester 1', value: 'Semester 1' },
+                            { label: 'Semester 2', value: 'Semester 2' }
+                          ]}
+                          placeholder="Select semester..."
+                          isLight={isLight}
+                        />
+                      </div>
+
+                      {/* Academic Strengths */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Academic Strengths / Focus Areas (optional)</p>
+                        <input
+                          type="text"
+                          value={form.academicStrengths}
+                          onChange={(e) => setForm(f => ({ ...f, academicStrengths: e.target.value }))}
+                          placeholder="e.g. Machine Learning, Finance Analysis"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* ── SELF-LEARNER / WORKING SPECIFIC FIELDS ── */}
+                  {form.educationLevel === 'self-learner' && (
+                    <>
+                      {/* Current Field / Stream */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Current Field / Stream</p>
+                        <input
+                          type="text"
+                          value={form.branch}
+                          onChange={(e) => setForm(f => ({ ...f, branch: e.target.value }))}
+                          placeholder="e.g. Software Testing, Marketing, Arts"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+
+                      {/* Skills & Strengths */}
+                      <div>
+                        <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Skills & Strengths (optional)</p>
+                        <input
+                          type="text"
+                          value={form.academicStrengths}
+                          onChange={(e) => setForm(f => ({ ...f, academicStrengths: e.target.value }))}
+                          placeholder="e.g. Python, Public Speaking"
+                          className={inputClass}
+                          style={inputStyle}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Study Hours */}
+                  {form.educationLevel && (
+                    <div>
+                      <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>{t('ob_study_hours', lang)}: <span className="font-bold" style={{ color: isLight ? '#92400e' : undefined }}>{form.studyHoursPerDay}h / day</span></p>
+                      <input
+                        type="range" min={1} max={10} value={form.studyHoursPerDay}
+                        onChange={(e) => setForm(f => ({ ...f, studyHoursPerDay: Number(e.target.value) }))}
+                        className="w-full accent-orange-500 cursor-pointer"
+                      />
+                      <div className="flex justify-between text-[9px] text-gold-500/30">
+                        <span>1h</span><span>5h</span><span>10h</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Target Year */}
+                  {form.educationLevel && (
+                    <div>
+                      <p className="text-xs mb-1.5 ml-1" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>{t('ob_target_year', lang)}</p>
+                      <input
+                        type="number"
+                        value={form.targetYear}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setForm(f => ({ ...f, targetYear: val }));
+                          const yr = parseInt(val, 10);
+                          const currentYear = new Date().getFullYear();
+                          const maxYear = currentYear + 50;
+                          if (val) {
+                            if (isNaN(yr) || yr < currentYear) {
+                              setTargetYearError(`Please enter a future year (${currentYear} or later).`);
+                            } else if (yr > maxYear) {
+                              setTargetYearError(`Goal must be achievable within 50 years (by ${maxYear}).`);
+                            } else {
+                              setTargetYearError('');
+                            }
+                          } else {
+                            setTargetYearError('');
+                          }
+                        }}
+                        min={new Date().getFullYear()}
+                        max={new Date().getFullYear() + 50}
+                        placeholder={`e.g. ${new Date().getFullYear() + 2}`}
+                        className={inputClass}
+                        style={targetYearError
+                          ? { ...inputStyle, borderColor: '#ef4444' }
+                          : inputStyle}
+                      />
+                      {targetYearError && (
+                        <p className="text-[11px] mt-1.5 ml-1 text-red-500 flex items-center gap-1 leading-tight">
+                          ⚠️ {targetYearError}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── Step 3: Dream (with validation) ── */}
+            {step === 3 && (
+              <div className="space-y-4 fade-up">
+                <div className="flex items-center gap-2 mb-1">
+                  <Briefcase className="text-orange-500" size={15} />
+                  <h2 className="text-sm font-semibold" style={{ color: headClr }}>Enter your career dream</h2>
+                </div>
+                <div className="relative">
+                  <textarea
+                    value={form.dream}
+                    onChange={(e) => handleDreamChange(e.target.value)}
+                    onBlur={handleDreamBlur}
+                    onFocus={() => {
+                      if (autocompleteSuggestions.length > 0) setShowAutocomplete(true);
+                    }}
+                    placeholder="What do you want to become? e.g. Doctor, Software Engineer, Artist..."
+                    className={`${inputClass} min-h-[100px] resize-none`}
+                    style={inputStyle}
+                  />
+
+                  {/* Autocomplete Dropdown */}
+                  {showAutocomplete && autocompleteSuggestions.length > 0 && (
+                    <div
+                      className="absolute left-0 right-0 top-full mt-1 rounded-xl overflow-hidden z-20"
+                      style={isLight
+                        ? { background: '#ffffff', border: '1px solid #e5e7eb', boxShadow: '0 8px 24px rgba(0,0,0,0.1)' }
+                        : { background: 'rgba(6,3,18,0.95)', border: '1px solid rgba(211,156,59,0.30)', backdropFilter: 'blur(12px)' }}
+                    >
+                      {autocompleteSuggestions.map((s, i) => (
+                        <button
+                          key={i}
+                          className="w-full text-left px-4 py-2.5 text-sm transition-colors flex items-center gap-2"
+                          style={{ color: isLight ? '#374151' : '#fde68a' }}
+                          onMouseDown={(e) => { e.preventDefault(); acceptSuggestion(s); }}
+                        >
+                          <Sparkles size={11} className="text-purple-400 shrink-0" />
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Fuzzy Match Suggestion */}
+                {dreamSuggestion && (
+                  <div
+                    className="flex items-center gap-2 p-3 rounded-xl animate-fade-in"
+                    style={{ background: 'rgba(234,88,12,0.08)', border: '1px solid rgba(234,88,12,0.25)' }}
+                  >
+                    <Sparkles size={13} className="text-orange-400 shrink-0" />
+                    <p className="text-xs text-gold-300/70 flex-1">
+                      Did you mean <button
+                        onClick={() => acceptSuggestion(dreamSuggestion)}
+                        className="text-orange-400 font-semibold underline underline-offset-2 hover:text-orange-300 transition-colors"
+                      >
+                        {dreamSuggestion}
+                      </button>?
+                    </p>
+                  </div>
+                )}
+
+                <div
+                  className="p-4 rounded-xl flex flex-col items-center justify-center text-center gap-2.5 relative overflow-hidden transition-all duration-300 hover:scale-[1.01] mt-2"
+                  style={isLight 
+                    ? { background: 'linear-gradient(135deg, rgba(168,85,247,0.08) 0%, rgba(244,63,94,0.08) 100%)', border: '1px solid rgba(168,85,247,0.35)' }
+                    : { background: 'linear-gradient(135deg, rgba(168,85,247,0.15) 0%, rgba(244,63,94,0.15) 100%)', border: '1px solid rgba(168,85,247,0.5)', boxShadow: '0 0 15px rgba(168,85,247,0.15)' }}
+                >
+                  <p className="text-[11px] font-bold tracking-wider uppercase flex items-center gap-1" style={{ color: isLight ? '#7e22ce' : '#d8b4fe' }}>
+                    <Sparkles size={11} className="text-yellow-400 animate-pulse" /> Not sure about your career dream?
+                  </p>
+                  <p className="text-[10px] max-w-xs leading-relaxed" style={{ color: isLight ? '#4b5563' : 'rgba(253,230,138,0.7)' }}>
+                    Answer a few simple questions to find the perfect career path tailored to your interests and skills!
+                  </p>
+                  <button
+                    onClick={() => setShowDiscovery(true)}
+                    className="mt-1 px-5 py-2.5 rounded-lg text-xs font-bold transition-all shadow-md flex items-center gap-1.5 hover:opacity-90 active:scale-95"
+                    style={{ background: 'linear-gradient(90deg, #a855f7 0%, #ec4899 100%)', color: 'white' }}
+                  >
+                    <Lightbulb size={13} className="text-yellow-200 fill-yellow-200/20" /> Take the Dream Discovery Quiz
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ── Step 4: Career Description (AI) ── */}
+            {step === 4 && (
+              <div className="space-y-5 fade-up">
+                <div className="text-center">
+                  <div
+                    className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4"
+                    style={{ background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.30)' }}
+                  >
+                    <Rocket size={22} className="text-purple-400" />
+                  </div>
+                  <h2 className="font-cinzel text-lg font-bold text-gold-100 mb-1">About Your Dream Career</h2>
+                  <p className="text-xs text-gold-400/40">Here's what it means to be a <span className="text-purple-400 font-medium">{form.dream}</span></p>
+                </div>
+
+                <div
+                  className="space-y-3 p-5 rounded-xl"
+                  style={isLight
+                    ? { background: '#f9fafb', border: '1px solid #e5e7eb' }
+                    : { background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(124,58,237,0.20)' }}
+                >
+                  <div className="flex items-center gap-3 pb-3" style={{ borderBottom: isLight ? '1px solid #e5e7eb' : '1px solid rgba(255,255,255,0.05)' }}>
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.25)' }}>
+                      <Briefcase size={15} className="text-purple-400" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-medium" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Your Dream Role</p>
+                      <p className="text-sm font-bold" style={{ color: isLight ? '#111827' : undefined }}>{form.dream}</p>
+                    </div>
+                  </div>
+
+                  {summaryLoading ? (
+                    <div className="flex items-center gap-3 py-6 justify-center">
+                      <Loader2 size={18} className="animate-spin text-purple-400" />
+                      <p className="text-xs text-gold-400/40">AI is analysing this career for you...</p>
+                    </div>
+                  ) : summaryError ? (
+                    <div className="p-5 rounded-xl flex flex-col items-center justify-center text-center gap-3"
+                      style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>
+                      <AlertCircle size={20} className="text-red-400" />
+                      <p className="text-xs text-red-400 font-medium leading-relaxed">{summaryError}</p>
+                      <button 
+                        onClick={() => goToSummaryStep()}
+                        className="btn-primary flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold mt-1"
+                      >
+                        <RefreshCw size={11} /> Retry
+                      </button>
+                    </div>
+                  ) : dreamSummary ? (
+                    <div className="space-y-4">
+                      {/* Overview Section */}
+                      <div className="p-3.5 rounded-xl" style={{ background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.15)' }}>
+                        <p className="text-xs leading-relaxed text-gold-300/70">{dreamSummary.overview}</p>
+                        {dreamSummary.is_curated && (
+                          <p className="text-[10px] text-purple-400 mt-2 font-medium">✨ Curated for {dreamSummary.career}</p>
+                        )}
+                      </div>
+
+                      {/* Roles & Responsibilities */}
+                      {dreamSummary.roles && dreamSummary.roles.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs font-bold text-purple-400 flex items-center gap-2">
+                            <Briefcase size={12} /> Key Responsibilities
+                          </p>
+                          <div className="space-y-1.5 pl-5">
+                            {dreamSummary.roles.map((role, idx) => (
+                              <div key={idx} className="flex items-start gap-2">
+                                <span className="text-purple-400 text-xs font-bold mt-0.5">•</span>
+                                <p className="text-xs text-gold-300/70 leading-relaxed">{role}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Required Skills */}
+                      {dreamSummary.required_skills && dreamSummary.required_skills.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs font-bold text-emerald-400 flex items-center gap-2">
+                            <Zap size={12} /> Essential Skills
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {dreamSummary.required_skills.map((skill, idx) => (
+                              <span key={idx} className="px-2.5 py-1 rounded-md text-[10px] font-medium" style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.2)', color: '#6ee7b7' }}>
+                                {skill}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Salary & Market */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 rounded-xl" style={{ background: 'rgba(251,146,60,0.08)', border: '1px solid rgba(251,146,60,0.15)' }}>
+                          <p className="text-[10px] font-bold text-orange-400">Salary Range</p>
+                          <p className="text-xs text-gold-300/70 mt-1">{dreamSummary.salary_range}</p>
+                        </div>
+                        <div className="p-3 rounded-xl" style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.15)' }}>
+                          <p className="text-[10px] font-bold text-blue-400">Market Outlook</p>
+                          <p className="text-xs text-gold-300/70 mt-1">{dreamSummary.market_outlook}</p>
+                        </div>
+                      </div>
+
+                      {/* Growth Path */}
+                      {dreamSummary.growth && (
+                        <div className="p-3.5 rounded-xl" style={{ background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.15)' }}>
+                          <p className="text-xs font-bold text-fuchsia-400 flex items-center gap-2 mb-2">
+                            <Target size={12} /> Career Growth
+                          </p>
+                          <p className="text-xs text-gold-300/70 leading-relaxed">{dreamSummary.growth}</p>
+                        </div>
+                      )}
+
+                      {/* Tips */}
+                      {dreamSummary.tips && (
+                        <div className="p-3.5 rounded-xl" style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.15)' }}>
+                          <p className="text-xs font-bold text-emerald-400 flex items-center gap-2 mb-2">
+                            <BookOpen size={12} /> Pro Tips
+                          </p>
+                          <p className="text-xs text-gold-300/70 leading-relaxed">{dreamSummary.tips}</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="p-3.5 rounded-xl" style={{ background: 'rgba(52,211,153,0.05)', border: '1px solid rgba(52,211,153,0.15)' }}>
+                  <p className="text-xs text-gold-300/60 leading-relaxed">
+                    ✅ <span className="text-emerald-400 font-medium">Sounds like you!</span> Click "Accept & Build Roadmap" to generate your personalized career plan.
+                  </p>
+                </div>
+
+                {!summaryLoading && (
+                  <button
+                    onClick={() => { 
+                      if (cameFromDiscovery) {
+                        setShowDiscovery(true);
+                      } else {
+                        setStep(3);
+                      }
+                      setDreamSummary(null); 
+                    }}
+                    className="flex items-center gap-1.5 text-xs text-gold-500/40 hover:text-gold-300 transition-colors mx-auto"
+                  >
+                    <RefreshCw size={11} /> Change my dream career
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* ── Step 5: Final Confirm ── */}
+            {step === 5 && (
+              <div className="space-y-5 text-center fade-up py-4">
+                <div
+                  className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto"
+                  style={{ background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.35)' }}
+                >
+                  <CheckCircle2 size={28} className="text-purple-400" />
+                </div>
+                <div>
+                  <h2 className="font-cinzel text-xl font-bold text-gold-100">You're all set!</h2>
+                  <p className="text-sm text-gold-400/50 mt-2 leading-relaxed">
+                    <span className="text-purple-400 font-medium">{form.name}</span>, your personalized plan to become a{' '}
+                    <span className="text-gold-300 font-medium">{form.dream}</span> is ready!
+                  </p>
+                </div>
+                <div className="text-left p-4 rounded-xl space-y-2"
+                style={isLight
+                  ? { background: '#f9fafb', border: '1px solid #e5e7eb' }
+                  : { background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(211,156,59,0.18)' }}
+              >
+                <p className="text-[11px] font-medium uppercase tracking-wider" style={{ color: labelClr ?? 'rgba(211,156,59,0.4)' }}>Summary</p>
+                {[['Name', form.name], ['Dream', form.dream], ['Level', form.year], ['Subject', form.branch]].map(([label, val]) => (
+                  <div key={label} className="flex items-center justify-between text-xs">
+                    <span style={{ color: isLight ? '#9ca3af' : 'rgba(211,156,59,0.4)' }}>{label}</span>
+                    <span style={{ color: label === 'Dream' ? (isLight ? '#92400e' : undefined) : (isLight ? '#374151' : 'rgba(211,156,59,0.7)'), fontWeight: label === 'Dream' ? 600 : 500 }}>{val}</span>
+                  </div>
+                ))}
+              </div>
+              </div>
+            )}
+
+            {/* ── Navigation ── */}
+            <div className="flex items-center gap-3">
+              {step > 1 && (
+                <button
+                  onClick={handleBack}
+                  disabled={summaryLoading}
+                  className="btn-secondary flex items-center gap-1.5 px-4 py-3.5 text-sm font-medium shrink-0 disabled:opacity-40"
+                >
+                  <ArrowLeft size={15} />
+                </button>
+              )}
+              <button
+                onClick={handleNext}
+                disabled={isNextDisabled()}
+                className={`flex-1 py-3.5 rounded-xl flex items-center justify-center gap-2 font-semibold text-sm transition-all ${
+                  isNextDisabled()
+                    ? 'cursor-not-allowed text-gold-500/20'
+                    : 'btn-primary'
+                }`}
+                style={isNextDisabled() ? { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' } : {}}
+              >
+                {summaryLoading && step === 4
+                  ? <><Loader2 size={14} className="animate-spin" /> Analysing Career...</>
+                  : step === 4
+                  ? <><CheckCircle2 size={14} /> Accept & Build Roadmap</>
+                  : step === 5
+                  ? <>View My Roadmap <ArrowRight size={15} /></>
+                  : <>Continue <ArrowRight size={15} /></>
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <p className="text-center text-[11px] mt-4" style={{ color: isLight ? '#9ca3af' : 'rgba(211,156,59,0.25)' }}>Step {step} of {totalSteps}</p>
+      </div>
+    </div>
+    </div>
+      )}
+    </>
+  );
+}

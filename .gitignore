@@ -1,0 +1,41 @@
+# ── Frontend ────────────────────────────────────────
+frontend/dist
+frontend/dist-ssr
+frontend/node_modules
+
+# ── Environment secrets (NEVER commit)
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+backend/.env
+backend/.env.local
+
+# ── Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ── Backend runtime artefacts (local only)
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+backend/chroma_db/
+backend/roadmap_cache/
+backend/filespeaker_uploads/
+backend/filespeaker_audio/
+backend/vector_db/

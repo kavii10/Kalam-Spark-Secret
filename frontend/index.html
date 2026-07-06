@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>Kalam Spark - AI Career Architect</title>
+
+    <!-- ── PWA: Manifest & Theme ─────────────────────────────────────────── -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#ff8c42" />
+
+    <!-- PWA: Mobile Web App (Android Chrome) -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="Kalam Spark" />
+
+    <!-- PWA: Apple (iOS Safari "Add to Home Screen") -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Kalam Spark" />
+    <link rel="apple-touch-icon" href="/assets/logo.png" />
+
+    <!-- SEO / Social -->    
+    <meta name="description" content="AI-powered career roadmap and personalised learning companion for students and self-learners." />
+    <meta name="keywords" content="career roadmap, AI learning, study planner, kalam spark" />
+    <script src="/tailwind.js"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            fontFamily: {
+              cinzel: ['Cinzel', 'Georgia', 'serif'],
+              inter: ['Inter', 'sans-serif'],
+            },
+            colors: {
+              purple: {
+                50: '#e0fbfc', 100: '#c2f7f9', 200: '#95eff3', 300: '#58e4ec',
+                400: '#23d5e2', 500: '#06bbca', 600: '#0095a5', 700: '#007887',
+                800: '#00616f', 900: '#00515e', 950: '#003540',
+              },
+              blue: {
+                50: '#e6f0fd', 100: '#cce1fa', 200: '#99c2f6', 300: '#66a3f1',
+                400: '#3384ec', 500: '#0065e7', 600: '#0051b9', 700: '#003d8b',
+                800: '#00285c', 900: '#00142e', 950: '#000a17',
+              },
+              gold: {
+                100: "#fff3e8",
+                200: "#ffd4aa",
+                300: "#ffb380",
+                400: "#ff8c42",
+                500: "#ff6b1a",
+                600: "#ea580c",
+                700: "#c2440a",
+              },
+              cosmic: {
+                950: "#020713",
+                900: "#040d24",
+                800: "#081639",
+                700: "#0e2459",
+                600: "#153580",
+                500: "#1e49ab",
+              },
+              neon: {
+                purple: "#9333ea",
+                violet: "#7c3aed",
+                orange: "#ff8c42",
+              },
+            },
+            backdropBlur: {
+              xs: '2px',
+            },
+            boxShadow: {
+              'glass': '0 8px 32px 0 rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,160,100,0.08)',
+              'glow-gold': '0 0 20px rgba(255,140,66,0.50), 0 0 40px rgba(255,140,66,0.20)',
+              'glow-purple': '0 0 20px rgba(0,212,255,0.5), 0 0 40px rgba(0,212,255,0.2)',
+              'neon-active': 'inset 0 0 20px rgba(255,140,66,0.12), 0 0 18px rgba(255,140,66,0.35)',
+            },
+            animation: {
+              "pulse-slow": "pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+              float: "float 6s ease-in-out infinite",
+              shimmer: "shimmer 2.5s linear infinite",
+              nebula: "nebulaDrift 30s infinite alternate ease-in-out",
+            },
+            keyframes: {
+              float: {
+                "0%, 100%": { transform: "translateY(0)" },
+                "50%": { transform: "translateY(-10px)" },
+              },
+              shimmer: {
+                "0%": { backgroundPosition: "-200% 0" },
+                "100%": { backgroundPosition: "200% 0" },
+              },
+            },
+          },
+        },
+      };
+    </script>
+    <!-- Google Fonts: Cinzel (headings) + Inter (body) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Inter:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* ── Design Tokens ── */
+      :root {
+        --orange-primary:  #ffd700;
+        --orange-light:    #ffb380;
+        --orange-vivid:    #ff6b1a;
+        --orange-glow:     rgba(255,215,0,0.40);
+        --purple-primary:  #00d4ff;
+        --purple-light:    #00ffff;
+        --purple-glow:     rgba(0,212,255,0.40);
+        --cosmic-bg:       #070e20;
+        --glass-bg:        rgba(4,13,36,0.45);
+        --glass-bg-light:  rgba(10,24,60,0.35);
+        --glass-border:    rgba(255,140,66,0.22);
+        --glass-border-hover: rgba(255,140,66,0.55);
+        --text-primary:    #ffb380;
+        --text-bright:     #ff8c42;
+        --text-muted:      rgba(255,160,100,0.50);
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body {
+        margin: 0; padding: 0;
+        width: 100%;
+        height: 100% !important;
+        overflow: hidden !important;
+        position: fixed !important;
+        overscroll-behavior: none !important;
+      }
+      body {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        background-color: var(--cosmic-bg);
+        color: var(--text-primary);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      /* ── Cinzel heading helper ── */
+      .font-cinzel { font-family: 'Cinzel', Georgia, serif; }
+      .mono { font-family: 'JetBrains Mono', monospace; }
+
+      /* ── Selection ── */
+      ::selection {
+        background: rgba(0, 212, 255, 0.45);
+        color: white;
+      }
+
+      /* ── Deep Space Cosmic Background ── */
+      .cosmic-bg {
+        position: fixed;
+        inset: 0;
+        z-index: -2;
+        background:
+          radial-gradient(ellipse 80% 80% at 20% 10%, rgba(0, 212, 255, 0.20) 0%, transparent 55%),
+          radial-gradient(ellipse 100% 70% at 85% 5%,  rgba(255, 215, 0, 0.08) 0%, transparent 50%),
+          radial-gradient(ellipse 90%  90% at 50% 90%, rgba(0, 100, 255, 0.25)  0%, transparent 60%),
+          radial-gradient(ellipse 60%  60% at 75% 50%, rgba(0, 212, 255, 0.12) 0%, transparent 55%),
+          linear-gradient(180deg, #020713 0%, #040d24 40%, #061130 70%, #020713 100%);
+      }
+
+      /* ── Star Field ── */
+      .star-field {
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        background-image:
+          radial-gradient(1px 1px at  8% 12%, rgba(255,255,255,0.9), transparent),
+          radial-gradient(1px 1px at 25% 35%, rgba(255,255,255,0.7), transparent),
+          radial-gradient(2px 2px at 42%  8%, rgba(255,255,255,0.8), transparent),
+          radial-gradient(1px 1px at 60% 65%, rgba(255,255,255,0.6), transparent),
+          radial-gradient(1px 1px at 78% 22%, rgba(255,255,255,0.9), transparent),
+          radial-gradient(2px 2px at 92% 48%, rgba(255,255,255,0.7), transparent),
+          radial-gradient(1px 1px at 15% 75%, rgba(255,255,255,0.5), transparent),
+          radial-gradient(1px 1px at 35% 85%, rgba(255,255,255,0.8), transparent),
+          radial-gradient(2px 2px at 55% 45%, rgba(255,255,255,0.6), transparent),
+          radial-gradient(1px 1px at 85% 80%, rgba(255,255,255,0.7), transparent),
+          radial-gradient(1px 1px at 70% 15%, rgba(211,156,59,0.5), transparent),
+          radial-gradient(1px 1px at 20% 55%, rgba(0,212,255,0.4), transparent);
+        background-size: 400px 400px, 600px 600px, 350px 350px, 500px 500px,
+                         450px 450px, 700px 700px, 300px 300px, 550px 550px,
+                         650px 650px, 480px 480px, 380px 380px, 420px 420px;
+        animation: starTwinkle 8s ease-in-out infinite alternate;
+      }
+
+      @keyframes starTwinkle {
+        0%, 100% { opacity: 0.4; }
+        50%       { opacity: 0.75; }
+      }
+
+      /* ── Nebula Glow Blobs ── */
+      .nebula-blob {
+        position: fixed;
+        border-radius: 50%;
+        filter: blur(80px);
+        pointer-events: none;
+        z-index: -1;
+      }
+      .nebula-blob-1 {
+        width: 600px; height: 600px;
+        top: -150px; left: -100px;
+        background: radial-gradient(circle, rgba(20,80,140,0.22) 0%, transparent 70%);
+        animation: nebulaDrift 25s infinite alternate ease-in-out;
+      }
+      .nebula-blob-2 {
+        width: 500px; height: 500px;
+        bottom: -100px; right: -50px;
+        background: radial-gradient(circle, rgba(40,100,180,0.18) 0%, transparent 70%);
+        animation: nebulaDrift 32s infinite alternate-reverse ease-in-out;
+      }
+      .nebula-blob-3 {
+        width: 400px; height: 400px;
+        top: 40%; left: 50%;
+        transform: translateX(-50%);
+        background: radial-gradient(circle, rgba(15,45,95,0.15) 0%, transparent 70%);
+        animation: nebulaDrift 40s infinite alternate ease-in-out;
+      }
+      @keyframes nebulaDrift {
+        from { transform: translate(0, 0) scale(1); }
+        to   { transform: translate(30px, 20px) scale(1.08); }
+      }
+
+      /* ── Content glow halo ── */
+      .content-glow {
+        position: fixed;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        width: 800px; height: 600px;
+        background: radial-gradient(ellipse at center, rgba(0,212,255,0.07) 0%, transparent 65%);
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      /* ── Glassmorphism Card ── */
+      .glass-card {
+        background: rgba(3,8,22,0.50);
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+        border: 1px solid var(--glass-border);
+        border-radius: 16px;
+        box-shadow:
+          0 8px 32px rgba(0,0,0,0.55),
+          0 0 0 1px rgba(255,140,66,0.04),
+          inset 0 1px 0 rgba(255,160,100,0.08),
+          inset 0 -1px 0 rgba(0,0,0,0.20);
+        transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+      }
+      .glass-card:hover {
+        border-color: var(--glass-border-hover);
+        box-shadow:
+          0 16px 48px rgba(0,0,0,0.65),
+          0 0 30px rgba(255,140,66,0.12),
+          inset 0 1px 0 rgba(255,160,100,0.12),
+          inset 0 -1px 0 rgba(0,0,0,0.25);
+        transform: translateY(-2px);
+      }
+
+      /* ── Glassmorphism Sidebar ── */
+      .glass-sidebar {
+        background: rgba(2,7,19,0.70);
+        backdrop-filter: blur(24px) saturate(150%);
+        -webkit-backdrop-filter: blur(24px) saturate(150%);
+        border-right: 1px solid rgba(255,140,66,0.15);
+        box-shadow: 4px 0 40px rgba(0,0,0,0.5);
+      }
+
+      /* ── Glassmorphism Header ── */
+      .glass-header {
+        background: rgba(2,7,19,0.96);
+        border-bottom: 1px solid rgba(255,140,66,0.15);
+        box-shadow: 0 4px 30px rgba(0,0,0,0.35);
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        transform: translate3d(0, 0, 0);
+        -webkit-transform: translate3d(0, 0, 0);
+        backface-visibility: hidden;
+        -webkit-backface-visibility: hidden;
+      }
+      @media (min-width: 1024px) {
+        .glass-header {
+          background: rgba(2,7,19,0.65);
+          backdrop-filter: blur(24px) saturate(150%);
+          -webkit-backdrop-filter: blur(24px) saturate(150%);
+        }
+      }
+
+      /* ── Sidebar Active Nav Item: orange neon glow border ── */
+      .nav-active {
+        background: rgba(255,120,40,0.14) !important;
+        border: 1px solid rgba(255,140,66,0.65) !important;
+        box-shadow: inset 0 0 20px rgba(255,120,40,0.10), 0 0 18px rgba(255,120,40,0.30) !important;
+        color: #ffb380 !important;
+      }
+      .nav-active .nav-icon { color: #ff8c42 !important; }
+
+      /* ── Orange heading glow ── */
+      .heading-gold {
+        font-family: 'Cinzel', Georgia, serif;
+        background: linear-gradient(135deg, #ff8c42 0%, #ffcba0 45%, #ff6b1a 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        text-shadow: none;
+        filter: drop-shadow(0 0 14px rgba(255,140,66,0.50));
+      }
+
+      /* ── Primary button: orange-to-amber gradient with hover glow ── */
+      .btn-primary {
+        background: linear-gradient(135deg, #ea580c 0%, #f97316 60%, #fb923c 100%);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1);
+        box-shadow: 0 4px 20px rgba(234,88,12,0.40), 0 0 0 1px rgba(255,140,66,0.20);
+      }
+      .btn-primary:hover {
+        background: linear-gradient(135deg, #ff6b1a 0%, #ff8c42 60%, #ffa96b 100%);
+        box-shadow: 0 8px 30px rgba(255,107,26,0.60), 0 0 40px rgba(255,140,66,0.25);
+        transform: translateY(-2px) scale(1.02);
+      }
+      .btn-primary:active { transform: translateY(0) scale(0.97); }
+
+      /* ── Secondary button: orange border thin, hover fill ── */
+      .btn-secondary {
+        background: rgba(255,140,66,0.06);
+        color: #ff8c42;
+        border: 1px solid rgba(255,140,66,0.40);
+        border-radius: 12px;
+        font-weight: 500;
+        transition: all 0.25s ease;
+      }
+      .btn-secondary:hover {
+        background: rgba(255,140,66,0.14);
+        border-color: #ff8c42;
+        box-shadow: 0 0 20px rgba(255,140,66,0.25);
+        transform: translateY(-1px);
+      }
+
+      /* ── Progress bars ── */
+      .progress-track {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,140,66,0.10);
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      .progress-bar-gold {
+        background: linear-gradient(90deg, #ea580c, #ff8c42, #ffb380);
+        border-radius: 999px;
+        box-shadow: 0 0 12px rgba(255,140,66,0.65);
+        transition: width 0.7s cubic-bezier(0.4,0,0.2,1);
+      }
+      .progress-bar-purple {
+        background: linear-gradient(90deg, #5b21b6, #7c3aed, #9333ea);
+        border-radius: 999px;
+        box-shadow: 0 0 10px rgba(0,212,255,0.50);
+        transition: width 0.7s cubic-bezier(0.4,0,0.2,1);
+      }
+
+      /* ── Polished scrollbar ── */
+      ::-webkit-scrollbar { width: 5px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(255,140,66,0.28);
+        border-radius: 10px;
+      }
+      ::-webkit-scrollbar-thumb:hover { background: rgba(255,140,66,0.55); }
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      .overflow-x-auto::-webkit-scrollbar { height: 4px; }
+
+      /* ── Fade-up animation ── */
+      .fade-up { animation: fadeUp 0.55s cubic-bezier(0.22,1,0.36,1) forwards; }
+      @keyframes fadeUp {
+        from { opacity: 0; transform: translateY(18px) scale(0.98); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+      }
+
+      /* ── Stagger children ── */
+      .stagger > * { opacity: 0; animation: fadeUp 0.5s cubic-bezier(0.22,1,0.36,1) forwards; }
+      .stagger > *:nth-child(1) { animation-delay: 0.05s; }
+      .stagger > *:nth-child(2) { animation-delay: 0.12s; }
+      .stagger > *:nth-child(3) { animation-delay: 0.19s; }
+      .stagger > *:nth-child(4) { animation-delay: 0.26s; }
+      .stagger > *:nth-child(5) { animation-delay: 0.33s; }
+      .stagger > *:nth-child(6) { animation-delay: 0.40s; }
+
+      /* ── Page transition: smooth slide-up + fade + slight scale ── */
+      .page-transition {
+        animation: pageIn 0.5s cubic-bezier(0.22,1,0.36,1) both;
+      }
+      @keyframes pageIn {
+        from { opacity: 0; transform: translateY(20px) scale(0.99); filter: blur(2px); }
+        to   { opacity: 1; transform: translateY(0) scale(1);      filter: blur(0); }
+      }
+
+      /* ── Shimmer animation ── */
+      @keyframes shimmer {
+        0%   { background-position: -200% 0; }
+        100% { background-position:  200% 0; }
+      }
+
+      /* ── Splash animations ── */
+      @keyframes splashLogoIn {
+        0%   { opacity: 0; transform: translateY(40px) scale(0.88); filter: blur(8px); }
+        40%  { opacity: 1; transform: translateY(0) scale(1.04); filter: blur(0); }
+        70%  { transform: scale(1.02); }
+        100% { opacity: 1; transform: scale(1); filter: blur(0); }
+      }
+      @keyframes splashTagIn {
+        from { opacity: 0; transform: translateY(12px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+      .phoenix-rise-anim  { animation: splashLogoIn 3.5s cubic-bezier(0.22,1,0.36,1) forwards; }
+      .logo-reveal-anim   { animation: splashTagIn 1.6s 2s ease-out forwards; opacity: 0; }
+
+      @keyframes fireGlow {
+        0%,100% { filter: drop-shadow(0 0 18px #ff8c00) drop-shadow(0 0 35px #d39c3b); }
+        50%     { filter: drop-shadow(0 0 28px #ff4500) drop-shadow(0 0 55px #ffaa00); }
+      }
+      .fire-glow { animation: fireGlow 1.8s ease-in-out infinite; }
+
+      /* ── Stars (splash) ── */
+      .stars {
+        position: absolute; inset: 0;
+        background-image:
+          radial-gradient(1px 1px at 10% 20%, white, transparent),
+          radial-gradient(1px 1px at 30% 50%, rgba(255,255,255,0.8), transparent),
+          radial-gradient(2px 2px at 70% 30%, white, transparent),
+          radial-gradient(1px 1px at 40% 80%, rgba(255,255,255,0.5), transparent),
+          radial-gradient(1px 1px at 90% 90%, white, transparent);
+        background-size: 300px 300px;
+        animation: starTwinkle 5s infinite linear;
+      }
+
+      /* ── Celebration / Confetti ── */
+      @keyframes confettiFall {
+        0%   { transform: translateY(-10px) rotate(0deg); opacity: 1; }
+        80%  { opacity: 1; }
+        100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+      }
+      @keyframes bounceIn {
+        0%   { transform: scale(0.3); opacity: 0; }
+        50%  { transform: scale(1.08); opacity: 1; }
+        70%  { transform: scale(0.95); }
+        100% { transform: scale(1); }
+      }
+      @keyframes slideUp {
+        from { opacity: 0; transform: translateY(24px) scale(0.97); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+      }
+
+      /* ── Icon tint helpers ── */
+      .icon-gold   { color: var(--gold-primary); }
+      .icon-purple { color: var(--purple-primary); }
+
+      /* ── Card inner shadow for glass depth ── */
+      .glass-inner-shadow {
+        box-shadow:
+          0 8px 32px rgba(0,0,0,0.55),
+          0 0 0 1px rgba(255,140,66,0.05),
+          inset 0 1px 0 rgba(255,160,100,0.10),
+          inset 0 -1px 0 rgba(0,0,0,0.25);
+      }
+
+      /* ── Glow ring on form focus ── */
+      input:focus, textarea:focus, select:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(255,140,66,0.40), 0 0 14px rgba(255,140,66,0.18);
+        border-color: rgba(255,140,66,0.60) !important;
+      }
+
+      /* Smooth link transitions */
+      a { transition: color 0.25s ease, opacity 0.25s ease; }
+
+      /* Text glow helpers */
+      .text-gold-glow   { text-shadow: 0 0 16px rgba(255,140,66,0.6); }
+      .text-orange-glow { text-shadow: 0 0 20px rgba(255,107,26,0.70); }
+      .text-purple-glow { text-shadow: 0 0 16px rgba(0,212,255,0.5);  }
+
+      /* icon tint helpers */
+      .icon-orange { color: #ff8c42; }
+      .icon-purple { color: var(--purple-primary); }
+    </style>
+    <script type="importmap">
+      {
+        "imports": {
+          "react-router-dom": "https://esm.sh/react-router-dom@^7.13.0",
+          "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
+          "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+          "@google/genai": "https://esm.sh/@google/genai@^1.40.0",
+          "react/": "https://esm.sh/react@^19.2.4/",
+          "react": "https://esm.sh/react@^19.2.4"
+        }
+      }
+    </script>
+    <link rel="stylesheet" href="/index.css" />
+  </head>
+  <body>
+    <!-- Cosmic background layers -->
+    <div class="cosmic-bg"></div>
+    <div class="star-field"></div>
+    <div class="nebula-blob nebula-blob-1"></div>
+    <div class="nebula-blob nebula-blob-2"></div>
+    <div class="nebula-blob nebula-blob-3"></div>
+    <div class="content-glow"></div>
+
+    <div id="root"></div>
+    <script type="module" src="/src/index.tsx"></script>
+
+    <!-- ── PWA: Service Worker Registration ─────────────────────────────── -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/sw.js', { scope: '/' })
+            .then(function (reg) {
+              console.log('[SW] Registered, scope:', reg.scope);
+              // Listen for a new service worker waiting to activate
+              reg.addEventListener('updatefound', function () {
+                var newWorker = reg.installing;
+                if (newWorker) {
+                  newWorker.addEventListener('statechange', function () {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                      // New version available — dispatch custom event so React can show an update banner
+                      window.dispatchEvent(new CustomEvent('sw-update-available'));
+                    }
+                  });
+                }
+              });
+            })
+            .catch(function (err) {
+              console.warn('[SW] Registration failed:', err);
+            });
+        });
+      }
+    </script>
+  </body>
+</html>
