@@ -16,6 +16,9 @@ import { llamaPlugin } from '../services/llamaPlugin';
 import { Capacitor } from '@capacitor/core';
 
 const getBackendUrl = (): string => {
+  if (import.meta.env.VITE_BACKEND_URL) {
+    return import.meta.env.VITE_BACKEND_URL;
+  }
   if (Capacitor.isNativePlatform()) {
     return ''; // Mobile apps run separately, no connection to laptop backend
   }

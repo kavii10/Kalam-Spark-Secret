@@ -19,6 +19,9 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 const IS_NATIVE_MOBILE = Capacitor.isNativePlatform();
 
 const getBackendUrl = (): string => {
+  if (import.meta.env.VITE_BACKEND_URL) {
+    return import.meta.env.VITE_BACKEND_URL;
+  }
   if (Capacitor.isNativePlatform()) {
     return ''; // Mobile apps run separately, no connection to laptop backend
   }

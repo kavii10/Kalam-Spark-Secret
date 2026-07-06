@@ -103,6 +103,9 @@ export const normalizeCareers = (data: any[]): any[] => {
 // ─────────────────────────────────────────────────────────────
 
 const getBackendUrl = (): string => {
+  if (import.meta.env.VITE_BACKEND_URL) {
+    return import.meta.env.VITE_BACKEND_URL;
+  }
   if (Capacitor.isNativePlatform()) {
     return ''; // Mobile apps run separately, no connection to laptop backend
   }
