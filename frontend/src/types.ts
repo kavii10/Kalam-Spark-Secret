@@ -98,6 +98,7 @@ export interface UserProfile {
     autoScheduleRevisions: boolean;
     notificationsEnabled: boolean;
     soundEnabled: boolean;
+    customGeminiKey?: string;
   };
   /** Cross-device sync for FileSpeaker / Radar sources */
   fileSpeakerData?: {

@@ -1618,6 +1618,35 @@ const AppContent = ({
               </label>
             </div>
 
+            {/* Custom Gemini API Key Settings Panel */}
+            <div className="flex flex-col gap-1.5 p-3.5 rounded-lg bg-black/40 border border-gold-500/20 mb-5 text-left">
+              <span className="text-xs uppercase font-mono tracking-wider text-gold-400 font-bold mb-1">Custom Gemini API Key</span>
+              <p className="text-[10px] text-gold-500/60 leading-relaxed mb-2">
+                Optional. Paste your Google AI Studio API key to bypass default key leaks/limits.
+              </p>
+              <input 
+                type="password"
+                placeholder="Paste Gemini API Key (AIzaSy...)"
+                value={user.settings?.customGeminiKey || ""}
+                onChange={(e) => {
+                  const updated = {
+                    ...user,
+                    settings: {
+                      ...user.settings,
+                      theme: user.settings?.theme || 'dark',
+                      autoScheduleRevisions: user.settings?.autoScheduleRevisions ?? true,
+                      notificationsEnabled: user.settings?.notificationsEnabled ?? true,
+                      soundEnabled: user.settings?.soundEnabled ?? true,
+                      customGeminiKey: e.target.value
+                    }
+                  };
+                  setUser(updated);
+                  dbService.saveUser(updated);
+                }}
+                className="w-full bg-black/80 border border-gold-500/30 rounded-lg px-2.5 py-1.5 text-xs text-gold-100 placeholder-gold-500/30 focus:border-orange-500 outline-none"
+              />
+            </div>
+
             {Capacitor.isNativePlatform() && (
               <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-black/40 border border-gold-500/20 mb-5 text-left">
                 <span className="text-xs uppercase font-mono tracking-wider text-gold-400 font-bold mb-1">Local AI (Offline Mode)</span>

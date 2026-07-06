@@ -16,8 +16,20 @@ import {
 
 const IS_NATIVE_MOBILE = Capacitor.isNativePlatform();
 
-// API Keys - loaded from .env
-const GOOGLE_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
+// API Keys - loaded from .env with local storage custom key fallback
+const getGoogleApiKey = (): string => {
+  try {
+    const cached = localStorage.getItem('kalamspark_cached_profile') || localStorage.getItem('kalamspark_user_session');
+    if (cached) {
+      const user = JSON.parse(cached);
+      if (user?.settings?.customGeminiKey) {
+        return user.settings.customGeminiKey.trim();
+      }
+    }
+  } catch (e) {}
+  return import.meta.env.VITE_GEMINI_API_KEY || "";
+};
+
 const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY || "";
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
 
@@ -106,7 +118,7 @@ export const generateText = async (options: LLMRequestOptions): Promise<string> 
     // 1. Google Gemini (Primary)
     try {
       console.log("[LLMRouter] Trying Google Gemini API...");
-      const ai = new GoogleGenAI({ apiKey: GOOGLE_API_KEY });
+      const ai = new GoogleGenAI({ apiKey: getGoogleApiKey() });
       const model = "gemini-3.1-flash-lite";
       
       const config: any = {};
@@ -699,7 +711,7 @@ export const getCareerNews = async (dream: string): Promise<any[]> => {
   if (isOnline) {
     try {
       console.log("[LLMRouter] Fetching career news using Gemini search grounding...");
-      const ai = new GoogleGenAI({ apiKey: GOOGLE_API_KEY });
+      const ai = new GoogleGenAI({ apiKey: getGoogleApiKey() });
       const response = await ai.models.generateContent({
         model: "gemini-3.1-flash-lite",
         contents: `Exciting news about ${dream} in simple words for kids.`,
@@ -1342,7 +1354,7 @@ Student: ${userProfile?.name || 'Student'}, Dream: ${userProfile?.dream || 'a gr
       userParts.push({ text: userText || 'Please analyse this PDF document and summarise the key points.' });
 
     } else if (mt.startsWith('audio/')) {
-      // Audio — Gemini supports audio/mpeg, audio/wav, audio/ogg, audio/aac, audio/flac, audio/webm
+      // Audio — Gemini supports audio/mpeg, audio/wav, audio/ogg, audio/aac, audio/aac, audio/flac, audio/webm
       userParts.push({
         inlineData: { mimeType: mt, data: attachment.base64 }
       });
@@ -1388,12 +1400,12 @@ const callGeminiREST = async (
   if (!networkService.isOnline()) {
     throw new Error("Internet connection is required to generate career suggestions and roadmaps. Please check your internet connection.");
   }
-  if (!GOOGLE_API_KEY) {
+  if (!getGoogleApiKey()) {
     throw new Error("Gemini API Key is missing. This feature works only with the online Gemini API.");
   }
 
   const model = "gemini-3.1-flash-lite";
-  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GOOGLE_API_KEY}`;
+  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${getGoogleApiKey()}`;
 
   const contents = [{ role: "user", parts: [{ text: prompt }] }];
   const generationConfig: any = {
