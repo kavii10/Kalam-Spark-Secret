@@ -16,17 +16,40 @@ import {
 
 const IS_NATIVE_MOBILE = Capacitor.isNativePlatform();
 
-// API Keys - loaded from .env with local storage custom key fallback
-const getGoogleApiKey = (): string => {
+// API Keys - loaded from .env with local storage custom key fallback & Render backend endpoint fallback
+let cachedFetchedApiKey: string | null = null;
+
+export const fetchApiKeyFromBackend = async (): Promise<string> => {
+  if (cachedFetchedApiKey) return cachedFetchedApiKey;
+
+  // 1. Try to read custom user key from localStorage
   try {
     const cached = localStorage.getItem('kalamspark_cached_profile') || localStorage.getItem('kalamspark_user_session');
     if (cached) {
       const user = JSON.parse(cached);
       if (user?.settings?.customGeminiKey) {
-        return user.settings.customGeminiKey.trim();
+        cachedFetchedApiKey = user.settings.customGeminiKey.trim();
+        return cachedFetchedApiKey;
       }
     }
   } catch (e) {}
+
+  // 2. Try to fetch dynamic key from Render backend environment
+  try {
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://127.0.0.1:8000";
+    const res = await fetch(`${backendUrl}/api/gemini_key`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.gemini_key) {
+        cachedFetchedApiKey = data.gemini_key.trim();
+        return cachedFetchedApiKey;
+      }
+    }
+  } catch (err) {
+    console.warn("[geminiService] Failed to fetch API key from backend:", err);
+  }
+
+  // 3. Fallback to compile-time env key
   return import.meta.env.VITE_GEMINI_API_KEY || "";
 };
 
@@ -118,7 +141,8 @@ export const generateText = async (options: LLMRequestOptions): Promise<string> 
     // 1. Google Gemini (Primary)
     try {
       console.log("[LLMRouter] Trying Google Gemini API...");
-      const ai = new GoogleGenAI({ apiKey: getGoogleApiKey() });
+      const apiKey = await fetchApiKeyFromBackend();
+      const ai = new GoogleGenAI({ apiKey });
       const model = "gemini-3.1-flash-lite";
       
       const config: any = {};
@@ -711,7 +735,8 @@ export const getCareerNews = async (dream: string): Promise<any[]> => {
   if (isOnline) {
     try {
       console.log("[LLMRouter] Fetching career news using Gemini search grounding...");
-      const ai = new GoogleGenAI({ apiKey: getGoogleApiKey() });
+      const apiKey = await fetchApiKeyFromBackend();
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: "gemini-3.1-flash-lite",
         contents: `Exciting news about ${dream} in simple words for kids.`,
@@ -1400,12 +1425,13 @@ const callGeminiREST = async (
   if (!networkService.isOnline()) {
     throw new Error("Internet connection is required to generate career suggestions and roadmaps. Please check your internet connection.");
   }
-  if (!getGoogleApiKey()) {
+  const apiKey = await fetchApiKeyFromBackend();
+  if (!apiKey) {
     throw new Error("Gemini API Key is missing. This feature works only with the online Gemini API.");
   }
 
   const model = "gemini-3.1-flash-lite";
-  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${getGoogleApiKey()}`;
+  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   const contents = [{ role: "user", parts: [{ text: prompt }] }];
   const generationConfig: any = {

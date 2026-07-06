@@ -157,6 +157,14 @@ async def health_check():
     }
 
 
+@app.get("/api/gemini_key")
+async def get_gemini_key():
+    import os
+    # Support VITE_GEMINI_API_KEY and GEMINI_API_KEY env variables on Render
+    key = os.getenv("VITE_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY") or ""
+    return {"gemini_key": key.strip()}
+
+
 # ──────────────────────────────────────────────
 # Main Roadmap Endpoint
 # ──────────────────────────────────────────────
