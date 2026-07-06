@@ -1676,24 +1676,31 @@ const AppContent = ({
           </div>
         </div>
       )}
-      {/* Download App Popup / PWA Banner (floating at the top) */}
       {showInstallBanner && (
         <div 
           className="fixed top-4 left-1/2 -translate-x-1/2 z-[300] w-[90%] max-w-md p-4 rounded-xl flex items-center justify-between gap-3 animate-fade-in-down"
           style={{
-            background: "rgba(6,3,18,0.95)",
-            border: "1px solid rgba(255,140,66,0.35)",
-            boxShadow: "0 10px 30px rgba(0,0,0,0.8), 0 0 15px rgba(255,140,66,0.1)",
+            background: isLight ? "#ffffff" : "rgba(6,3,18,0.95)",
+            border: isLight ? "1px solid #ea580c" : "1px solid rgba(255,140,66,0.35)",
+            boxShadow: isLight 
+              ? "0 10px 30px rgba(234,88,12,0.15), 0 0 15px rgba(234,88,12,0.05)" 
+              : "0 10px 30px rgba(0,0,0,0.8), 0 0 15px rgba(255,140,66,0.1)",
             backdropFilter: "blur(10px)"
           }}
         >
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,140,66,0.15)', border: '1px solid rgba(255,140,66,0.3)' }}>
-              <Smartphone size={18} className="text-orange-400" />
+            <div 
+              className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" 
+              style={{ 
+                background: isLight ? "rgba(234,88,12,0.1)" : "rgba(255,140,66,0.15)", 
+                border: isLight ? "1px solid rgba(234,88,12,0.2)" : "1px solid rgba(255,140,66,0.3)" 
+              }}
+            >
+              <Smartphone size={18} className={isLight ? "text-orange-600" : "text-orange-400"} />
             </div>
             <div>
-              <p className="text-xs font-bold text-gold-200">Kalam Spark App</p>
-              <p className="text-[10px] text-gold-500/80">Get our native app for full offline local AI support!</p>
+              <p className={`text-xs font-bold ${isLight ? "text-orange-900" : "text-gold-200"}`}>Kalam Spark App</p>
+              <p className={`text-[10px] ${isLight ? "text-zinc-600" : "text-gold-500/80"}`}>Get our native app for full offline local AI support!</p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -1705,7 +1712,7 @@ const AppContent = ({
             </button>
             <button 
               onClick={() => setShowInstallBanner(false)}
-              className="p-1.5 rounded-lg text-gold-500/50 hover:text-gold-300 hover:bg-white/5 transition-all"
+              className={`p-1.5 rounded-lg transition-all ${isLight ? "text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100" : "text-gold-500/50 hover:text-gold-300 hover:bg-white/5"}`}
             >
               <X size={14} />
             </button>
