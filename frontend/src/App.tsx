@@ -1068,10 +1068,23 @@ const AppContent = ({
       if (outcome === 'accepted') {
         setShowInstallBanner(false);
         setIsInstalled(true);
+        setInstallPrompt(null);
+        return;
       }
-      setInstallPrompt(null);
     }
-    // iOS — banner already shows instructions, nothing else to do
+
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    if (isIOS) {
+      alert("To install Kalam Spark on iOS, tap the Share icon in Safari and select 'Add to Home Screen'.");
+    } else {
+      // Trigger download of the native Android APK file
+      const link = document.createElement('a');
+      link.href = '/kalam-spark.apk';
+      link.download = 'kalam-spark.apk';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   useEffect(() => {
