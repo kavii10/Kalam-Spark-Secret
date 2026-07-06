@@ -6,7 +6,7 @@
  */
 
 // ─── API Keys ─────────────────────────────────────────────────────────────────
-const YOUTUBE_API_KEY   = import.meta.env.VITE_YOUTUBE_API_KEY || '';
+const YOUTUBE_API_KEY   = import.meta.env.VITE_YOUTUBE_API_KEY || 'AIzaSyAJpwWbR-MZtwWvfFih8rHIVHrNMLPdPv8';
 const BOOKS_API_KEY     = import.meta.env.VITE_GOOGLE_BOOKS_API_KEY || '';
 const NYT_API_KEY       = import.meta.env.VITE_NYT_API_KEY || '';
 const NEWSDATA_API_KEY  = import.meta.env.VITE_NEWSDATA_API_KEY || '';
@@ -379,11 +379,17 @@ async function fetchKhanAcademy(query: string, maxResults = 6): Promise<VideoRes
     'law':               { path: 'humanities', topics: ['us-government-and-civics', 'world-history'] },
     'sat':               { path: 'test-prep', topics: ['sat'] },
     'gre':               { path: 'test-prep', topics: ['gre'] },
+    // Expanded sub-topics
+    'algebra':           { path: 'math', topics: ['algebra', 'algebra-basics', 'linear-algebra'] },
+    'geometry':          { path: 'math', topics: ['geometry', 'basic-geometry', 'analytic-geometry'] },
+    'logic':             { path: 'computing', topics: ['computer-science', 'algorithms'] },
+    'boolean':           { path: 'computing', topics: ['computer-science', 'algorithms'] }
   };
 
   // Find the best matching subject (longest match wins for specificity)
+  // Split query into individual keywords for robust matching
   const matchedSubject = Object.keys(subjectMap)
-    .filter(k => lower.includes(k))
+    .filter(k => lower.split(/\s+/).some(w => w === k || w.startsWith(k)))
     .sort((a, b) => b.length - a.length)[0]; // longest match = most specific
 
   if (!matchedSubject) return [];
@@ -428,10 +434,16 @@ async function fetchMITOpenCourseWare(query: string, maxResults = 6): Promise<Vi
                       item.querySelector('guid')?.textContent?.trim() || '';
       const link = rawLink.startsWith('http') ? rawLink : '';
 
-      // Only include if the course title or description actually matches the query
-      const matches =
-        title.toLowerCase().includes(lower) ||
-        desc.toLowerCase().includes(lower);
+      // Extract core keywords (filtering out generic search terms)
+      const coreKeywords = lower
+        .split(/\s+/)
+        .filter(w => w.length > 2 && !['tutorial', 'learn', 'course', 'introduction', 'intro', 'class', 'basic', 'basics', 'specialist', 'specialism'].includes(w));
+      
+      // Match if at least one core keyword matches the title or description
+      const matches = coreKeywords.length > 0 && coreKeywords.some(kw => 
+        title.toLowerCase().includes(kw) || 
+        desc.toLowerCase().includes(kw)
+      );
 
       if (matches && link && isValidUrl(link)) {
         results.push({
