@@ -1036,25 +1036,28 @@ const AppContent = ({
     // Only show on web (not inside Capacitor native app)
     if (Capacitor.isNativePlatform() || standalone) return;
 
+    // Show the floating banner to new web users after 3s, then auto-hide after 8s
+    const showTimer = setTimeout(() => {
+      setShowInstallBanner(true);
+      const hideTimer = setTimeout(() => {
+        setShowInstallBanner(false);
+      }, 8000);
+      return () => clearTimeout(hideTimer);
+    }, 3000);
+
     // Android Chrome: capture the install prompt
     const handler = (e: Event) => {
       e.preventDefault();
       setInstallPrompt(e);
-      setShowInstallBanner(true);
     };
     window.addEventListener('beforeinstallprompt', handler);
-
-    // iOS: show the banner after a short delay so user can see the app first
-    if (ios) {
-      const timer = setTimeout(() => setShowInstallBanner(true), 3000);
-      return () => { clearTimeout(timer); window.removeEventListener('beforeinstallprompt', handler); };
-    }
 
     // Hide after install
     const onInstalled = () => { setShowInstallBanner(false); setIsInstalled(true); };
     window.addEventListener('appinstalled', onInstalled);
 
     return () => {
+      clearTimeout(showTimer);
       window.removeEventListener('beforeinstallprompt', handler);
       window.removeEventListener('appinstalled', onInstalled);
     };
@@ -1669,6 +1672,42 @@ const AppContent = ({
               style={{ border: "1px solid rgba(239,68,68,0.2)" }}
             >
               <LogOut size={16} /> Log Out
+            </button>
+          </div>
+        </div>
+      )}
+      {/* Download App Popup / PWA Banner (floating at the top) */}
+      {showInstallBanner && (
+        <div 
+          className="fixed top-4 left-1/2 -translate-x-1/2 z-[300] w-[90%] max-w-md p-4 rounded-xl flex items-center justify-between gap-3 animate-fade-in-down"
+          style={{
+            background: "rgba(6,3,18,0.95)",
+            border: "1px solid rgba(255,140,66,0.35)",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.8), 0 0 15px rgba(255,140,66,0.1)",
+            backdropFilter: "blur(10px)"
+          }}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,140,66,0.15)', border: '1px solid rgba(255,140,66,0.3)' }}>
+              <Smartphone size={18} className="text-orange-400" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-gold-200">Kalam Spark App</p>
+              <p className="text-[10px] text-gold-500/80">Get our native app for full offline local AI support!</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button 
+              onClick={() => { setShowInstallBanner(false); handleInstallClick(); }}
+              className="px-2.5 py-1.5 rounded-lg text-[10px] font-bold text-white bg-gradient-to-r from-orange-500 to-amber-500 hover:opacity-90 active:scale-95 transition-all"
+            >
+              Download
+            </button>
+            <button 
+              onClick={() => setShowInstallBanner(false)}
+              className="p-1.5 rounded-lg text-gold-500/50 hover:text-gold-300 hover:bg-white/5 transition-all"
+            >
+              <X size={14} />
             </button>
           </div>
         </div>
