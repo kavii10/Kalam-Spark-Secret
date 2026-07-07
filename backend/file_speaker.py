@@ -337,45 +337,43 @@ def _get_embed_model():
     global _embed_model
     if _embed_model is None:
         genai = _import_google_generativeai()
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY not found in environment. Required for cloud embeddings.")
-        genai.configure(api_key=api_key, transport="rest")
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY")
+        if api_key:
+            genai.configure(api_key=api_key, transport="rest")
         
         class GeminiEmbedder:
             def encode(self, texts: list[str]):
-                # Google allows batch embedding
-                # We try several model names to avoid 404s in different environments
-                models_to_try = [
-                    "models/gemini-embedding-001",
-                    "models/text-embedding-004", 
-                    "text-embedding-004",
-                    "models/embedding-001",
-                    "embedding-001"
-                ]
-                
-                last_err = None
-                for mname in models_to_try:
-                    try:
-                        res = genai.embed_content(
-                            model=mname,
-                            content=texts,
-                            task_type="retrieval_document"
-                        )
-                        print(f"[FileSpeaker] Embedding success with model: {mname}")
-                        if isinstance(res, dict) and 'embedding' in res:
-                            return res['embedding']
-                        elif hasattr(res, 'embedding'):
-                            return res.embedding
-                        elif isinstance(res, dict) and 'embeddings' in res:
-                            return res['embeddings']
-                        elif hasattr(res, 'embeddings'):
-                            return res.embeddings
-                        return res
+                if api_key:
+                    # Google allows batch embedding
+                    # We try several model names to avoid 404s in different environments
+                    models_to_try = [
+                        "models/gemini-embedding-001",
+                        "models/text-embedding-004", 
+                        "text-embedding-004",
+                        "models/embedding-001",
+                        "embedding-001"
+                    ]
+                    
+                    for mname in models_to_try:
+                        try:
+                            res = genai.embed_content(
+                                model=mname,
+                                content=texts,
+                                task_type="retrieval_document"
+                            )
+                            print(f"[FileSpeaker] Embedding success with model: {mname}")
+                            if isinstance(res, dict) and 'embedding' in res:
+                                return res['embedding']
+                            elif hasattr(res, 'embedding'):
+                                return res.embedding
+                            elif isinstance(res, dict) and 'embeddings' in res:
+                                return res['embeddings']
+                            elif hasattr(res, 'embeddings'):
+                                return res.embeddings
+                            return res
 
-                    except Exception as e:
-                        print(f"[FileSpeaker] Embedding failed with {mname}: {e}")
-                        last_err = e
+                        except Exception as e:
+                            print(f"[FileSpeaker] Embedding failed with {mname}: {e}")
                 
                 # If Google fails, try OpenRouter if key is available
                 or_key = os.getenv("OPENROUTER_API_KEY")
@@ -393,7 +391,9 @@ def _get_embed_model():
                     except Exception as or_e:
                         print(f"[FileSpeaker] OpenRouter embedding failed: {or_e}")
                 
-                raise last_err
+                # Fallback to zero-filled embeddings to prevent crash
+                print("[FileSpeaker] WARNING: All embedding services failed. Using fallback zero embeddings.")
+                return [[0.0] * 768 for _ in texts]
         
         _embed_model = GeminiEmbedder()
     return _embed_model

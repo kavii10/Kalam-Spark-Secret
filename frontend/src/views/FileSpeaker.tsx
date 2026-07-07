@@ -1790,7 +1790,7 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
           if (res.ok) {
             const data = await res.json();
             if (data.source_id) {
-              registerSource({ ...data, text: data.preview, addedAt: Date.now() });
+              registerSource({ ...data, text: data.text || data.preview, addedAt: Date.now() });
               setUploading(false);
               return;
             }
@@ -1898,7 +1898,7 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
           if (res.ok) {
             const data = await res.json();
             if (data.source_id) {
-              registerSource({ ...data, text: data.preview, addedAt: Date.now() });
+              registerSource({ ...data, text: data.text || data.preview, addedAt: Date.now() });
               setUrlInput('');
               setUploading(false);
               return;

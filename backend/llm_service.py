@@ -13,7 +13,7 @@ from json_repair import try_parse_json, repair_json_string
 
 # ── Cloud API Keys (from environment variables)
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-GEMINI_API_KEY     = os.getenv("GEMINI_API_KEY", "")  # Google AI Studio key
+GEMINI_API_KEY     = os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY") or ""
 GROQ_API_KEY       = os.getenv("GROQ_API_KEY", "")
 
 # ── Local LLM via Ollama (fallback when cloud providers fail)

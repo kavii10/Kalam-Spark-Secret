@@ -1060,7 +1060,7 @@ async def fs_upload_file(
 
     # Index into local VDB for RAG
     print(f"[FileSpeaker] Processing upload: {file.filename}, length: {len(text)}")
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY")
     if not api_key:
         print("[FileSpeaker] WARNING: GEMINI_API_KEY is not set. Indexing will fail.")
     else:
@@ -1079,6 +1079,7 @@ async def fs_upload_file(
         "char_count": len(text),
         "chunk_count": chunk_count,
         "preview": text[:500],
+        "text": text,
     }
 
 
@@ -1103,7 +1104,7 @@ async def fs_add_url(req: FSUrlRequest):
         chunk_count = 0
 
     _source_store[sid] = {"title": title, "text": text, "chunks": chunk_count}
-    return {"source_id": sid, "title": title, "char_count": len(text), "chunk_count": chunk_count, "preview": text[:500]}
+    return {"source_id": sid, "title": title, "char_count": len(text), "chunk_count": chunk_count, "preview": text[:500], "text": text}
 
 
 
@@ -1124,7 +1125,7 @@ async def fs_add_text(payload: dict):
         chunk_count = 0
 
     _source_store[sid] = {"title": title, "text": text, "chunks": chunk_count}
-    return {"source_id": sid, "title": title, "char_count": len(text), "chunk_count": chunk_count}
+    return {"source_id": sid, "title": title, "char_count": len(text), "chunk_count": chunk_count, "text": text}
 
 
 @app.post("/api/filespeaker/chat")

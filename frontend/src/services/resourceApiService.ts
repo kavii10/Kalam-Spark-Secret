@@ -299,6 +299,42 @@ export async function fetchBooks(query: string, maxPerProvider = 15, startIndex 
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ── Provider 1: YouTube ───────────────────────────────────────────────────────
+async function fetchYouTubeVideosInvidious(query: string, maxResults = 20): Promise<VideoResource[]> {
+  const instances = [
+    'https://inv.tux.im',
+    'https://yewtu.be',
+    'https://invidious.flokinet.to',
+    'https://invidious.projectsegfau.lt'
+  ];
+  
+  for (const instance of instances) {
+    try {
+      const url = `${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=video`;
+      const res = await fetchWithTimeout(url, {}, 6000);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          return data
+            .filter((item: any) => item.type === 'video' && item.videoId)
+            .slice(0, maxResults)
+            .map((item: any): VideoResource => ({
+              id: makeId('yt', item.videoId),
+              title: item.title || 'Untitled Video',
+              channel: item.author || 'Unknown Channel',
+              summary: item.description?.slice(0, 200) || 'YouTube video lecture',
+              link: `https://www.youtube.com/watch?v=${item.videoId}`,
+              thumbnail: `https://img.youtube.com/vi/${item.videoId}/hqdefault.jpg`,
+              source: 'youtube'
+            }));
+        }
+      }
+    } catch (err) {
+      console.warn(`[Videos] Invidious instance ${instance} failed:`, err);
+    }
+  }
+  return [];
+}
+
 async function fetchYouTubeVideos(query: string, maxResults = 20): Promise<VideoResource[]> {
   try {
     const params = new URLSearchParams({
@@ -314,26 +350,30 @@ async function fetchYouTubeVideos(query: string, maxResults = 20): Promise<Video
     const res = await fetchWithTimeout(
       `https://www.googleapis.com/youtube/v3/search?${params}`
     );
-    if (!res.ok) throw new Error(`YouTube ${res.status}`);
+    if (!res.ok) throw new Error(`YouTube API returned HTTP ${res.status}`);
     const data = await res.json();
-    return (data.items || [])
-      .filter((item: any) => item.id?.videoId)
-      .map((item: any): VideoResource => ({
-        id: makeId('yt', item.id.videoId),
-        title: item.snippet.title || 'Untitled Video',
-        channel: item.snippet.channelTitle || 'Unknown Channel',
-        summary: item.snippet.description?.slice(0, 200) || 'Educational video lecture',
-        link: `https://www.youtube.com/watch?v=${item.id.videoId}`,
-        thumbnail:
-          item.snippet.thumbnails?.high?.url ||
-          item.snippet.thumbnails?.medium?.url ||
-          item.snippet.thumbnails?.default?.url,
-        source: 'youtube',
-      }));
+    if (data.items && data.items.length > 0) {
+      return data.items
+        .filter((item: any) => item.id?.videoId)
+        .map((item: any): VideoResource => ({
+          id: makeId('yt', item.id.videoId),
+          title: item.snippet.title || 'Untitled Video',
+          channel: item.snippet.channelTitle || 'Unknown Channel',
+          summary: item.snippet.description?.slice(0, 200) || 'Educational video lecture',
+          link: `https://www.youtube.com/watch?v=${item.id.videoId}`,
+          thumbnail:
+            item.snippet.thumbnails?.high?.url ||
+            item.snippet.thumbnails?.medium?.url ||
+            item.snippet.thumbnails?.default?.url,
+          source: 'youtube',
+        }));
+    }
   } catch (e) {
-    console.warn('[Videos] YouTube failed:', e);
-    return [];
+    console.warn('[Videos] Official YouTube API failed, trying Invidious fallback:', e);
   }
+
+  // Fallback to Invidious search
+  return fetchYouTubeVideosInvidious(query, maxResults);
 }
 
 // ── Provider 2: Khan Academy (curated topic links) ────────────────────────────
@@ -466,15 +506,13 @@ async function fetchMITOpenCourseWare(query: string, maxResults = 6): Promise<Vi
 
 /** Aggregate videos from all providers, deduplicating strictly by videoId. */
 export async function fetchVideos(query: string, maxPerProvider = 20): Promise<VideoResource[]> {
-  const [yt, ka, mit] = await Promise.allSettled([
+  const [yt, mit] = await Promise.allSettled([
     fetchYouTubeVideos(query, maxPerProvider),
-    fetchKhanAcademy(query, 6),
     fetchMITOpenCourseWare(query, 4),
   ]);
 
   const all: VideoResource[] = [
     ...(yt.status === 'fulfilled' ? yt.value : []),
-    ...(ka.status === 'fulfilled' ? ka.value : []),
     ...(mit.status === 'fulfilled' ? mit.value : []),
   ];
 
