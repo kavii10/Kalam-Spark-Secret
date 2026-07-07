@@ -148,12 +148,74 @@ export const generateText = async (options: LLMRequestOptions): Promise<string> 
   const isOnline = networkService.isOnline();
   
   if (isOnline) {
-    // 1. Google Gemini (Primary)
+    // 0. On native mobile APK — always route through the backend proxy (no API key in APK)
+    if (IS_NATIVE_MOBILE) {
+      try {
+        const backendUrl = getBackendUrl();
+        const proxyBody: any = {
+          prompt: options.prompt,
+          systemInstruction: options.systemInstruction,
+          temperature: options.temperature ?? 0.3,
+          model: "gemini-2.0-flash-lite",
+        };
+        if (options.responseSchema) proxyBody.responseSchema = options.responseSchema;
+
+        const proxyResp = await fetch(`${backendUrl}/api/gemini_proxy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(proxyBody),
+        });
+
+        if (proxyResp.ok) {
+          const proxyData = await proxyResp.json();
+          if (proxyData.text) {
+            console.log("[LLMRouter] Backend proxy (native) succeeded.");
+            return proxyData.text;
+          }
+        } else {
+          const errData = await proxyResp.json().catch(() => ({}));
+          console.warn("[LLMRouter] Backend proxy failed:", errData.detail || proxyResp.status);
+        }
+      } catch (e: any) {
+        console.warn("[LLMRouter] Backend proxy network error:", e?.message?.substring(0, 100));
+      }
+
+      // Fallback to OpenRouter if proxy fails
+      try {
+        console.log("[LLMRouter] Native: falling back to OpenRouter...");
+        const messages: any[] = [];
+        if (options.systemInstruction) messages.push({ role: "system", content: options.systemInstruction });
+        messages.push({ role: "user", content: options.prompt });
+        const body: any = { model: "openrouter/auto", messages, temperature: options.temperature ?? 0.3 };
+        if (options.responseMimeType === "application/json") body.response_format = { type: "json_object" };
+        const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+            "HTTP-Referer": "https://kalam-spark.com",
+            "X-Title": "Kalam Spark"
+          },
+          body: JSON.stringify(body)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const text = data.choices?.[0]?.message?.content;
+          if (text) { console.log("[LLMRouter] Native OpenRouter succeeded."); return text; }
+        }
+      } catch (e: any) {
+        console.warn("[LLMRouter] Native OpenRouter failed:", e?.message?.substring(0, 100));
+      }
+
+      throw new Error("AI service unavailable on mobile. Please check your internet connection.");
+    }
+
+    // 1. Google Gemini (Primary — browser/web only)
     try {
       console.log("[LLMRouter] Trying Google Gemini API...");
       const apiKey = await fetchApiKeyFromBackend();
       const ai = new GoogleGenAI({ apiKey });
-      const model = "gemini-3.1-flash-lite";
+      const model = "gemini-2.0-flash-lite";
       
       const config: any = {};
       if (options.systemInstruction) config.systemInstruction = options.systemInstruction;

@@ -297,6 +297,22 @@ async def get_roadmap(
     if not force_refresh:
         cached = get_cached(dream, year, branch)
         if cached:
+            # Ensure cached roadmaps also have 6 stages
+            stages = cached.get("stages", [])
+            while len(stages) < 6:
+                i = len(stages)
+                stages.append({
+                    "id": f"stage-{i + 1}",
+                    "title": "Expert Mastery & Mentorship" if i == 5 else f"Stage {i + 1} Continuation",
+                    "description": f"Focus on design leadership, mentoring others, and continuous professional mastery in {dream}." if i == 5 else f"Continue advancing and specializing in {dream}.",
+                    "duration": "Ongoing" if i == 5 else "8-12 weeks",
+                    "subjects": ["Advanced Leadership", "Continuous Learning", "Emerging Trends Research"],
+                    "concepts": ["Stay updated with industry shifts", "Contribute to community", "Mentor junior peers"],
+                    "skills": ["Leadership", "Strategic Vision", "Innovation"],
+                    "projects": ["Lead a major project or publish research in the field"],
+                    "resources": []
+                })
+            cached["stages"] = stages
             cached["_source"] = "cache"
             return cached
 
