@@ -16,11 +16,14 @@ import { llamaPlugin } from '../services/llamaPlugin';
 import { Capacitor } from '@capacitor/core';
 
 const getBackendUrl = (): string => {
+  if (Capacitor.isNativePlatform()) {
+    if (import.meta.env.VITE_BACKEND_URL && !import.meta.env.VITE_BACKEND_URL.includes("127.0.0.1") && !import.meta.env.VITE_BACKEND_URL.includes("localhost")) {
+      return import.meta.env.VITE_BACKEND_URL;
+    }
+    return 'https://kalam-spark-backend-mqft.onrender.com';
+  }
   if (import.meta.env.VITE_BACKEND_URL) {
     return import.meta.env.VITE_BACKEND_URL;
-  }
-  if (Capacitor.isNativePlatform()) {
-    return ''; // Mobile apps run separately, no connection to laptop backend
   }
   if (typeof window === 'undefined') return '';
   const hostname = window.location.hostname;

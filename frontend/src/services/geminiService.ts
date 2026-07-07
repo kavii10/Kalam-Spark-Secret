@@ -16,6 +16,30 @@ import {
 
 const IS_NATIVE_MOBILE = Capacitor.isNativePlatform();
 
+const getBackendUrl = (): string => {
+  if (Capacitor.isNativePlatform()) {
+    if (import.meta.env.VITE_BACKEND_URL && !import.meta.env.VITE_BACKEND_URL.includes("127.0.0.1") && !import.meta.env.VITE_BACKEND_URL.includes("localhost")) {
+      return import.meta.env.VITE_BACKEND_URL;
+    }
+    return 'https://kalam-spark-backend-mqft.onrender.com';
+  }
+  if (import.meta.env.VITE_BACKEND_URL) {
+    return import.meta.env.VITE_BACKEND_URL;
+  }
+  if (typeof window === 'undefined') return '';
+  const hostname = window.location.hostname;
+  if (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname.startsWith('192.168.') ||
+    hostname.startsWith('10.') ||
+    hostname.startsWith('172.')
+  ) {
+    return `http://${hostname}:8000`;
+  }
+  return '';
+};
+
 // API Keys - loaded from .env with local storage custom key fallback & Render backend endpoint fallback
 let cachedFetchedApiKey: string | null = null;
 
@@ -36,7 +60,7 @@ export const fetchApiKeyFromBackend = async (): Promise<string> => {
 
   // 2. Try to fetch dynamic key from Render backend environment
   try {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://127.0.0.1:8000";
+    const backendUrl = getBackendUrl();
     const res = await fetch(`${backendUrl}/api/gemini_key`);
     if (res.ok) {
       const data = await res.json();
@@ -101,27 +125,6 @@ export const normalizeCareers = (data: any[]): any[] => {
 // ─────────────────────────────────────────────────────────────
 //  PRIMARY: Local AI Backend (Crawl4AI + Ollama Gemma4 (gemma4:e4b))
 // ─────────────────────────────────────────────────────────────
-
-const getBackendUrl = (): string => {
-  if (import.meta.env.VITE_BACKEND_URL) {
-    return import.meta.env.VITE_BACKEND_URL;
-  }
-  if (Capacitor.isNativePlatform()) {
-    return ''; // Mobile apps run separately, no connection to laptop backend
-  }
-  if (typeof window === 'undefined') return '';
-  const hostname = window.location.hostname;
-  if (
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname.startsWith('192.168.') ||
-    hostname.startsWith('10.') ||
-    hostname.startsWith('172.')
-  ) {
-    return `http://${hostname}:8000`;
-  }
-  return '';
-};
 
 //  CENTRAL ROUTING LLM GENERATOR (Google -> OpenRouter -> Groq -> Local)
 // ─────────────────────────────────────────────────────────────

@@ -19,11 +19,14 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 const IS_NATIVE_MOBILE = Capacitor.isNativePlatform();
 
 const getBackendUrl = (): string => {
+  if (Capacitor.isNativePlatform()) {
+    if (import.meta.env.VITE_BACKEND_URL && !import.meta.env.VITE_BACKEND_URL.includes("127.0.0.1") && !import.meta.env.VITE_BACKEND_URL.includes("localhost")) {
+      return import.meta.env.VITE_BACKEND_URL;
+    }
+    return 'https://kalam-spark-backend-mqft.onrender.com';
+  }
   if (import.meta.env.VITE_BACKEND_URL) {
     return import.meta.env.VITE_BACKEND_URL;
-  }
-  if (Capacitor.isNativePlatform()) {
-    return ''; // Mobile apps run separately, no connection to laptop backend
   }
   if (typeof window === 'undefined') return '';
   const hostname = window.location.hostname;
