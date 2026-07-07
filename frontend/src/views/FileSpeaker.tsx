@@ -3155,7 +3155,7 @@ The generated content must be extremely detailed, educational, and structured, s
         </div>
 
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ Right Panel: Workspace Ã¢â€â‚¬Ã¢â€â‚¬ */}
-        <div className={`flex-1 flex flex-col min-w-0 h-full overflow-hidden transition-all duration-300 ${
+        <div className={`flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${
           activeSource 
             ? `absolute inset-0 z-[40] ${isLight ? 'bg-[#faf8f5]' : 'bg-gradient-to-b from-[#020713] via-[#040d24] to-[#020713]'} sm:relative sm:z-auto sm:inset-auto sm:bg-transparent` 
             : 'hidden sm:flex'
