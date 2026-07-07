@@ -1244,35 +1244,35 @@ const AppContent = ({
             WebkitBackfaceVisibility: 'hidden',
           }}
         >
-          <div className="flex items-center gap-3 sm:gap-4 flex-1">
+          <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
             <button
-              className="text-gold-400/60 hover:text-gold-300 transition-colors p-2 rounded-lg hover:bg-white/5"
+              className="text-gold-400/60 hover:text-gold-300 transition-colors p-2 rounded-lg hover:bg-white/5 flex-shrink-0"
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               title="Toggle Sidebar"
             >
               <Menu size={22} />
             </button>
             {/* Logo + App name — visible on all pages */}
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <div className="w-8 h-8 rounded-xl overflow-hidden flex-shrink-0" style={{ border: '1px solid rgba(255,140,66,0.25)' }}>
                 <img src={user.settings?.theme === 'light' ? "/assets/logo-light.png" : "/assets/logo.png"} alt="Kalam Spark" className="w-full h-full object-contain" />
               </div>
-              <span className="heading-gold font-cinzel text-base font-bold hidden sm:block" style={{ letterSpacing: '0.08em' }}>
+              <span className="heading-gold font-cinzel text-base font-bold hidden sm:block flex-shrink-0" style={{ letterSpacing: '0.08em' }}>
                 Kalam Spark
               </span>
-              <span className="text-gold-500/30 hidden sm:block">—</span>
+              <span className="text-gold-500/30 hidden sm:block flex-shrink-0">—</span>
             </div>
             <h1
-              className="heading-gold font-cinzel text-lg sm:text-xl font-semibold hidden sm:block truncate"
+              className="heading-gold font-cinzel text-lg sm:text-xl font-semibold hidden sm:block truncate flex-shrink-0"
               style={{ letterSpacing: "0.05em" }}
             >
               {pageTitle.replace(/^Kalam — /, '')}
             </h1>
           </div>
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center justify-end gap-1.5 sm:gap-3 flex-shrink-0">
             {/* XP Counter */}
             <div
-              className="hidden xs:flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-semibold text-gold-300"
+              className="hidden xs:flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-semibold text-gold-300 flex-shrink-0"
               style={{
                 background: "rgba(211,156,59,0.08)",
                 border: "1px solid rgba(211,156,59,0.25)",
@@ -1288,29 +1288,32 @@ const AppContent = ({
               <button
                 onClick={handleInstallClick}
                 title={isIOS ? 'Tap Share → Add to Home Screen to install' : 'Install Kalam Spark App'}
-                className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-semibold text-gold-300 transition-all active:scale-95 select-none hover:bg-white/5"
+                className="flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 rounded-xl text-xs font-semibold text-gold-300 transition-all active:scale-95 select-none hover:bg-white/5 flex-shrink-0"
                 style={{
                   background: "rgba(211,156,59,0.08)",
                   border: "1px solid rgba(211,156,59,0.25)",
                   boxShadow: "0 0 12px rgba(211,156,59,0.08)",
+                  minWidth: "36px",
+                  height: "36px"
                 }}
               >
-                <Smartphone size={13} className="text-gold-400" />
+                <Smartphone size={14} className="text-gold-400 flex-shrink-0" />
                 <span className="hidden sm:inline">Install App</span>
-                <span className="sm:hidden">Install</span>
               </button>
             )}
 
             {/* Stage Badge */}
             <div
-              className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-semibold text-gold-300"
+              className="flex items-center justify-center gap-1.5 px-2 sm:px-4 py-2 rounded-xl text-xs font-semibold text-gold-300 flex-shrink-0"
               style={{
                 background: "rgba(211,156,59,0.08)",
                 border: "1px solid rgba(211,156,59,0.25)",
                 boxShadow: "0 0 12px rgba(211,156,59,0.08)",
+                minWidth: "36px",
+                height: "36px"
               }}
             >
-              <Trophy size={13} className="text-gold-400" />
+              <Trophy size={14} className="text-gold-400 flex-shrink-0" />
               <span className="hidden sm:inline">Stage {(user.currentStageIndex || 0) + 1}</span>
               <span className="sm:hidden">{(user.currentStageIndex || 0) + 1}</span>
             </div>

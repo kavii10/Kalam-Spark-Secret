@@ -1446,12 +1446,52 @@ const callGeminiREST = async (
   if (!networkService.isOnline()) {
     throw new Error("Internet connection is required to generate career suggestions and roadmaps. Please check your internet connection.");
   }
+
+  // ── On native mobile APK: route through backend proxy so no API key is needed in the APK ──
+  if (IS_NATIVE_MOBILE) {
+    const backendUrl = getBackendUrl();
+    const proxyBody: any = {
+      prompt,
+      systemInstruction,
+      temperature: 0.3,
+      model: "gemini-2.0-flash-lite",
+    };
+    if (responseSchema) {
+      proxyBody.responseSchema = responseSchema;
+    }
+
+    let proxyResp: Response;
+    try {
+      proxyResp = await fetch(`${backendUrl}/api/gemini_proxy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(proxyBody),
+      });
+    } catch (netErr: any) {
+      throw new Error("Network connection failed. Please check your internet connection.");
+    }
+
+    if (!proxyResp.ok) {
+      let errMsg = `Server Error (${proxyResp.status})`;
+      try {
+        const errData = await proxyResp.json();
+        errMsg = errData.detail || errMsg;
+      } catch {}
+      throw new Error(errMsg);
+    }
+
+    const proxyData = await proxyResp.json();
+    if (!proxyData.text) throw new Error("Empty response from Gemini proxy.");
+    return proxyData.text;
+  }
+
+  // ── On browser/web: call Gemini API directly with the baked-in key ──
   const apiKey = await fetchApiKeyFromBackend();
   if (!apiKey) {
     throw new Error("Gemini API Key is missing. This feature works only with the online Gemini API.");
   }
 
-  const model = "gemini-3.1-flash-lite";
+  const model = "gemini-2.0-flash-lite";
   const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   const contents = [{ role: "user", parts: [{ text: prompt }] }];

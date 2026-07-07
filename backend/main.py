@@ -166,6 +166,62 @@ async def get_gemini_key():
 
 
 # ──────────────────────────────────────────────
+# Gemini Proxy Endpoint (used by native APK)
+# Calls Gemini server-side so no API key needed in APK
+# ──────────────────────────────────────────────
+class GeminiProxyRequest(BaseModel):
+    prompt: str
+    systemInstruction: Optional[str] = None
+    responseSchema: Optional[dict] = None
+    temperature: Optional[float] = 0.3
+    model: Optional[str] = "gemini-2.0-flash-lite"
+
+@app.post("/api/gemini_proxy")
+async def gemini_proxy(req: GeminiProxyRequest):
+    """Server-side Gemini proxy — APK sends prompt, backend calls Gemini with its own key."""
+    import os, httpx
+    api_key = os.getenv("VITE_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY") or ""
+    if not api_key:
+        raise HTTPException(status_code=503, detail="Gemini API key not configured on server. Please add VITE_GEMINI_API_KEY to Render environment variables.")
+
+    model = req.model or "gemini-2.0-flash-lite"
+    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+
+    contents = [{"role": "user", "parts": [{"text": req.prompt}]}]
+    generation_config: dict = {"temperature": req.temperature or 0.3}
+    if req.responseSchema:
+        generation_config["responseMimeType"] = "application/json"
+        generation_config["responseSchema"] = req.responseSchema
+
+    body: dict = {"contents": contents, "generationConfig": generation_config}
+    if req.systemInstruction:
+        body["systemInstruction"] = {"parts": [{"text": req.systemInstruction}]}
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(gemini_url, json=body)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to reach Gemini API: {str(e)}")
+
+    if not resp.is_success:
+        try:
+            err = resp.json()
+            msg = err.get("error", {}).get("message", resp.text)
+        except Exception:
+            msg = resp.text
+        raise HTTPException(status_code=resp.status_code, detail=f"Gemini API Error: {msg}")
+
+    data = resp.json()
+    text = ""
+    try:
+        text = data["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError):
+        raise HTTPException(status_code=502, detail="Empty response from Gemini API.")
+
+    return {"text": text}
+
+
+# ──────────────────────────────────────────────
 # Main Roadmap Endpoint
 # ──────────────────────────────────────────────
 @app.get("/api/discover_dream")
