@@ -307,9 +307,9 @@ public class LlamaPlugin extends Plugin {
             Log.w(TAG, "Failed to query display name or file size: " + e.getMessage());
         }
 
-        if (!displayName.toLowerCase().endsWith(".gguf")) {
-            Log.e(TAG, "Selected file is not a GGUF model: " + displayName);
-            call.reject("Selected file is not a GGUF model: " + displayName + ". Please select a valid local AI model (.gguf extension).");
+        if (!displayName.toLowerCase().endsWith(".gguf") && !displayName.toLowerCase().endsWith(".litertlm")) {
+            Log.e(TAG, "Selected file is not a valid model: " + displayName);
+            call.reject("Selected file is not a valid model: " + displayName + ". Please select a valid local AI model (.gguf or .litertlm extension).");
             return;
         }
         

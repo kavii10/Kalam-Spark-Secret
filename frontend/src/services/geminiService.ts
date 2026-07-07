@@ -46,7 +46,27 @@ let cachedFetchedApiKey: string | null = null;
 export const fetchApiKeyFromBackend = async (): Promise<string> => {
   if (cachedFetchedApiKey) return cachedFetchedApiKey;
 
-  // 1. Try to read custom user key from localStorage
+  // 1. Try to fetch dynamic key from Render backend environment first
+  try {
+    const backendUrl = getBackendUrl();
+    const res = await fetch(`${backendUrl}/api/gemini_key`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.gemini_key && data.gemini_key.trim()) {
+        cachedFetchedApiKey = data.gemini_key.trim();
+        return cachedFetchedApiKey;
+      }
+    }
+  } catch (err) {
+    console.warn("[geminiService] Failed to fetch API key from backend:", err);
+  }
+
+  // 2. Fallback to compile-time env key second
+  if (import.meta.env.VITE_GEMINI_API_KEY) {
+    return import.meta.env.VITE_GEMINI_API_KEY;
+  }
+
+  // 3. Try to read custom user key from localStorage last
   try {
     const cached = localStorage.getItem('kalamspark_cached_profile') || localStorage.getItem('kalamspark_user_session');
     if (cached) {
@@ -58,23 +78,7 @@ export const fetchApiKeyFromBackend = async (): Promise<string> => {
     }
   } catch (e) {}
 
-  // 2. Try to fetch dynamic key from Render backend environment
-  try {
-    const backendUrl = getBackendUrl();
-    const res = await fetch(`${backendUrl}/api/gemini_key`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data.gemini_key) {
-        cachedFetchedApiKey = data.gemini_key.trim();
-        return cachedFetchedApiKey;
-      }
-    }
-  } catch (err) {
-    console.warn("[geminiService] Failed to fetch API key from backend:", err);
-  }
-
-  // 3. Fallback to compile-time env key
-  return import.meta.env.VITE_GEMINI_API_KEY || "";
+  return "";
 };
 
 const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY || "";
@@ -324,6 +328,39 @@ export const generateText = async (options: LLMRequestOptions): Promise<string> 
 //  EXPOSED SERVICE FUNCTIONS
 // ─────────────────────────────────────────────────────────────
 
+const ensureSixStages = (stages: any[], dream: string): any[] => {
+  let normalized = stages.map((s: any, i: number) => ({
+    id: s.id || `stage-${i + 1}`,
+    title: s.title || `Stage ${i + 1}`,
+    description: s.description || `In this stage, you will focus on foundational concepts of ${dream}.`,
+    duration: s.duration || '8-12 weeks',
+    subjects: Array.isArray(s.subjects) ? s.subjects : [],
+    concepts: Array.isArray(s.concepts) ? s.concepts : (Array.isArray(s.subjects) ? s.subjects : []),
+    skills: Array.isArray(s.skills) ? s.skills : [],
+    projects: Array.isArray(s.projects) ? s.projects : [],
+    resources: Array.isArray(s.resources) ? s.resources : []
+  }));
+
+  while (normalized.length < 6) {
+    const i = normalized.length;
+    normalized.push({
+      id: `stage-${i + 1}`,
+      title: i === 5 ? 'Expert Mastery & Mentorship' : `Stage ${i + 1} Continuation`,
+      description: i === 5 
+        ? `In this final stage, focus on design leadership, mentoring others, contributing back to the ${dream} community, and continuous professional mastery.`
+        : `In this stage, continue your growth and specialize in advanced topics of ${dream}.`,
+      duration: i === 5 ? 'Ongoing' : '8-12 weeks',
+      subjects: ['Advanced Leadership', 'Continuous Learning', 'Emerging Trends Research'],
+      concepts: ['Stay updated with emerging industry shifts', 'Contribute to community/open-source', 'Mentor junior peers'],
+      skills: ['Leadership', 'Strategic Vision', 'Innovation'],
+      projects: ['Lead a major project or publish research in the field'],
+      resources: []
+    });
+  }
+
+  return normalized;
+};
+
 export const generateRoadmap = async (
   profile: UserProfile,
 ): Promise<CareerRoadmap> => {
@@ -359,18 +396,7 @@ export const generateRoadmap = async (
         const data = await response.json();
         if (data && data.stages && data.stages.length > 0) {
           console.log("[generateRoadmap] Local backend succeeded.");
-          // Normalize stages structure
-          data.stages = data.stages.map((s: any, i: number) => ({
-            id: s.id || `stage-${i + 1}`,
-            title: s.title || `Stage ${i + 1}`,
-            description: s.description || `In this stage, you will focus on foundational concepts of ${profile.dream}.`,
-            duration: s.duration || '8-12 weeks',
-            subjects: Array.isArray(s.subjects) ? s.subjects : [],
-            concepts: Array.isArray(s.concepts) ? s.concepts : (Array.isArray(s.subjects) ? s.subjects : []),
-            skills: Array.isArray(s.skills) ? s.skills : [],
-            projects: Array.isArray(s.projects) ? s.projects : [],
-            resources: Array.isArray(s.resources) ? s.resources : []
-          }));
+          data.stages = ensureSixStages(data.stages, profile.dream || "");
           return data as CareerRoadmap;
         }
       } else {
@@ -471,18 +497,7 @@ REQUIREMENTS:
 
     const data = tryParseJson(resText || "{}");
     if (data && data.stages && data.stages.length > 0) {
-      // Normalize stages structure
-      data.stages = data.stages.map((s: any, i: number) => ({
-        id: s.id || `stage-${i + 1}`,
-        title: s.title || `Stage ${i + 1}`,
-        description: s.description || `In this stage, you will focus on foundational concepts of ${profile.dream}.`,
-        duration: s.duration || '8-12 weeks',
-        subjects: Array.isArray(s.subjects) ? s.subjects : [],
-        concepts: Array.isArray(s.concepts) ? s.concepts : (Array.isArray(s.subjects) ? s.subjects : []),
-        skills: Array.isArray(s.skills) ? s.skills : [],
-        projects: Array.isArray(s.projects) ? s.projects : [],
-        resources: Array.isArray(s.resources) ? s.resources : []
-      }));
+      data.stages = ensureSixStages(data.stages, profile.dream || "");
       return data as CareerRoadmap;
     }
   } catch (e) {
@@ -490,7 +505,7 @@ REQUIREMENTS:
   }
 
   console.log("[generateRoadmap] All LLM routes failed. Cannot generate roadmap offline without a loaded model.");
-  throw new Error("Could not generate roadmap. Please connect to the internet or load a local Gemma 4 model (.gguf) file in settings to generate roadmaps offline.");
+  throw new Error("Could not generate roadmap. Please connect to the internet or load a local Gemma 4 model (.gguf or .litertlm) file in settings to generate roadmaps offline.");
 };
 
 export const discoverDream = async (interests: string[], personality: string[]): Promise<any[]> => {

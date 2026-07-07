@@ -557,10 +557,25 @@ async def generate_roadmap(dream: str, year: str, branch: str, crawled_content: 
             "This may be a temporary issue with the API. Please try again."
         )
 
+    stages = [_normalize_stage(s, i) for i, s in enumerate(parsed.get("stages", []))]
+    while len(stages) < 6:
+        i = len(stages)
+        stages.append({
+            "id": f"stage-{i + 1}",
+            "title": "Expert Mastery & Mentorship" if i == 5 else f"Stage {i + 1} Continuation",
+            "description": f"In this final stage, focus on design leadership, mentoring others, contributing back to the {normalized_dream} community, and continuous professional mastery." if i == 5 else f"In this stage, continue your growth and specialize in advanced topics of {normalized_dream}.",
+            "duration": "Ongoing" if i == 5 else "8-12 weeks",
+            "subjects": ["Advanced Leadership", "Continuous Learning", "Emerging Trends Research"],
+            "concepts": ["Stay updated with emerging industry shifts", "Contribute to community/open-source", "Mentor junior peers"],
+            "skills": ["Leadership", "Strategic Vision", "Innovation"],
+            "projects": ["Lead a major project or publish research in the field"],
+            "resources": []
+        })
+
     roadmap = {
         "dream": parsed.get("dream") or normalized_dream,
         "summary": parsed.get("summary") or f"Your personalized roadmap to become a {normalized_dream}.",
-        "stages": [_normalize_stage(s, i) for i, s in enumerate(parsed.get("stages", []))],
+        "stages": stages,
     }
     if not roadmap["stages"]:
         print(f"[Roadmap] [-] Parsed JSON but no stages found")

@@ -1122,9 +1122,9 @@ const AppContent = ({
       const isCancelled = msg.toLowerCase().includes('cancel') || msg.toLowerCase().includes('result code: 0');
       if (!isCancelled) {
         const helpMsg = msg.includes('No document picker') 
-          ? 'Your device does not support file browsing. Please copy the .gguf model file to your Downloads folder manually.'
+          ? 'Your device does not support file browsing. Please copy the .gguf or .litertlm model file to your Downloads folder manually.'
           : msg.includes('Failed to open') || msg.includes('stream')
-            ? 'Could not read the selected file. Ensure the .gguf file is not corrupted and try again.'
+            ? 'Could not read the selected file. Ensure the model file is not corrupted and try again.'
             : `Could not select model file: ${msg}\n\nTip: Place the file in your Downloads folder instead.`;
         alert(`⚠️ Model Selection Failed\n\n${helpMsg}`);
       }
@@ -1622,7 +1622,7 @@ const AppContent = ({
               <div className="flex flex-col gap-2 p-3.5 rounded-lg bg-black/40 border border-gold-500/20 mb-5 text-left">
                 <span className="text-xs uppercase font-mono tracking-wider text-gold-400 font-bold mb-1">Local AI (Offline Mode)</span>
                 <p className="text-[10px] text-gold-500/60 leading-relaxed mb-2">
-                  Place <strong>google_gemma-4-E2B-it-Q2_K.gguf</strong> in your Downloads folder, or select it below to copy to app private storage.
+                  Place <strong>google_gemma-4-E2B-it-Q2_K.gguf</strong> or <strong>gemma-4-E2B-it.litertlm</strong> in your Downloads folder, or select it below to copy to app private storage.
                 </p>
                 {copyStatus === 'copying' ? (
                   <div className="w-full bg-black/50 border border-gold-500/10 rounded-lg p-2.5 text-center">

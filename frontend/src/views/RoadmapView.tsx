@@ -613,6 +613,8 @@ export default function RoadmapView({
   const projectProgress = user.settings?.projectProgress || {};
 
   const lastLoadedRef = useRef<{ userId: string; dream: string; branch: string; year: string } | null>(null);
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
 
 
 
@@ -769,6 +771,7 @@ export default function RoadmapView({
 
 
   const toggleStage = async (id: string, stageIndex: number) => {
+    const currentUser = userRef.current;
     const wasCompleted = completedStages.includes(id);
     if (wasCompleted) return;
 
@@ -783,16 +786,16 @@ export default function RoadmapView({
     if (setCachedCompletedStages) setCachedCompletedStages(updated);
 
     if (onXpGain) onXpGain(100);
-    dbService.saveCompletedStage(user.id, id);
+    dbService.saveCompletedStage(currentUser.id, id);
 
     // Grant stage completion reward + shower
     const stageName = roadmap?.stages?.[stageIndex]?.title || `Stage ${stageIndex + 1}`;
-    const reward = makeStageCompleteReward(stageName, stageIndex, user.dream);
+    const reward = makeStageCompleteReward(stageName, stageIndex, currentUser.dream);
     // Pass quiet: true to avoid global RewardShower popup (we have custom celebration)
-    grantReward(user, reward, (updatedUser) => {
+    grantReward(currentUser, reward, (updatedUser) => {
       // Advance the global stage index if this stage was the current one
       const nextIdx = stageIndex + 1;
-      if (nextIdx > (user.currentStageIndex || 0)) {
+      if (nextIdx > (currentUser.currentStageIndex || 0)) {
         updatedUser.currentStageIndex = nextIdx;
       }
       setUser(updatedUser);

@@ -409,14 +409,14 @@ async function callLocalMentor(
       const errMsg = e?.message || String(e) || 'Unknown error';
       const isModelMissing = errMsg.toLowerCase().includes('not found') || errMsg.toLowerCase().includes('load');
       if (isModelMissing) {
-        return `⚠️ **Local AI model not found.**\n\nDownload the \`google_gemma-4-E2B-it-Q2_K.gguf\` and go to setting page to click load button and browse the local model and select to use offline local model.`;
+        return `⚠️ **Local AI model not found.**\n\nDownload the \`google_gemma-4-E2B-it-Q2_K.gguf\` or \`gemma-4-E2B-it.litertlm\` and go to settings to browse and select the model file.`;
       }
-      return `⚠️ **Local AI error:** ${errMsg}\n\nDownload the \`google_gemma-4-E2B-it-Q2_K.gguf\` and go to setting page to click load button and browse the local model and select to use offline local model.`;
+      return `⚠️ **Local AI error:** ${errMsg}\n\nDownload the \`google_gemma-4-E2B-it-Q2_K.gguf\` or \`gemma-4-E2B-it.litertlm\` and go to settings to browse and select the model file.`;
     }
   }
 
   // No local model available and no internet
-  return `⚠️ **You are offline** and no local AI model is loaded.\n\nDownload the \`google_gemma-4-E2B-it-Q2_K.gguf\` and go to setting page to click load button and browse the local model and select to use offline local model.`;
+  return `⚠️ **You are offline** and no local AI model is loaded.\n\nDownload the \`google_gemma-4-E2B-it-Q2_K.gguf\` or \`gemma-4-E2B-it.litertlm\` and go to settings to browse and select the model file.`;
 }
 
 

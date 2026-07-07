@@ -1212,13 +1212,69 @@ async def fs_detect_language(req: FSDetectLangRequest):
         raise HTTPException(500, f"Language detection failed: {e}")
 
 
+def range_file_response(file_path: str, range_header: str, media_type: str = "audio/mpeg"):
+    """
+    Custom response handler that supports HTTP 206 Partial Content Range requests,
+    allowing HTML5 video/audio players to scrub, seek, and fast-forward/rewind.
+    """
+    import re
+    from fastapi.responses import StreamingResponse
+    file_size = os.path.getsize(file_path)
+    
+    # Parse Range Header
+    # Format: bytes=start-end (e.g. bytes=0-1023)
+    start, end = 0, file_size - 1
+    
+    range_match = re.match(r"bytes=(\d+)-(\d*)", range_header)
+    if range_match:
+        start = int(range_match.group(1))
+        if range_match.group(2):
+            end = int(range_match.group(2))
+            
+    # Ensure bounds are correct
+    start = max(0, min(start, file_size - 1))
+    end = max(start, min(end, file_size - 1))
+    content_length = end - start + 1
+    
+    def file_iterator():
+        with open(file_path, "rb") as f:
+            f.seek(start)
+            chunk_size = 8192 * 4  # 32KB chunks
+            remaining = content_length
+            while remaining > 0:
+                to_read = min(chunk_size, remaining)
+                data = f.read(to_read)
+                if not data:
+                    break
+                remaining -= len(data)
+                yield data
+
+    headers = {
+        "Content-Range": f"bytes {start}-{end}/{file_size}",
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(content_length),
+    }
+    
+    return StreamingResponse(
+        file_iterator(),
+        status_code=206,
+        headers=headers,
+        media_type=media_type
+    )
+
+
 @app.get("/api/filespeaker/audio/{filename}")
-async def fs_serve_audio(filename: str):
-    """Serve a generated podcast MP3 file."""
+async def fs_serve_audio(filename: str, request: Request):
+    """Serve a generated podcast MP3 file with range request support."""
     from file_speaker import AUDIO_DIR
     audio_path = AUDIO_DIR / filename
     if not audio_path.exists():
         raise HTTPException(404, "Audio file not found.")
+        
+    range_header = request.headers.get("range")
+    if range_header:
+        return range_file_response(str(audio_path), range_header, "audio/mpeg")
+        
     return FileResponse(str(audio_path), media_type="audio/mpeg", filename=filename)
 
 
