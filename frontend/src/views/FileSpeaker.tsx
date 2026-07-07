@@ -3155,9 +3155,9 @@ The generated content must be extremely detailed, educational, and structured, s
         </div>
 
         {/* Ã¢â€â‚¬Ã¢â€â‚¬ Right Panel: Workspace Ã¢â€â‚¬Ã¢â€â‚¬ */}
-        <div className={`flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${
+        <div className={`flex flex-col min-w-0 overflow-hidden transition-all duration-300 ${
           activeSource 
-            ? `absolute inset-0 z-[40] ${isLight ? 'bg-[#faf8f5]' : 'bg-gradient-to-b from-[#020713] via-[#040d24] to-[#020713]'} sm:relative sm:z-auto sm:inset-auto sm:bg-transparent` 
+            ? `fixed inset-0 h-full w-full z-[60] ${isLight ? 'bg-[#faf8f5]' : 'bg-gradient-to-b from-[#020713] via-[#040d24] to-[#020713]'} sm:relative sm:h-auto sm:z-auto sm:inset-auto sm:bg-transparent sm:flex-1` 
             : 'hidden sm:flex'
         }`}>
           {!activeSource ? (
@@ -3183,7 +3183,7 @@ The generated content must be extremely detailed, educational, and structured, s
               </div>
             </div>
           ) : (
-            <div className={`flex-1 flex flex-col overflow-hidden transition-all ${
+            <div className={`flex-1 flex flex-col min-h-0 overflow-hidden transition-all ${
               isLight 
                 ? 'bg-white sm:border sm:border-zinc-200 sm:rounded-2xl sm:shadow-sm' 
                 : 'bg-transparent sm:bg-zinc-950/30 sm:border sm:border-zinc-800/60 sm:rounded-2xl'
@@ -3219,7 +3219,7 @@ The generated content must be extremely detailed, educational, and structured, s
 
               {/* Ã¢â€â‚¬Ã¢â€â‚¬ CHAT TAB Ã¢â€â‚¬Ã¢â€â‚¬ */}
               {sourceTab === 'chat' && (
-                <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                   <div className="flex-1 overflow-y-auto p-5 space-y-4">
                     {chatHistory.length === 0 && (
                       <div className="text-center py-10">
@@ -3370,7 +3370,7 @@ The generated content must be extremely detailed, educational, and structured, s
                     )}
                     <div ref={chatEndRef} />
                   </div>
-                  <div className={`p-3 border-t flex items-center gap-2 ${isLight ? 'border-zinc-200 bg-zinc-50' : 'border-zinc-800/60 bg-zinc-900/40'}`}>
+                  <div className={`p-3 border-t flex items-center gap-2 flex-shrink-0 ${isLight ? 'border-zinc-200 bg-zinc-50' : 'border-zinc-800/60 bg-zinc-900/40'}`} style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))' }}>
                     {/* Attachment Button */}
                     <button 
                       onClick={() => fileRef.current?.click()} 
