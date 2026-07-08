@@ -173,6 +173,87 @@ async def get_youtube_key():
     return {"youtube_key": key.strip()}
 
 
+@app.get("/api/youtube/search")
+async def search_youtube_proxy(q: str = Query(..., description="Search query"), max_results: int = 10):
+    """Server-side YouTube search proxy to bypass browser restrictions and CORS/quota limitations."""
+    import os, httpx
+    
+    # Try official YouTube API
+    key = os.getenv("VITE_YOUTUBE_API_KEY") or os.getenv("YOUTUBE_API_KEY") or "AIzaSyAJpwWbR-MZtwWvfFih8rHIVHrNMLPdPv8"
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            params = {
+                "part": "snippet",
+                "q": q,
+                "type": "video",
+                "maxResults": min(max_results, 50),
+                "order": "relevance",
+                "relevanceLanguage": "en",
+                "safeSearch": "strict",
+                "key": key.strip()
+            }
+            res = await client.get("https://www.googleapis.com/youtube/v3/search", params=params)
+            if res.status_code == 200:
+                data = res.json()
+                items = data.get("items", [])
+                results = []
+                for item in items:
+                    v_id = item.get("id", {}).get("videoId")
+                    if v_id:
+                        snippet = item.get("snippet", {})
+                        thumbs = snippet.get("thumbnails", {})
+                        thumb_url = (
+                            thumbs.get("high", {}).get("url") or 
+                            thumbs.get("medium", {}).get("url") or 
+                            thumbs.get("default", {}).get("url") or 
+                            f"https://img.youtube.com/vi/{v_id}/hqdefault.jpg"
+                        )
+                        results.append({
+                            "id": f"yt_{v_id}",
+                            "title": snippet.get("title", "Untitled Video"),
+                            "channel": snippet.get("channelTitle", "Unknown Channel"),
+                            "summary": snippet.get("description", "")[:200],
+                            "link": f"https://www.youtube.com/watch?v={v_id}",
+                            "thumbnail": thumb_url,
+                            "source": "youtube"
+                        })
+                return results
+    except Exception as e:
+        print(f"[YouTube Proxy] Official YouTube API failed: {e}")
+
+    # Fallback to working Invidious instances
+    instances = [
+        'https://yt.chocolatemoo53.com',
+        'https://inv.zoomerville.com'
+    ]
+    for inst in instances:
+        try:
+            async with httpx.AsyncClient(timeout=6.0) as client:
+                res = await client.get(f"{inst}/api/v1/search", params={"q": q, "type": "video"})
+                if res.status_code == 200:
+                    data = res.json()
+                    if isinstance(data, list):
+                        results = []
+                        for item in data:
+                            if item.get("type") == "video" and item.get("videoId"):
+                                v_id = item["videoId"]
+                                results.append({
+                                    "id": f"yt_{v_id}",
+                                    "title": item.get("title", "Untitled Video"),
+                                    "channel": item.get("author", "Unknown Channel"),
+                                    "summary": (item.get("description") or "")[:200],
+                                    "link": f"https://www.youtube.com/watch?v={v_id}",
+                                    "thumbnail": f"https://img.youtube.com/vi/{v_id}/hqdefault.jpg",
+                                    "source": "youtube"
+                                })
+                        if results:
+                            return results[:max_results]
+        except Exception as e:
+            print(f"[YouTube Proxy] Invidious instance {inst} failed: {e}")
+
+    return []
+
+
 
 # ──────────────────────────────────────────────
 # Gemini Proxy Endpoint (used by native APK)

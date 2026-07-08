@@ -342,12 +342,11 @@ export async function fetchBooks(query: string, maxPerProvider = 15, startIndex 
 // ── Provider 1: YouTube ───────────────────────────────────────────────────────
 async function fetchYouTubeVideosInvidious(query: string, maxResults = 20): Promise<VideoResource[]> {
   const instances = [
+    'https://yt.chocolatemoo53.com',
+    'https://inv.zoomerville.com',
+    'https://invidious.no-logs.com',
     'https://invidious.lunar.icu',
     'https://invidious.nerdvpn.de',
-    'https://invidious.no-logs.com',
-    'https://inv.us.projectsegfau.lt',
-    'https://invidious.jing.rocks',
-    'https://invidious.privacydev.net',
     'https://yewtu.be'
   ];
   
@@ -380,6 +379,24 @@ async function fetchYouTubeVideosInvidious(query: string, maxResults = 20): Prom
 }
 
 async function fetchYouTubeVideos(query: string, maxResults = 20): Promise<VideoResource[]> {
+  // 1. Try our backend proxy first to bypass browser/CORS/key restrictions
+  try {
+    const res = await fetchWithTimeout(
+      `${backendUrl}/api/youtube/search?q=${encodeURIComponent(query)}&max_results=${maxResults}`,
+      {},
+      8000
+    );
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        return data;
+      }
+    }
+  } catch (err) {
+    console.warn('[Videos] Backend YouTube proxy search failed, trying direct browser request...', err);
+  }
+
+  // 2. Try direct browser YouTube Search API using API key
   try {
     const params = new URLSearchParams({
       part: 'snippet',
@@ -416,7 +433,7 @@ async function fetchYouTubeVideos(query: string, maxResults = 20): Promise<Video
     console.warn('[Videos] Official YouTube API failed, trying Invidious fallback:', e);
   }
 
-  // Fallback to Invidious search
+  // 3. Fallback to Invidious search
   return fetchYouTubeVideosInvidious(query, maxResults);
 }
 
