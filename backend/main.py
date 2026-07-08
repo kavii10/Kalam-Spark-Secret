@@ -201,25 +201,85 @@ async def gemini_proxy(req: GeminiProxyRequest):
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(gemini_url, json=body)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Failed to reach Gemini API: {str(e)}")
+        
+        if not resp.is_success:
+            resp.raise_for_status()
 
-    if not resp.is_success:
-        try:
-            err = resp.json()
-            msg = err.get("error", {}).get("message", resp.text)
-        except Exception:
-            msg = resp.text
-        raise HTTPException(status_code=resp.status_code, detail=f"Gemini API Error: {msg}")
-
-    data = resp.json()
-    text = ""
-    try:
+        data = resp.json()
         text = data["candidates"][0]["content"]["parts"][0]["text"]
-    except (KeyError, IndexError):
-        raise HTTPException(status_code=502, detail="Empty response from Gemini API.")
+        return {"text": text}
 
-    return {"text": text}
+    except Exception as e:
+        print(f"[Proxy] Direct Gemini call failed: {e}. Trying server-side fallbacks...")
+
+        # Fallback 1: OpenRouter
+        or_key = os.getenv("VITE_OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY") or ""
+        if or_key:
+            try:
+                print("[Proxy] Trying OpenRouter fallback...")
+                or_headers = {
+                    "Authorization": f"Bearer {or_key}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://kalam-spark.com",
+                    "X-Title": "Kalam Spark",
+                }
+                or_messages = []
+                if req.systemInstruction:
+                    or_messages.append({"role": "system", "content": req.systemInstruction})
+                or_messages.append({"role": "user", "content": req.prompt})
+
+                or_body = {
+                    "model": "openrouter/auto",
+                    "messages": or_messages,
+                    "temperature": req.temperature or 0.3,
+                }
+                if req.responseSchema:
+                    or_body["response_format"] = {"type": "json_object"}
+
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    or_resp = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=or_headers, json=or_body)
+                    or_resp.raise_for_status()
+                    or_text = or_resp.json()["choices"][0]["message"]["content"].strip()
+                    print("[Proxy] OpenRouter fallback succeeded!")
+                    return {"text": or_text}
+            except Exception as or_err:
+                print(f"[Proxy] OpenRouter fallback failed: {or_err}")
+
+        # Fallback 2: Groq
+        groq_key = os.getenv("VITE_GROQ_API_KEY") or os.getenv("GROQ_API_KEY") or ""
+        if groq_key:
+            try:
+                print("[Proxy] Trying Groq fallback...")
+                groq_headers = {
+                    "Authorization": f"Bearer {groq_key}",
+                    "Content-Type": "application/json",
+                }
+                groq_messages = []
+                if req.systemInstruction:
+                    groq_messages.append({"role": "system", "content": req.systemInstruction})
+                groq_messages.append({"role": "user", "content": req.prompt})
+
+                groq_body = {
+                    "model": "llama-3.1-8b-instant",
+                    "messages": groq_messages,
+                    "temperature": req.temperature or 0.3,
+                }
+                if req.responseSchema:
+                    groq_body["response_format"] = {"type": "json_object"}
+
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    groq_resp = await client.post("https://api.groq.com/openai/v1/chat/completions", headers=groq_headers, json=groq_body)
+                    groq_resp.raise_for_status()
+                    groq_text = groq_resp.json()["choices"][0]["message"]["content"].strip()
+                    print("[Proxy] Groq fallback succeeded!")
+                    return {"text": groq_text}
+            except Exception as groq_err:
+                print(f"[Proxy] Groq fallback failed: {groq_err}")
+
+        raise HTTPException(
+            status_code=502,
+            detail=f"Gemini API rate limit or quota exceeded (limit: 0). Server fallback options failed. Original error: {str(e)}"
+        )
 
 
 # ──────────────────────────────────────────────
