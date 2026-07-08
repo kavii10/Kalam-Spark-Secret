@@ -174,7 +174,7 @@ class GeminiProxyRequest(BaseModel):
     systemInstruction: Optional[str] = None
     responseSchema: Optional[dict] = None
     temperature: Optional[float] = 0.3
-    model: Optional[str] = "gemini-2.0-flash-lite"
+    model: Optional[str] = "gemini-3.1-flash-lite"
     apiKey: Optional[str] = None
 
 @app.post("/api/gemini_proxy")
@@ -185,7 +185,7 @@ async def gemini_proxy(req: GeminiProxyRequest):
     if not api_key:
         raise HTTPException(status_code=503, detail="Gemini API key not configured on server and no custom key provided.")
 
-    model = req.model or "gemini-2.0-flash-lite"
+    model = req.model or "gemini-3.1-flash-lite"
     gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
 
     contents = [{"role": "user", "parts": [{"text": req.prompt}]}]
@@ -229,7 +229,7 @@ async def gemini_proxy(req: GeminiProxyRequest):
                 or_messages.append({"role": "user", "content": req.prompt})
 
                 or_body = {
-                    "model": "openrouter/auto",
+                    "model": "google/gemini-2.0-flash-lite:free",
                     "messages": or_messages,
                     "temperature": req.temperature or 0.3,
                 }

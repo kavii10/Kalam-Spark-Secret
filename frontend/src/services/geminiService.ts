@@ -155,7 +155,7 @@ export const generateText = async (options: LLMRequestOptions): Promise<string> 
           prompt: options.prompt,
           systemInstruction: options.systemInstruction,
           temperature: options.temperature ?? 0.3,
-          model: "gemini-2.0-flash-lite",
+          model: "gemini-3.1-flash-lite",
         };
         if (options.responseSchema) proxyBody.responseSchema = options.responseSchema;
 
@@ -224,7 +224,7 @@ export const generateText = async (options: LLMRequestOptions): Promise<string> 
       console.log("[LLMRouter] Trying Google Gemini API...");
       const apiKey = await fetchApiKeyFromBackend();
       const ai = new GoogleGenAI({ apiKey });
-      const model = "gemini-2.0-flash-lite";
+      const model = "gemini-3.1-flash-lite";
       
       const config: any = {};
       if (options.systemInstruction) config.systemInstruction = options.systemInstruction;
@@ -1525,7 +1525,7 @@ const callGeminiREST = async (
       prompt,
       systemInstruction,
       temperature: 0.3,
-      model: "gemini-2.0-flash-lite",
+      model: "gemini-3.1-flash-lite",
     };
     if (responseSchema) {
       proxyBody.responseSchema = responseSchema;
@@ -1572,7 +1572,7 @@ const callGeminiREST = async (
     throw new Error("Gemini API Key is missing. This feature works only with the online Gemini API.");
   }
 
-  const model = "gemini-2.0-flash-lite";
+  const model = "gemini-3.1-flash-lite";
   const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   const contents = [{ role: "user", parts: [{ text: prompt }] }];
@@ -1623,7 +1623,7 @@ const callGeminiREST = async (
         prompt,
         systemInstruction,
         temperature: 0.3,
-        model: "gemini-2.0-flash-lite",
+        model: "gemini-3.1-flash-lite",
       };
       if (responseSchema) proxyBody.responseSchema = responseSchema;
 
@@ -1655,7 +1655,7 @@ const callGeminiREST = async (
         messagesList.push({ role: "user", content: prompt });
 
         const body: any = {
-          model: "openrouter/auto",
+          model: "google/gemini-2.0-flash-lite:free",
           messages: messagesList,
           temperature: 0.3,
         };
