@@ -1619,6 +1619,32 @@ const AppContent = ({
                   className="w-4 h-4 accent-gold-500 cursor-pointer"
                 />
               </label>
+
+              <div className="flex flex-col gap-1.5 p-3.5 rounded-lg bg-black/40 border border-gold-500/20 text-left">
+                <span className="text-xs font-semibold text-gold-200">Custom Gemini API Key</span>
+                <input 
+                  type="password" 
+                  value={user.settings?.customGeminiKey || ""} 
+                  onChange={(e) => {
+                    const keyVal = e.target.value;
+                    const updated = { 
+                      ...user, 
+                      settings: { 
+                        ...user.settings, 
+                        theme: user.settings?.theme || 'dark', 
+                        customGeminiKey: keyVal 
+                      } 
+                    };
+                    setUser(updated);
+                    dbService.saveUser(updated);
+                  }}
+                  placeholder="Paste your AIzaSy... API key"
+                  className="w-full bg-black/50 border border-gold-500/25 rounded-lg px-3 py-2 text-xs text-gold-100 placeholder:text-gold-500/30 focus:outline-none focus:border-gold-500/50 transition-colors"
+                />
+                <p className="text-[9px] text-gold-500/40 mt-1 leading-relaxed">
+                  Bypasses the public rate limits. Get a free key at <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:underline">Google AI Studio</a>.
+                </p>
+              </div>
             </div>
 
             {Capacitor.isNativePlatform() && (

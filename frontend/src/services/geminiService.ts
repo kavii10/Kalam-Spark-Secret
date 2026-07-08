@@ -44,9 +44,20 @@ const getBackendUrl = (): string => {
 let cachedFetchedApiKey: string | null = null;
 
 export const fetchApiKeyFromBackend = async (): Promise<string> => {
+  // 1. Try to read custom user key from localStorage first (highest priority)
+  try {
+    const cached = localStorage.getItem('kalamspark_cached_profile') || localStorage.getItem('kalamspark_user_session');
+    if (cached) {
+      const user = JSON.parse(cached);
+      if (user?.settings?.customGeminiKey && user.settings.customGeminiKey.trim()) {
+        return user.settings.customGeminiKey.trim();
+      }
+    }
+  } catch (e) {}
+
   if (cachedFetchedApiKey) return cachedFetchedApiKey;
 
-  // 1. Try to fetch dynamic key from Render backend environment first
+  // 2. Try to fetch dynamic key from Render backend environment second
   try {
     const backendUrl = getBackendUrl();
     const res = await fetch(`${backendUrl}/api/gemini_key`);
@@ -61,22 +72,10 @@ export const fetchApiKeyFromBackend = async (): Promise<string> => {
     console.warn("[geminiService] Failed to fetch API key from backend:", err);
   }
 
-  // 2. Fallback to compile-time env key second
+  // 3. Fallback to compile-time env key last
   if (import.meta.env.VITE_GEMINI_API_KEY) {
     return import.meta.env.VITE_GEMINI_API_KEY;
   }
-
-  // 3. Try to read custom user key from localStorage last
-  try {
-    const cached = localStorage.getItem('kalamspark_cached_profile') || localStorage.getItem('kalamspark_user_session');
-    if (cached) {
-      const user = JSON.parse(cached);
-      if (user?.settings?.customGeminiKey) {
-        cachedFetchedApiKey = user.settings.customGeminiKey.trim();
-        return cachedFetchedApiKey;
-      }
-    }
-  } catch (e) {}
 
   return "";
 };
@@ -159,6 +158,16 @@ export const generateText = async (options: LLMRequestOptions): Promise<string> 
           model: "gemini-2.0-flash-lite",
         };
         if (options.responseSchema) proxyBody.responseSchema = options.responseSchema;
+
+        try {
+          const cached = localStorage.getItem('kalamspark_cached_profile') || localStorage.getItem('kalamspark_user_session');
+          if (cached) {
+            const user = JSON.parse(cached);
+            if (user?.settings?.customGeminiKey && user.settings.customGeminiKey.trim()) {
+              proxyBody.apiKey = user.settings.customGeminiKey.trim();
+            }
+          }
+        } catch {}
 
         const proxyResp = await fetch(`${backendUrl}/api/gemini_proxy`, {
           method: 'POST',
@@ -1522,6 +1531,16 @@ const callGeminiREST = async (
       proxyBody.responseSchema = responseSchema;
     }
 
+    try {
+      const cached = localStorage.getItem('kalamspark_cached_profile') || localStorage.getItem('kalamspark_user_session');
+      if (cached) {
+        const user = JSON.parse(cached);
+        if (user?.settings?.customGeminiKey && user.settings.customGeminiKey.trim()) {
+          proxyBody.apiKey = user.settings.customGeminiKey.trim();
+        }
+      }
+    } catch {}
+
     let proxyResp: Response;
     try {
       proxyResp = await fetch(`${backendUrl}/api/gemini_proxy`, {
@@ -1571,37 +1590,145 @@ const callGeminiREST = async (
   }
 
   let response;
+  let useFallback = false;
+  let directErrorMsg = "";
+
   try {
     response = await fetch(geminiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(reqBody)
     });
+    if (!response.ok) {
+      useFallback = true;
+      directErrorMsg = `HTTP ${response.status}`;
+      try {
+        const errText = await response.clone().text();
+        const parsed = JSON.parse(errText);
+        directErrorMsg = parsed?.error?.message || directErrorMsg;
+      } catch {}
+    }
   } catch (netErr: any) {
-    console.error("[callGeminiREST] Network connection failed:", netErr);
-    throw new Error("Network connection failed (Failed to fetch). If you are using an ad-blocker or Brave browser, please disable shields/ad-blocker for localhost and check your internet connection.");
+    console.warn("[callGeminiREST] Direct call failed, trying fallbacks...", netErr);
+    useFallback = true;
+    directErrorMsg = netErr?.message || "Network Error";
   }
 
-  if (!response.ok) {
-    const errText = await response.text();
-    console.error("[callGeminiREST] API error:", response.status, errText);
-    let readableError = `Gemini API Error (HTTP ${response.status})`;
+  if (useFallback) {
+    console.log(`[callGeminiREST] Direct Gemini failed (${directErrorMsg}). Trying backend proxy fallback...`);
+    // Fallback 1: Backend proxy
     try {
-      const parsedError = JSON.parse(errText);
-      if (parsedError?.error?.message) {
-        const msg = parsedError.error.message;
-        if (msg.includes("Quota exceeded") || msg.includes("exceeded your current quota") || response.status === 429) {
-          readableError = "Gemini API rate limit or quota exceeded. Please wait a minute and try again.";
-        } else {
-          readableError = `Gemini API Error: ${msg}`;
+      const backendUrl = getBackendUrl();
+      const proxyBody: any = {
+        prompt,
+        systemInstruction,
+        temperature: 0.3,
+        model: "gemini-2.0-flash-lite",
+      };
+      if (responseSchema) proxyBody.responseSchema = responseSchema;
+
+      const proxyResp = await fetch(`${backendUrl}/api/gemini_proxy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(proxyBody),
+      });
+
+      if (proxyResp.ok) {
+        const proxyData = await proxyResp.json();
+        if (proxyData.text) {
+          console.log("[callGeminiREST] Backend proxy fallback succeeded.");
+          return proxyData.text;
         }
       }
-    } catch {
-      if (response.status === 429) {
-        readableError = "Gemini API rate limit or quota exceeded. Please wait a minute and try again.";
+    } catch (e) {
+      console.warn("[callGeminiREST] Backend proxy fallback failed:", e);
+    }
+
+    // Fallback 2: OpenRouter
+    if (OPENROUTER_API_KEY) {
+      try {
+        console.log("[callGeminiREST] Trying OpenRouter fallback...");
+        const messagesList: any[] = [];
+        if (systemInstruction) {
+          messagesList.push({ role: "system", content: systemInstruction });
+        }
+        messagesList.push({ role: "user", content: prompt });
+
+        const body: any = {
+          model: "openrouter/auto",
+          messages: messagesList,
+          temperature: 0.3,
+        };
+        if (responseSchema) {
+          body.response_format = { type: "json_object" };
+        }
+
+        const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+            "HTTP-Referer": "https://kalam-spark.com",
+            "X-Title": "Kalam Spark"
+          },
+          body: JSON.stringify(body)
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const text = data.choices?.[0]?.message?.content;
+          if (text) {
+            console.log("[callGeminiREST] OpenRouter fallback succeeded.");
+            return text;
+          }
+        }
+      } catch (e) {
+        console.warn("[callGeminiREST] OpenRouter fallback failed:", e);
       }
     }
-    throw new Error(readableError);
+
+    // Fallback 3: Groq
+    if (GROQ_API_KEY) {
+      try {
+        console.log("[callGeminiREST] Trying Groq fallback...");
+        const messagesList: any[] = [];
+        if (systemInstruction) {
+          messagesList.push({ role: "system", content: systemInstruction });
+        }
+        messagesList.push({ role: "user", content: prompt });
+
+        const body: any = {
+          model: "llama-3.1-8b-instant",
+          messages: messagesList,
+          temperature: 0.3,
+        };
+        if (responseSchema) {
+          body.response_format = { type: "json_object" };
+        }
+
+        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${GROQ_API_KEY}`
+          },
+          body: JSON.stringify(body)
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const text = data.choices?.[0]?.message?.content;
+          if (text) {
+            console.log("[callGeminiREST] Groq fallback succeeded.");
+            return text;
+          }
+        }
+      } catch (e) {
+        console.warn("[callGeminiREST] Groq fallback failed:", e);
+      }
+    }
+
+    throw new Error(`AI service is temporarily rate limited or offline (${directErrorMsg}). Please check your settings or try again in a minute.`);
   }
 
   const data = await response.json();

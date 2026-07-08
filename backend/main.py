@@ -175,14 +175,15 @@ class GeminiProxyRequest(BaseModel):
     responseSchema: Optional[dict] = None
     temperature: Optional[float] = 0.3
     model: Optional[str] = "gemini-2.0-flash-lite"
+    apiKey: Optional[str] = None
 
 @app.post("/api/gemini_proxy")
 async def gemini_proxy(req: GeminiProxyRequest):
     """Server-side Gemini proxy — APK sends prompt, backend calls Gemini with its own key."""
     import os, httpx
-    api_key = os.getenv("VITE_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY") or ""
+    api_key = req.apiKey or os.getenv("VITE_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY") or ""
     if not api_key:
-        raise HTTPException(status_code=503, detail="Gemini API key not configured on server. Please add VITE_GEMINI_API_KEY to Render environment variables.")
+        raise HTTPException(status_code=503, detail="Gemini API key not configured on server and no custom key provided.")
 
     model = req.model or "gemini-2.0-flash-lite"
     gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
