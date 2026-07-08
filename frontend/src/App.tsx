@@ -1000,10 +1000,15 @@ const AppContent = ({
     setIsSyncing(false);
   };
 
-  // Persist last visited route
+  // Persist last visited route and reset scroll position of main content container on route changes
   useEffect(() => {
     if (user.isAuthenticated && user.onboardingComplete) {
       localStorage.setItem("kalamspark_last_route", location.pathname + location.search + location.hash);
+    }
+    // Reset outer scroll container when path changes to prevent viewport offsets
+    const mainEl = document.querySelector('main');
+    if (mainEl) {
+      mainEl.scrollTop = 0;
     }
   }, [location, user.isAuthenticated, user.onboardingComplete]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
