@@ -6,7 +6,48 @@
  */
 
 // ─── API Keys ─────────────────────────────────────────────────────────────────
-const YOUTUBE_API_KEY   = import.meta.env.VITE_YOUTUBE_API_KEY || 'AIzaSyAJpwWbR-MZtwWvfFih8rHIVHrNMLPdPv8';
+const getBackendUrl = (): string => {
+  if (Capacitor.isNativePlatform()) {
+    if (import.meta.env.VITE_BACKEND_URL && !import.meta.env.VITE_BACKEND_URL.includes("127.0.0.1") && !import.meta.env.VITE_BACKEND_URL.includes("localhost")) {
+      return import.meta.env.VITE_BACKEND_URL;
+    }
+    return 'https://kalam-spark-backend-mqft.onrender.com';
+  }
+  if (import.meta.env.VITE_BACKEND_URL) {
+    return import.meta.env.VITE_BACKEND_URL;
+  }
+  if (typeof window === 'undefined') return '';
+  const hostname = window.location.hostname;
+  if (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname.startsWith('192.168.') ||
+    hostname.startsWith('10.') ||
+    hostname.startsWith('172.')
+  ) {
+    return `http://${hostname}:8000`;
+  }
+  return '';
+};
+
+let cachedYoutubeApiKey = "";
+const getYoutubeApiKey = async (): Promise<string> => {
+  if (cachedYoutubeApiKey) return cachedYoutubeApiKey;
+  try {
+    const backendUrl = getBackendUrl();
+    const res = await fetch(`${backendUrl}/api/youtube_key`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.youtube_key && data.youtube_key.trim()) {
+        cachedYoutubeApiKey = data.youtube_key.trim();
+        return cachedYoutubeApiKey;
+      }
+    }
+  } catch (err) {
+    console.warn("[resourceApiService] Failed to fetch Youtube API key from backend:", err);
+  }
+  return import.meta.env.VITE_YOUTUBE_API_KEY || 'AIzaSyAJpwWbR-MZtwWvfFih8rHIVHrNMLPdPv8';
+};
 const BOOKS_API_KEY     = import.meta.env.VITE_GOOGLE_BOOKS_API_KEY || '';
 const NYT_API_KEY       = import.meta.env.VITE_NYT_API_KEY || '';
 const NEWSDATA_API_KEY  = import.meta.env.VITE_NEWSDATA_API_KEY || '';
@@ -301,10 +342,13 @@ export async function fetchBooks(query: string, maxPerProvider = 15, startIndex 
 // ── Provider 1: YouTube ───────────────────────────────────────────────────────
 async function fetchYouTubeVideosInvidious(query: string, maxResults = 20): Promise<VideoResource[]> {
   const instances = [
-    'https://inv.tux.im',
-    'https://yewtu.be',
-    'https://invidious.flokinet.to',
-    'https://invidious.projectsegfau.lt'
+    'https://invidious.lunar.icu',
+    'https://invidious.nerdvpn.de',
+    'https://invidious.no-logs.com',
+    'https://inv.us.projectsegfau.lt',
+    'https://invidious.jing.rocks',
+    'https://invidious.privacydev.net',
+    'https://yewtu.be'
   ];
   
   for (const instance of instances) {
@@ -345,7 +389,7 @@ async function fetchYouTubeVideos(query: string, maxResults = 20): Promise<Video
       order: 'relevance',
       relevanceLanguage: 'en',
       safeSearch: 'strict',
-      key: YOUTUBE_API_KEY,
+      key: await getYoutubeApiKey(),
     });
     const res = await fetchWithTimeout(
       `https://www.googleapis.com/youtube/v3/search?${params}`

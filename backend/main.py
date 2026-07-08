@@ -165,6 +165,15 @@ async def get_gemini_key():
     return {"gemini_key": key.strip()}
 
 
+@app.get("/api/youtube_key")
+async def get_youtube_key():
+    import os
+    # Support VITE_YOUTUBE_API_KEY and YOUTUBE_API_KEY env variables on Render
+    key = os.getenv("VITE_YOUTUBE_API_KEY") or os.getenv("YOUTUBE_API_KEY") or ""
+    return {"youtube_key": key.strip()}
+
+
+
 # ──────────────────────────────────────────────
 # Gemini Proxy Endpoint (used by native APK)
 # Calls Gemini server-side so no API key needed in APK
