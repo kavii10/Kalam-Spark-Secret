@@ -1551,13 +1551,7 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
   useEffect(() => { localStorage.setItem('fs_active_id', activeSourceId || ''); }, [activeSourceId]);
   useEffect(() => { localStorage.setItem('fs_states', JSON.stringify(sourceStates)); }, [sourceStates]);
 
-  // Reset outer layout scroll when active source or tab changes to prevent top menu/header cutoff
-  useEffect(() => {
-    const mainEl = document.querySelector('main');
-    if (mainEl) {
-      mainEl.scrollTop = 0;
-    }
-  }, [activeSourceId, sourceTab]);
+
 
   const [addMode, setAddMode] = useState<'file' | 'url' | 'text' | null>(null);
   const [urlInput, setUrlInput]   = useState('');
@@ -1767,6 +1761,14 @@ export default function FileSpeaker({ user, setUser, isLight }: { user: UserProf
   };
 
   const [sourceTab, setSourceTab] = useState<'chat' | 'transform' | 'podcast'>('chat');
+
+  // Reset outer layout scroll when active source or tab changes to prevent top menu/header cutoff
+  useEffect(() => {
+    const mainEl = document.querySelector('main');
+    if (mainEl) {
+      mainEl.scrollTop = 0;
+    }
+  }, [activeSourceId, sourceTab]);
 
   /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
   const activeSource = sources.find(s => s.source_id === activeSourceId) ?? null;
