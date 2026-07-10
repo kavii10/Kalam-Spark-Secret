@@ -99,6 +99,7 @@ export interface UserProfile {
     notificationsEnabled: boolean;
     soundEnabled: boolean;
     customGeminiKey?: string;
+    customBackendUrl?: string;
   };
   /** Cross-device sync for FileSpeaker / Radar sources */
   fileSpeakerData?: {

@@ -7,11 +7,23 @@
 
 // ─── API Keys ─────────────────────────────────────────────────────────────────
 const getBackendUrl = (): string => {
+  // 1. Try to read user's custom backend URL from localStorage first
+  try {
+    const cached = localStorage.getItem('kalamspark_user_session') || localStorage.getItem('kalamspark_cached_profile');
+    if (cached) {
+      const userObj = JSON.parse(cached);
+      if (userObj?.settings?.customBackendUrl && userObj.settings.customBackendUrl.trim()) {
+        return userObj.settings.customBackendUrl.trim();
+      }
+    }
+  } catch {}
+
+  // 2. Default fallbacks
   if (Capacitor.isNativePlatform()) {
     if (import.meta.env.VITE_BACKEND_URL && !import.meta.env.VITE_BACKEND_URL.includes("127.0.0.1") && !import.meta.env.VITE_BACKEND_URL.includes("localhost")) {
       return import.meta.env.VITE_BACKEND_URL;
     }
-    return 'https://kalam-spark-backend-mqft.onrender.com';
+    return 'https://kalam-spark-backend-jrpe.onrender.com';
   }
   if (import.meta.env.VITE_BACKEND_URL) {
     return import.meta.env.VITE_BACKEND_URL;
