@@ -32,7 +32,7 @@ const getBackendUrl = (): string => {
     if (import.meta.env.VITE_BACKEND_URL && !import.meta.env.VITE_BACKEND_URL.includes("127.0.0.1") && !import.meta.env.VITE_BACKEND_URL.includes("localhost")) {
       return import.meta.env.VITE_BACKEND_URL;
     }
-    return 'https://kalam-spark-backend-jrpe.onrender.com';
+    return 'https://kalam-spark-backend-mqff.onrender.com';
   }
   if (import.meta.env.VITE_BACKEND_URL) {
     return import.meta.env.VITE_BACKEND_URL;
